@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title><%= title %> | <%= appName %></title>
+    <link rel="stylesheet" href="/public/css/app.css" />
+    <script defer src="/public/js/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <span class="eyebrow">MVP Greenfield</span>
+          <h1><%= appName %></h1>
+          <p>mono-tenant, ohne Auth, mit User-Selektion</p>
+        </div>
+
+        <div class="user-select">
+          <label for="user-switcher">Aktiver User</label>
+          <select id="user-switcher" data-user-switcher>
+            <% users.forEach((user) => { %>
+              <option value="<%= user.key %>" <%= user.key === activeUser.key ? "selected" : "" %>>
+                <%= user.displayName %>
+              </option>
+            <% }) %>
+          </select>
+        </div>
+      </header>
+
+      <nav class="main-nav" aria-label="Hauptnavigation">
+        <% navigation.forEach((item) => { %>
+          <a href="<%= item.href %>" class="nav-link <%= item.isActive ? "is-active" : "" %>">
+            <%= item.label %>
+          </a>
+        <% }) %>
+      </nav>
+
+      <main class="page-shell">
+        <%- body %>
+      </main>
+    </div>
+  </body>
+  </html>

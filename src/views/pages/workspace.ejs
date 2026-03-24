@@ -1,0 +1,112 @@
+<section class="hero-card">
+  <div>
+    <span class="eyebrow">Arbeits-UI</span>
+    <h2>My Workspace</h2>
+    <p>Fuehrende Startseite fuer den aktuell ausgewaehlten User mit Gruppen, Aufgaben, Templates und Documents.</p>
+  </div>
+  <div class="hero-metrics">
+    <article>
+      <strong><%= workspaceSummary.groups.length %></strong>
+      <span>Groups</span>
+    </article>
+    <article>
+      <strong><%= workspaceSummary.tasks.length %></strong>
+      <span>Open Tasks</span>
+    </article>
+    <article>
+      <strong><%= workspaceSummary.documents.length %></strong>
+      <span>My Documents</span>
+    </article>
+  </div>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>My Groups</h3>
+      <span class="chip"><%= activeUser.displayName %></span>
+    </div>
+    <ul class="stack-list">
+      <% workspaceSummary.groups.forEach((group) => { %>
+        <li>
+          <strong><%= group.name %></strong>
+          <p><%= group.description ?? "Keine Beschreibung vorhanden." %></p>
+        </li>
+      <% }) %>
+    </ul>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>My Tasks</h3>
+      <span class="chip">Open</span>
+    </div>
+    <ul class="stack-list">
+      <% workspaceSummary.tasks.forEach((task) => { %>
+        <li>
+          <strong><%= task.title %></strong>
+          <p>Action: <%= task.action %> · Rolle: <%= task.role %> · Aktualisiert: <%= task.updatedAt %></p>
+        </li>
+      <% }) %>
+    </ul>
+  </article>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>My Templates</h3>
+      <a class="text-link" href="/templates?user=<%= activeUser.key %>">Alle Templates</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Key</th>
+            <th>Status</th>
+            <th>Version</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% workspaceSummary.templates.forEach((template) => { %>
+            <tr>
+              <td><%= template.name %></td>
+              <td><%= template.key %></td>
+              <td><span class="status-pill status-<%= template.status %>"><%= template.status %></span></td>
+              <td>v<%= template.version %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>My Documents</h3>
+      <a class="text-link" href="/documents?user=<%= activeUser.key %>">Zu Documents</a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Status</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% workspaceSummary.documents.forEach((document) => { %>
+            <tr>
+              <td><%= document.title %></td>
+              <td><span class="status-pill"><%= document.status %></span></td>
+              <td><%= document.updatedAt %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+

@@ -1,0 +1,129 @@
+export type EntityStatus = "active" | "inactive" | "draft" | "published" | "archived";
+
+export type MembershipRights = {
+  read: boolean;
+  write: boolean;
+  execute: boolean;
+};
+
+export type User = {
+  id: string;
+  key: string;
+  displayName: string;
+  email?: string;
+  description?: string;
+  status: EntityStatus;
+};
+
+export type Group = {
+  id: string;
+  key: string;
+  name: string;
+  description?: string;
+  status: EntityStatus;
+};
+
+export type Membership = {
+  id: string;
+  userId: string;
+  groupId: string;
+  rights: MembershipRights;
+};
+
+export type Task = {
+  id: string;
+  documentId: string;
+  userId: string;
+  title: string;
+  action: string;
+  status: "open" | "closed";
+  role: "editor" | "approver";
+  updatedAt: string;
+};
+
+export type WorkflowActionSummary = {
+  name: string;
+  from: string[];
+  to: string;
+  allowedRoles: Array<"editor" | "approver">;
+};
+
+export type WorkflowTemplate = {
+  id: string;
+  key: string;
+  name: string;
+  version: number;
+  status: EntityStatus;
+  description?: string;
+  initialStatus: string;
+  statuses: string[];
+  actions: WorkflowActionSummary[];
+};
+
+export type FormTemplate = {
+  id: string;
+  key: string;
+  name: string;
+  version: number;
+  status: EntityStatus;
+  description?: string;
+  workflowTemplateId: string;
+  groupIds: string[];
+  templateKeys: string[];
+  documentKeys: string[];
+  tableFields: string[];
+};
+
+export type Document = {
+  id: string;
+  templateId: string;
+  title: string;
+  status: string;
+  updatedAt: string;
+  assignedUserIds: string[];
+};
+
+export type Assignment = {
+  id: string;
+  documentId: string;
+  userId: string;
+  role: "editor" | "approver";
+  active: boolean;
+};
+
+export type AuditEvent = {
+  id: string;
+  documentId: string;
+  eventType: string;
+  actorUserId?: string;
+  message: string;
+  createdAt: string;
+};
+
+export type Attachment = {
+  id: string;
+  documentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  uploadedBy: string;
+  createdAt: string;
+};
+
+export type Operation = {
+  operationRef: string;
+  modulePath: string;
+  authStrategy: string;
+  name: string;
+  description?: string;
+};
+
+export type WorkspaceContext = {
+  activeUser: User;
+  users: User[];
+  groups: Group[];
+  tasks: Task[];
+  templates: FormTemplate[];
+  documents: Document[];
+};
+

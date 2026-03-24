@@ -1,0 +1,51 @@
+<section class="hero-card">
+  <div>
+    <span class="eyebrow">Admin-UI</span>
+    <h2>Admin</h2>
+    <p>Verwaltungsstart fuer Users, Groups, Memberships und Template Assignments ohne technische Ueberladung.</p>
+  </div>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Users</h3>
+      <button class="button-secondary" type="button">New User</button>
+    </div>
+    <ul class="stack-list compact">
+      <% users.forEach((user) => { %>
+        <li>
+          <strong><%= user.displayName %></strong>
+          <p><%= user.key %> · <%= user.email ?? "keine E-Mail" %> · <%= user.status %></p>
+        </li>
+      <% }) %>
+    </ul>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Groups</h3>
+      <button class="button-secondary" type="button">New Group</button>
+    </div>
+    <ul class="stack-list compact">
+      <% catalog.groups.forEach((group) => { %>
+        <li>
+          <strong><%= group.name %></strong>
+          <p><%= group.key %> · <%= group.description ?? "Keine Beschreibung" %></p>
+        </li>
+      <% }) %>
+    </ul>
+  </article>
+</section>
+
+<section class="grid two-up">
+  <article class="panel subtle">
+    <h3>Memberships</h3>
+    <p>Platz fuer r/w/x-Zuordnung zwischen User und Group.</p>
+  </article>
+  <article class="panel subtle">
+    <h3>Template Assignments</h3>
+    <p>Platz fuer Group-Zuordnung von Form Templates gemaess Spezifikation.</p>
+  </article>
+</section>
+

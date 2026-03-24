@@ -1,0 +1,109 @@
+---
+key: customer-order-test
+name: Customer Order Test
+version: 3
+status: published
+workflowTemplateKey: customer-order.group-submit.v1
+description: Example MDX form template for customer order processing.
+---
+
+<Fields>
+  <Field
+    name="customer_id"
+    type="lookup"
+    label="Customer"
+    operationRef="customers.listValid"
+    valueKey="id"
+    labelKey="name"
+    templateKey
+    required
+    tableField
+    editableIn={["new", "created"]}
+    readonlyIn={["assigned", "started", "progressed", "submitted", "approved", "archived"]}
+  />
+
+  <Field
+    name="customer_order_number"
+    type="text"
+    label="Customer Order Number"
+    documentKey
+    tableField
+    editableIn={["assigned"]}
+    readonlyIn={["started", "progressed", "submitted", "approved", "archived"]}
+    helpText="Set or confirm the external customer order number."
+  />
+
+  <Field
+    name="fulfillment_flags"
+    type="checkboxGroup"
+    label="Fulfillment Flags"
+    options={["packed", "reviewed", "released"]}
+    editableIn={["started", "progressed"]}
+    readonlyIn={["submitted", "approved", "archived"]}
+  />
+
+  <Field
+    name="review_notes"
+    type="textarea"
+    label="Review Notes"
+    placeholder="Optional notes for processing or approval."
+    editableIn={["started", "progressed"]}
+    readonlyIn={["submitted", "approved", "archived"]}
+  />
+
+  <Field
+    name="attachments_main"
+    type="attachmentArea"
+    label="Attachments"
+    helpText="Upload supporting files for the customer order."
+  />
+</Fields>
+
+<Action
+  name="create_customer_order"
+  label="Create Customer Order"
+  operationRef="customerOrders.create"
+  visibleIn={["started", "progressed"]}
+  enabledIn={["started", "progressed"]}
+  requestMapping={{
+    customerId: "data.customer_id",
+    notes: "data.review_notes"
+  }}
+  responseMapping={{
+    "integrationContext.customer_order_id": "result.id",
+    "external.customer_order_number": "result.orderNumber",
+    "snapshot.customer_order_created_ok": "result.ok"
+  }}
+/>
+
+# Customer Order Test
+
+<Section title="Customer">
+  <Row>
+    <Column width={6}>
+      <FieldRef name="customer_id" />
+    </Column>
+    <Column width={6}>
+      <FieldRef name="customer_order_number" />
+    </Column>
+  </Row>
+</Section>
+
+<Section title="Processing">
+  <Row>
+    <Column width={12}>
+      <FieldRef name="fulfillment_flags" />
+    </Column>
+  </Row>
+  <Row>
+    <Column width={12}>
+      <FieldRef name="review_notes" />
+    </Column>
+  </Row>
+</Section>
+
+<Section title="Attachments">
+  <AttachmentAreaRef name="attachments_main" />
+</Section>
+
+<ActionButton name="create_customer_order" label="Create Customer Order" />

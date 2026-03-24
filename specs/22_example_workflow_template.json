@@ -1,0 +1,129 @@
+{
+  "initialStatus": "created",
+  "statuses": [
+    "created",
+    "assigned",
+    "started",
+    "progressed",
+    "submitted",
+    "approved",
+    "archived"
+  ],
+  "actions": {
+    "assign": {
+      "from": ["created"],
+      "to": "assigned",
+      "allowedRoles": ["editor"],
+      "completionMode": "single"
+    },
+    "start": {
+      "from": ["assigned"],
+      "to": "started",
+      "allowedRoles": ["editor"],
+      "completionMode": "single"
+    },
+    "save": {
+      "from": ["started", "progressed"],
+      "to": "progressed",
+      "allowedRoles": ["editor"],
+      "completionMode": "single"
+    },
+    "submit": {
+      "from": ["assigned", "started", "progressed"],
+      "to": "submitted",
+      "allowedRoles": ["editor"],
+      "completionMode": "single",
+      "validation": {
+        "requiredFields": ["customer_id"]
+      }
+    },
+    "approve": {
+      "from": ["submitted"],
+      "to": "approved",
+      "allowedRoles": ["approver"],
+      "completionMode": "all"
+    },
+    "reject": {
+      "from": ["submitted"],
+      "to": "progressed",
+      "allowedRoles": ["approver"],
+      "completionMode": "single"
+    },
+    "reAssign": {
+      "from": ["assigned", "started", "progressed"],
+      "to": "assigned",
+      "allowedRoles": ["editor", "approver"],
+      "completionMode": "single"
+    },
+    "archive": {
+      "from": ["approved"],
+      "to": "archived",
+      "allowedRoles": ["approver"],
+      "completionMode": "single"
+    }
+  },
+  "fieldRules": {
+    "created": {
+      "editable": ["customer_id"],
+      "readonly": ["customer_order_number"]
+    },
+    "assigned": {
+      "editable": ["customer_order_number"],
+      "readonly": ["customer_id"]
+    },
+    "started": {
+      "editable": ["fulfillment_flags", "review_notes"],
+      "readonly": ["customer_id", "customer_order_number"]
+    },
+    "progressed": {
+      "editable": ["fulfillment_flags", "review_notes"],
+      "readonly": ["customer_id", "customer_order_number"]
+    },
+    "submitted": {
+      "editable": [],
+      "readonly": [
+        "customer_id",
+        "customer_order_number",
+        "fulfillment_flags",
+        "review_notes"
+      ]
+    },
+    "approved": {
+      "editable": [],
+      "readonly": [
+        "customer_id",
+        "customer_order_number",
+        "fulfillment_flags",
+        "review_notes"
+      ]
+    },
+    "archived": {
+      "editable": [],
+      "readonly": [
+        "customer_id",
+        "customer_order_number",
+        "fulfillment_flags",
+        "review_notes"
+      ]
+    }
+  },
+  "approval": {
+    "editors": "multiple",
+    "approvers": "multiple",
+    "submitMode": "single",
+    "approvalMode": "all"
+  },
+  "hooks": [
+    {
+      "trigger": "submitted->approved",
+      "operationRef": "customerOrders.setStatusFromContext",
+      "request": {
+        "status": "approved"
+      },
+      "responseMapping": {
+        "snapshot.customer_order_sync_ok": "result.ok"
+      },
+      "description": "Sync external customer order status after approval."
+    }
+  ]
+}

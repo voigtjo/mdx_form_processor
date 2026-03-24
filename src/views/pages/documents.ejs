@@ -1,0 +1,63 @@
+<section class="hero-card">
+  <div>
+    <span class="eyebrow">Arbeits-UI</span>
+    <h2>Documents</h2>
+    <p>Finder fuer laufende Vorgangsarbeit mit Status, Zuweisungen und spaeterem Detailzugang.</p>
+  </div>
+  <div class="hero-actions">
+    <button class="button-primary" type="button">Start Document</button>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h3>My Documents</h3>
+    <span class="chip">Standardfilter: nicht archiviert</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Document</th>
+          <th>Template</th>
+          <th>Status</th>
+          <th>Assigned Users</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% catalog.documents.forEach((document) => { %>
+          <% const template = catalog.templates.find((item) => item.id === document.templateId); %>
+          <% const assignedUsers = users.filter((user) => document.assignedUserIds.includes(user.id)).map((user) => user.displayName).join(", "); %>
+          <tr>
+            <td><%= document.title %></td>
+            <td><%= template?.name ?? "Unbekannt" %></td>
+            <td><span class="status-pill"><%= document.status %></span></td>
+            <td><%= assignedUsers %></td>
+            <td><%= document.updatedAt %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="grid four-up">
+  <article class="panel subtle">
+    <h3>Work Summary</h3>
+    <p>Vorgesehen fuer Template-, Workflow- und Assignment-Kontext.</p>
+  </article>
+  <article class="panel subtle">
+    <h3>Form</h3>
+    <p>MDX-Rendering folgt im naechsten Umsetzungsschritt.</p>
+  </article>
+  <article class="panel subtle">
+    <h3>Attachments</h3>
+    <p>Bereich fuer Dateiliste und Upload-Hooks ist reserviert.</p>
+  </article>
+  <article class="panel subtle">
+    <h3>History</h3>
+    <p>Audit- und Journal-Sicht bleibt vorbereitet, aber noch schlank.</p>
+  </article>
+</section>
+
