@@ -106,14 +106,36 @@ create table if not exists documents (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists assignments (
+do $$
+begin
+  if to_regclass('public.assignments') is not null and to_regclass('public.document_assignments') is null then
+    alter table assignments rename to document_assignments;
+  end if;
+end $$;
+
+create table if not exists document_assignments (
   id uuid primary key default gen_random_uuid(),
   document_id uuid not null references documents(id),
   user_id uuid not null references users(id),
   role text not null,
   assigned_by uuid references users(id),
   assigned_at timestamptz not null default now(),
-  active boolean not null default true
+  active boolean not null default true,
+  unique (document_id, user_id, role)
+);
+
+create table if not exists tasks (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid not null references documents(id),
+  user_id uuid not null references users(id),
+  title text not null,
+  action text not null,
+  status text not null,
+  role text not null,
+  due_at timestamptz,
+  closed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists attachments (
@@ -136,4 +158,3 @@ create table if not exists audit_events (
   payload_json jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
-

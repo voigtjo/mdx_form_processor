@@ -188,6 +188,12 @@ Für den nächsten echten Persistenzschritt sollen mindestens diese Kernobjekte 
 - document_assignments
 - audit_events
 
+Benennungsentscheidung für den Persistenzschnitt:
+
+- im Code bleibt das Fachmodul `assignments`
+- in Postgres wird die Tabelle `document_assignments` verwendet
+- damit bleibt die fachliche Domänensprache `Assignment` erhalten, während die DB-Benennung die dokumentbezogene Natur explizit macht
+
 Noch nicht voll auszubauen, nur falls technisch vorbereitet erforderlich:
 
 - attachments

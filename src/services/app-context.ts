@@ -1,28 +1,47 @@
 import { env } from "../config/env.js";
+import { getAttachmentUploadStateForUser } from "../modules/attachments/upload.js";
+import { listAttachmentsForDocument } from "../modules/attachments/read.js";
+import { listAssignments } from "../modules/assignments/read.js";
+import { listAssignmentsForDocument } from "../modules/assignments/read.js";
+import { listAuditEvents } from "../modules/audit/read.js";
+import { listAuditEventsForDocument } from "../modules/audit/read.js";
+import { getDocumentApproveStateForUser } from "../modules/documents/approve.js";
+import { getDocumentArchiveStateForUser } from "../modules/documents/archive.js";
 import {
-  sampleDocuments,
-  sampleGroups,
-  sampleMemberships,
-  sampleTasks,
-  sampleTemplates,
-  sampleUsers,
-  sampleWorkflows,
-} from "./sample-data.js";
-import type { Document, FormTemplate, Group, Task, User, WorkflowTemplate } from "../types/domain.js";
+  findDocumentDetailVisibleToUser,
+  listDocumentsAssignedToUser,
+  listDocumentsVisibleToUser,
+  listTasks,
+  listTasksForDocument,
+  listTasksForUser,
+} from "../modules/documents/read.js";
+import { getDocumentRejectStateForUser } from "../modules/documents/reject.js";
+import { getDocumentSubmitStateForUser } from "../modules/documents/submit.js";
+import { listGroups, listGroupsForUser } from "../modules/groups/read.js";
+import { listMemberships } from "../modules/memberships/read.js";
+import { buildReadOnlyFormDefinition } from "../modules/templates/form-read.js";
+import { listFormTemplates, listFormTemplatesForUser, listTemplateAssignments } from "../modules/templates/read.js";
+import { findUserByKey, listUsers } from "../modules/users/read.js";
+import { listWorkflowTemplates } from "../modules/workflows/read.js";
+import type { User } from "../types/domain.js";
 import type { NavItem } from "../types/navigation.js";
 
 type SectionKey = "workspace" | "templates" | "workflows" | "documents" | "admin";
 
 const buildHref = (path: string, activeUserKey: string): string => `${path}?user=${encodeURIComponent(activeUserKey)}`;
 
-export const getActiveUser = (userKey: string | undefined): User => {
-  const fallbackUser = sampleUsers[0];
+export const getActiveUser = async (userKey: string | undefined, users: User[]): Promise<User> => {
+  const fallbackUser = users[0];
 
   if (!fallbackUser) {
-    throw new Error("No sample users available for initial user selection.");
+    throw new Error("No users available in the database for user selection.");
   }
 
-  return sampleUsers.find((user) => user.key === userKey) ?? fallbackUser;
+  if (!userKey) {
+    return fallbackUser;
+  }
+
+  return (await findUserByKey(userKey)) ?? fallbackUser;
 };
 
 export const getNavigation = (section: SectionKey, activeUserKey: string): NavItem[] => {
@@ -41,59 +60,134 @@ export const getNavigation = (section: SectionKey, activeUserKey: string): NavIt
   }));
 };
 
-const groupIdsForUser = (userId: string): string[] => {
-  return sampleMemberships.filter((membership) => membership.userId === userId).map((membership) => membership.groupId);
-};
-
-const groupsForUser = (userId: string): Group[] => {
-  const groupIds = new Set(groupIdsForUser(userId));
-  return sampleGroups.filter((group) => groupIds.has(group.id));
-};
-
-const templatesForUser = (userId: string): FormTemplate[] => {
-  const groupIds = new Set(groupIdsForUser(userId));
-  return sampleTemplates.filter((template) => template.groupIds.some((groupId) => groupIds.has(groupId)));
-};
-
-const documentsForUser = (userId: string): Document[] => {
-  return sampleDocuments.filter((document) => document.assignedUserIds.includes(userId));
-};
-
-const tasksForUser = (userId: string): Task[] => {
-  return sampleTasks.filter((task) => task.userId === userId && task.status === "open");
-};
-
-const workflowsForTemplates = (templates: FormTemplate[]): WorkflowTemplate[] => {
+const workflowsForTemplates = (templates: { workflowTemplateId: string }[], workflows: { id: string }[]) => {
   const workflowIds = new Set(templates.map((template) => template.workflowTemplateId));
-  return sampleWorkflows.filter((workflow) => workflowIds.has(workflow.id));
+  return workflows.filter((workflow) => workflowIds.has(workflow.id));
 };
 
-export const createBaseViewModel = (section: SectionKey, userKey: string | undefined) => {
-  const activeUser = getActiveUser(userKey);
-  const userGroups = groupsForUser(activeUser.id);
-  const userTemplates = templatesForUser(activeUser.id);
-  const userDocuments = documentsForUser(activeUser.id);
-  const userTasks = tasksForUser(activeUser.id);
+const createShellContext = async (section: SectionKey, userKey: string | undefined) => {
+  const users = await listUsers();
+  const activeUser = await getActiveUser(userKey, users);
 
   return {
     appName: env.appName,
-    pageSection: section,
     activeUser,
-    users: sampleUsers,
+    users,
     navigation: getNavigation(section, activeUser.key),
+  };
+};
+
+export const createBaseViewModel = async (section: SectionKey, userKey: string | undefined) => {
+  const shellContext = await createShellContext(section, userKey);
+  const { activeUser, users } = shellContext;
+
+  const [
+    userGroups,
+    userTemplates,
+    userDocuments,
+    visibleDocuments,
+    userTasks,
+    groups,
+    memberships,
+    templates,
+    templateAssignments,
+    workflows,
+    tasks,
+    assignments,
+    auditEvents,
+  ] = await Promise.all([
+    listGroupsForUser(activeUser.id),
+    listFormTemplatesForUser(activeUser.id),
+    listDocumentsAssignedToUser(activeUser.id),
+    listDocumentsVisibleToUser(activeUser.id),
+    listTasksForUser(activeUser.id),
+    listGroups(),
+    listMemberships(),
+    listFormTemplates(),
+    listTemplateAssignments(),
+    listWorkflowTemplates(),
+    listTasks(),
+    listAssignments(),
+    listAuditEvents(),
+  ]);
+
+  return {
+    ...shellContext,
+    pageSection: section,
     workspaceSummary: {
       groups: userGroups,
       tasks: userTasks,
       templates: userTemplates,
       documents: userDocuments,
-      workflows: workflowsForTemplates(userTemplates),
+      workflows: workflowsForTemplates(userTemplates, workflows),
     },
     catalog: {
-      groups: sampleGroups,
-      templates: sampleTemplates,
-      workflows: sampleWorkflows,
-      documents: sampleDocuments,
-      tasks: sampleTasks,
+      groups,
+      memberships,
+      templates,
+      templateAssignments,
+      workflows,
+      documents: visibleDocuments,
+      tasks,
+      assignments,
+      auditEvents,
     },
+  };
+};
+
+export const createDocumentDetailViewModel = async (userKey: string | undefined, documentId: string) => {
+  const shellContext = await createShellContext("documents", userKey);
+  const { activeUser, users } = shellContext;
+
+  const document = await findDocumentDetailVisibleToUser(documentId, activeUser.id);
+
+  if (!document) {
+    return null;
+  }
+
+  const [assignments, tasks, attachments, auditEvents, attachmentUploadState, submitState, approveState, rejectState, archiveState] = await Promise.all([
+    listAssignmentsForDocument(document.id),
+    listTasksForDocument(document.id),
+    listAttachmentsForDocument(document.id),
+    listAuditEventsForDocument(document.id),
+    getAttachmentUploadStateForUser(document.id, activeUser.id),
+    getDocumentSubmitStateForUser(document.id, activeUser.id),
+    getDocumentApproveStateForUser(document.id, activeUser.id),
+    getDocumentRejectStateForUser(document.id, activeUser.id),
+    getDocumentArchiveStateForUser(document.id, activeUser.id),
+  ]);
+
+  const formDefinition = buildReadOnlyFormDefinition({
+    templateId: document.templateId,
+    templateKey: document.templateKey,
+    templateName: document.templateName,
+    templateVersion: document.templateVersion,
+    templateStatus: document.formTemplateStatus,
+    ...(document.formTemplateDescription ? { templateDescription: document.formTemplateDescription } : {}),
+    mdxBody: document.formTemplateMdxBody,
+    documentStatus: document.status,
+    documentData: document.documentDataJson,
+    workflowFieldRules: document.workflowFieldRules,
+  });
+
+  return {
+    ...shellContext,
+    title: document.title,
+    pageSection: "documents" as const,
+    documentDetail: {
+      document,
+      formDefinition,
+      editableFields: formDefinition.fields.filter((field) => field.isSavable),
+      attachmentUploadState,
+      submitState,
+      approveState,
+      rejectState,
+      archiveState,
+      assignments,
+      tasks,
+      attachments,
+      auditEvents,
+    },
+    users,
   };
 };

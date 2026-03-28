@@ -5,9 +5,28 @@
     <p>Finder fuer laufende Vorgangsarbeit mit Status, Zuweisungen und spaeterem Detailzugang.</p>
   </div>
   <div class="hero-actions">
-    <button class="button-primary" type="button">Start Document</button>
+    <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form">
+      <label class="sr-only" for="templateId">Template</label>
+      <select id="templateId" name="templateId">
+        <% const startableTemplates = workspaceSummary.templates.filter((template) => template.status === "published"); %>
+        <% startableTemplates.forEach((template) => { %>
+          <option value="<%= template.id %>"><%= template.name %> (v<%= template.version %>)</option>
+        <% }) %>
+      </select>
+      <button class="button-primary" type="submit" <%= startableTemplates.length === 0 ? "disabled" : "" %>>Start Document</button>
+    </form>
   </div>
 </section>
+
+<% if (typeof startError === "string" && startError.length > 0) { %>
+  <section class="panel subtle">
+    <div class="panel-header">
+      <h3>Start Error</h3>
+      <span class="chip"><%= activeUser.displayName %></span>
+    </div>
+    <p><%= startError %></p>
+  </section>
+<% } %>
 
 <section class="panel">
   <div class="panel-header">
@@ -30,7 +49,7 @@
           <% const template = catalog.templates.find((item) => item.id === document.templateId); %>
           <% const assignedUsers = users.filter((user) => document.assignedUserIds.includes(user.id)).map((user) => user.displayName).join(", "); %>
           <tr>
-            <td><%= document.title %></td>
+            <td><a class="text-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>"><%= document.title %></a></td>
             <td><%= template?.name ?? "Unbekannt" %></td>
             <td><span class="status-pill"><%= document.status %></span></td>
             <td><%= assignedUsers %></td>
@@ -60,4 +79,3 @@
     <p>Audit- und Journal-Sicht bleibt vorbereitet, aber noch schlank.</p>
   </article>
 </section>
-

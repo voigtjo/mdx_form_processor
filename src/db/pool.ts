@@ -33,10 +33,24 @@ export const withDb = async <T>(fn: (client: PoolClient) => Promise<T>): Promise
   }
 };
 
+export const withDbTransaction = async <T>(fn: (client: PoolClient) => Promise<T>): Promise<T> => {
+  return withDb(async (client) => {
+    await client.query("begin");
+
+    try {
+      const result = await fn(client);
+      await client.query("commit");
+      return result;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    }
+  });
+};
+
 export const closePool = async (): Promise<void> => {
   if (pool) {
     await pool.end();
     pool = null;
   }
 };
-

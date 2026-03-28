@@ -41,11 +41,28 @@
 <section class="grid two-up">
   <article class="panel subtle">
     <h3>Memberships</h3>
-    <p>Platz fuer r/w/x-Zuordnung zwischen User und Group.</p>
+    <ul class="stack-list compact">
+      <% catalog.memberships.forEach((membership) => { %>
+        <% const user = users.find((entry) => entry.id === membership.userId); %>
+        <% const group = catalog.groups.find((entry) => entry.id === membership.groupId); %>
+        <li>
+          <strong><%= user?.displayName ?? membership.userId %></strong>
+          <p><%= group?.name ?? membership.groupId %> · r:<%= membership.rights.read ? "yes" : "no" %> · w:<%= membership.rights.write ? "yes" : "no" %> · x:<%= membership.rights.execute ? "yes" : "no" %></p>
+        </li>
+      <% }) %>
+    </ul>
   </article>
   <article class="panel subtle">
     <h3>Template Assignments</h3>
-    <p>Platz fuer Group-Zuordnung von Form Templates gemaess Spezifikation.</p>
+    <ul class="stack-list compact">
+      <% catalog.templateAssignments.forEach((assignment) => { %>
+        <% const template = catalog.templates.find((entry) => entry.id === assignment.templateId); %>
+        <% const group = catalog.groups.find((entry) => entry.id === assignment.groupId); %>
+        <li>
+          <strong><%= template?.name ?? assignment.templateId %></strong>
+          <p><%= group?.name ?? assignment.groupId %> · <%= assignment.status %></p>
+        </li>
+      <% }) %>
+    </ul>
   </article>
 </section>
-

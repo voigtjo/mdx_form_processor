@@ -30,6 +30,14 @@ export type Membership = {
   rights: MembershipRights;
 };
 
+export type TemplateAssignment = {
+  id: string;
+  templateId: string;
+  groupId: string;
+  status: string;
+  assignedAt: string;
+};
+
 export type Task = {
   id: string;
   documentId: string;
@@ -60,6 +68,13 @@ export type WorkflowTemplate = {
   actions: WorkflowActionSummary[];
 };
 
+export type WorkflowFieldRule = {
+  editable?: string[];
+  readonly?: string[];
+};
+
+export type WorkflowFieldRules = Record<string, WorkflowFieldRule>;
+
 export type FormTemplate = {
   id: string;
   key: string;
@@ -74,6 +89,41 @@ export type FormTemplate = {
   tableFields: string[];
 };
 
+export type ReadOnlyFormField = {
+  name: string;
+  type: string;
+  label: string;
+  operationRef?: string;
+  helpText?: string;
+  flags: string[];
+  options?: string[];
+  editableIn?: string[];
+  readonlyIn?: string[];
+  currentValue?: string | string[];
+  isEditable: boolean;
+  isSavable: boolean;
+};
+
+export type ReadOnlyFormAction = {
+  name: string;
+  label?: string;
+  operationRef?: string;
+};
+
+export type ReadOnlyFormDefinition = {
+  templateId: string;
+  templateKey: string;
+  templateName: string;
+  templateVersion: number;
+  templateStatus: EntityStatus;
+  templateDescription?: string;
+  mdxBody: string;
+  sourceMeta: Record<string, string>;
+  sections: string[];
+  fields: ReadOnlyFormField[];
+  actions: ReadOnlyFormAction[];
+};
+
 export type Document = {
   id: string;
   templateId: string;
@@ -81,6 +131,27 @@ export type Document = {
   status: string;
   updatedAt: string;
   assignedUserIds: string[];
+};
+
+export type DocumentDetail = {
+  id: string;
+  templateId: string;
+  templateKey: string;
+  templateName: string;
+  templateVersion: number;
+  workflowTemplateId: string;
+  workflowTemplateKey: string;
+  workflowTemplateName: string;
+  workflowTemplateVersion: number;
+  title: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  formTemplateDescription?: string;
+  formTemplateStatus: EntityStatus;
+  formTemplateMdxBody: string;
+  documentDataJson: Record<string, unknown>;
+  workflowFieldRules: WorkflowFieldRules;
 };
 
 export type Assignment = {
@@ -110,6 +181,14 @@ export type Attachment = {
   createdAt: string;
 };
 
+export type AttachmentAsset = {
+  id: string;
+  documentId: string;
+  filename: string;
+  mimeType: string;
+  storageKey: string;
+};
+
 export type Operation = {
   operationRef: string;
   modulePath: string;
@@ -122,8 +201,8 @@ export type WorkspaceContext = {
   activeUser: User;
   users: User[];
   groups: Group[];
+  memberships: Membership[];
   tasks: Task[];
   templates: FormTemplate[];
   documents: Document[];
 };
-

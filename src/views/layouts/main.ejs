@@ -40,5 +40,17 @@
         <%- body %>
       </main>
     </div>
+
+    <% if (typeof appDialog !== "undefined" && appDialog) { %>
+      <div class="dialog-backdrop" data-app-dialog>
+        <div class="dialog-card dialog-<%= appDialog.type %>" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title">
+          <div class="dialog-header">
+            <h2 id="app-dialog-title"><%= appDialog.title %></h2>
+            <button class="dialog-close" type="button" data-dialog-close aria-label="Dialog schliessen">Schliessen</button>
+          </div>
+          <p><%= appDialog.message %></p>
+        </div>
+      </div>
+    <% } %>
   </body>
   </html>
