@@ -2,7 +2,28 @@
   <div>
     <span class="eyebrow">Arbeits-UI</span>
     <h2>Documents</h2>
-    <p>Finder fuer laufende Vorgangsarbeit mit Status, Zuweisungen und spaeterem Detailzugang.</p>
+    <p>Arbeitsuebersicht fuer sichtbare Documents mit Start, Filterung und direktem Zugang in die laufende Vorgangsarbeit.</p>
+  </div>
+  <div class="hero-metrics">
+    <article>
+      <strong><%= documentsList.summary.filteredCount %></strong>
+      <span>Shown</span>
+    </article>
+    <article>
+      <strong><%= documentsList.summary.activeCount %></strong>
+      <span>Active</span>
+    </article>
+    <article>
+      <strong><%= documentsList.summary.archivedCount %></strong>
+      <span>Archived</span>
+    </article>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h3>Start Document</h3>
+    <span class="chip"><%= activeUser.displayName %></span>
   </div>
   <div class="hero-actions">
     <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form">
@@ -31,51 +52,85 @@
 <section class="panel">
   <div class="panel-header">
     <h3>My Documents</h3>
-    <span class="chip">Standardfilter: nicht archiviert</span>
+    <span class="chip">Arbeitsfinder</span>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Document</th>
-          <th>Template</th>
-          <th>Status</th>
-          <th>Assigned Users</th>
-          <th>Updated</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% catalog.documents.forEach((document) => { %>
-          <% const template = catalog.templates.find((item) => item.id === document.templateId); %>
-          <% const assignedUsers = users.filter((user) => document.assignedUserIds.includes(user.id)).map((user) => user.displayName).join(", "); %>
-          <tr>
-            <td><a class="text-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>"><%= document.title %></a></td>
-            <td><%= template?.name ?? "Unbekannt" %></td>
-            <td><span class="status-pill"><%= document.status %></span></td>
-            <td><%= assignedUsers %></td>
-            <td><%= document.updatedAt %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  </div>
-</section>
 
-<section class="grid four-up">
-  <article class="panel subtle">
-    <h3>Work Summary</h3>
-    <p>Vorgesehen fuer Template-, Workflow- und Assignment-Kontext.</p>
-  </article>
-  <article class="panel subtle">
-    <h3>Form</h3>
-    <p>MDX-Rendering folgt im naechsten Umsetzungsschritt.</p>
-  </article>
-  <article class="panel subtle">
-    <h3>Attachments</h3>
-    <p>Bereich fuer Dateiliste und Upload-Hooks ist reserviert.</p>
-  </article>
-  <article class="panel subtle">
-    <h3>History</h3>
-    <p>Audit- und Journal-Sicht bleibt vorbereitet, aber noch schlank.</p>
-  </article>
+  <form method="get" action="/documents" class="filter-form">
+    <input type="hidden" name="user" value="<%= activeUser.key %>" />
+    <div class="filter-grid">
+      <div>
+        <label class="field-label" for="documents-q">Search</label>
+        <input id="documents-q" type="search" name="q" value="<%= documentsList.filterState.q %>" placeholder="Document, Template oder Workflow" />
+      </div>
+      <div>
+        <label class="field-label" for="documents-status">Status</label>
+        <select id="documents-status" name="status">
+          <option value="">Alle sichtbaren Status</option>
+          <% documentsList.availableStatuses.forEach((status) => { %>
+            <option value="<%= status %>" <%= documentsList.filterState.status === status ? "selected" : "" %>><%= status %></option>
+          <% }) %>
+        </select>
+      </div>
+      <label class="filter-toggle">
+        <input type="checkbox" name="showArchived" value="1" <%= documentsList.filterState.showArchived ? "checked" : "" %> />
+        <span>Archivierte Documents einbeziehen</span>
+      </label>
+      <div class="filter-actions">
+        <button class="button-secondary" type="submit">Apply Filters</button>
+        <a class="text-link" href="/documents?user=<%= activeUser.key %>">Reset</a>
+      </div>
+    </div>
+  </form>
+
+  <p class="panel-copy">
+    Standardansicht zeigt sichtbare Documents ohne archivierte Eintraege. Template-, Workflow- und Assignment-Kontext bleiben in der Liste lesbar, die eigentliche Arbeit liegt weiterhin im Detail.
+  </p>
+
+  <% if (documentsList.documents.length === 0) { %>
+    <div class="empty-state">
+      <strong>Keine Documents gefunden.</strong>
+      <p>Die aktuelle Kombination aus Suche, Status und Archivfilter liefert keine Treffer.</p>
+    </div>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Template</th>
+            <th>Workflow</th>
+            <th>Status</th>
+            <th>Assigned Users</th>
+            <th>Updated</th>
+            <th>Open</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% documentsList.documents.forEach((document) => { %>
+            <% const template = catalog.templates.find((item) => item.id === document.templateId); %>
+            <% const workflow = template ? catalog.workflows.find((item) => item.id === template.workflowTemplateId) : undefined; %>
+            <% const assignedUsers = users.filter((user) => document.assignedUserIds.includes(user.id)).map((user) => user.displayName).join(", "); %>
+            <tr>
+              <td>
+                <a class="text-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>"><%= document.title %></a>
+                <p class="table-meta"><%= document.status === "archived" ? "Archivierter Vorgang" : "Aktiver Vorgang" %></p>
+              </td>
+              <td>
+                <strong><%= template?.name ?? "Unbekannt" %></strong>
+                <p class="table-meta"><%= template?.key ?? "ohne Template-Key" %></p>
+              </td>
+              <td>
+                <strong><%= workflow?.name ?? "Unbekannt" %></strong>
+                <p class="table-meta"><%= workflow?.key ?? "ohne Workflow-Key" %></p>
+              </td>
+              <td><span class="status-pill"><%= document.status %></span></td>
+              <td><%= assignedUsers || "Keine aktiven Assignments" %></td>
+              <td><%= document.updatedAt %></td>
+              <td><a class="text-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>">Open</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
 </section>

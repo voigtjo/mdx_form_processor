@@ -2,7 +2,14 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyError } from "fastify";
-import { createBaseViewModel, createDocumentDetailViewModel } from "../services/app-context.js";
+import {
+  createBaseViewModel,
+  createDocumentDetailViewModel,
+  createTemplateDetailViewModel,
+  createTemplateNewViewModel,
+  createWorkflowDetailViewModel,
+  createWorkflowNewViewModel,
+} from "../services/app-context.js";
 import { findAttachmentAssetVisibleToUser } from "../modules/attachments/read.js";
 import { parseSingleAttachmentUpload, uploadAttachmentForUser } from "../modules/attachments/upload.js";
 import { approveDocumentForUser } from "../modules/documents/approve.js";
@@ -11,14 +18,24 @@ import { rejectDocumentForUser } from "../modules/documents/reject.js";
 import { saveDocumentValuesForUser } from "../modules/documents/save.js";
 import { startDocumentForUser } from "../modules/documents/start.js";
 import { submitDocumentForUser } from "../modules/documents/submit.js";
+import { addJournalEntryForUser } from "../modules/journal/add.js";
 import { getActiveUser } from "../services/app-context.js";
+import { createTemplateDraft } from "../modules/templates/create.js";
 import { listUsers } from "../modules/users/read.js";
+import { createWorkflowDraft } from "../modules/workflows/create.js";
 
 type UserQuery = {
   user?: string;
+  q?: string;
+  template?: string;
+  workflow?: string;
+  status?: string;
+  showArchived?: string;
   startError?: string;
   saveError?: string;
   saveStatus?: string;
+  journalError?: string;
+  journalStatus?: string;
   submitError?: string;
   submitStatus?: string;
   approveError?: string;
@@ -37,9 +54,14 @@ type UserQuery = {
 const query = (request: FastifyRequest): UserQuery => request.query as UserQuery;
 
 const queryValue = (request: FastifyRequest): string | undefined => query(request).user;
+const searchValue = (request: FastifyRequest): string | undefined => query(request).q;
+const statusFilterValue = (request: FastifyRequest): string | undefined => query(request).status;
+const showArchivedValue = (request: FastifyRequest): string | undefined => query(request).showArchived;
 const startErrorValue = (request: FastifyRequest): string | undefined => query(request).startError;
 const saveErrorValue = (request: FastifyRequest): string | undefined => query(request).saveError;
 const saveStatusValue = (request: FastifyRequest): string | undefined => query(request).saveStatus;
+const journalErrorValue = (request: FastifyRequest): string | undefined => query(request).journalError;
+const journalStatusValue = (request: FastifyRequest): string | undefined => query(request).journalStatus;
 const submitErrorValue = (request: FastifyRequest): string | undefined => query(request).submitError;
 const submitStatusValue = (request: FastifyRequest): string | undefined => query(request).submitStatus;
 const approveErrorValue = (request: FastifyRequest): string | undefined => query(request).approveError;
@@ -69,6 +91,77 @@ const dialogState = (request: FastifyRequest) => {
 const withDialog = async (request: FastifyRequest, input: Record<string, unknown>) => {
   const appDialog = dialogState(request);
   return appDialog ? { ...input, appDialog } : input;
+};
+
+const normalizeSearchTerm = (value: string | undefined): string => value?.trim() ?? "";
+
+const normalizeShowArchived = (value: string | undefined): boolean => {
+  return value === "1" || value === "true" || value === "yes";
+};
+
+const filterDocumentsViewModel = (input: {
+  documents: Array<{ id: string; title: string; templateId: string; status: string; assignedUserIds: string[]; updatedAt: string }>;
+  templates: Array<{ id: string; key: string; name: string; workflowTemplateId: string }>;
+  workflows: Array<{ id: string; key: string; name: string }>;
+  users: Array<{ id: string; displayName: string }>;
+  searchTerm: string;
+  statusFilter: string | undefined;
+  showArchived: boolean;
+}) => {
+  const templateById = new Map(input.templates.map((template) => [template.id, template]));
+  const workflowById = new Map(input.workflows.map((workflow) => [workflow.id, workflow]));
+  const normalizedSearch = input.searchTerm.toLowerCase();
+  const validStatuses = Array.from(new Set(input.documents.map((document) => document.status))).sort();
+  const normalizedStatusFilter = input.statusFilter && validStatuses.includes(input.statusFilter) ? input.statusFilter : "";
+  const filteredDocuments = input.documents.filter((document) => {
+    if (!input.showArchived && document.status === "archived") {
+      return false;
+    }
+
+    if (normalizedStatusFilter && document.status !== normalizedStatusFilter) {
+      return false;
+    }
+
+    if (!normalizedSearch) {
+      return true;
+    }
+
+    const template = templateById.get(document.templateId);
+    const workflow = template ? workflowById.get(template.workflowTemplateId) : undefined;
+    const assignedUsers = input.users
+      .filter((user) => document.assignedUserIds.includes(user.id))
+      .map((user) => user.displayName)
+      .join(" ");
+    const haystack = [
+      document.title,
+      template?.name ?? "",
+      template?.key ?? "",
+      workflow?.name ?? "",
+      workflow?.key ?? "",
+      assignedUsers,
+      document.status,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(normalizedSearch);
+  });
+
+  return {
+    documents: filteredDocuments,
+    availableStatuses: validStatuses,
+    filterState: {
+      q: input.searchTerm,
+      status: normalizedStatusFilter,
+      showArchived: input.showArchived,
+    },
+    summary: {
+      totalVisible: input.documents.length,
+      activeCount: input.documents.filter((document) => document.status !== "archived").length,
+      archivedCount: input.documents.filter((document) => document.status === "archived").length,
+      filteredCount: filteredDocuments.length,
+    },
+  };
 };
 
 const buildDialogRedirect = (targetUrl: string, input: { type?: "error" | "info"; title: string; message: string }) => {
@@ -141,14 +234,125 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     return renderPage(request, reply, "templates", "templates", "Templates");
   });
 
+  app.get("/templates/new", async (request, reply) => {
+    return reply.view("pages/template-new.ejs", await withDialog(request, await createTemplateNewViewModel(queryValue(request))));
+  });
+
+  app.post<{ Body: { name?: string; key?: string; description?: string; workflowTemplateId?: string } }>("/templates/new", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+
+    try {
+      const result = await createTemplateDraft({
+        name: request.body?.name ?? "",
+        key: request.body?.key ?? "",
+        ...(request.body?.description ? { description: request.body.description } : {}),
+        workflowTemplateId: request.body?.workflowTemplateId ?? "",
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/templates/${result.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Template angelegt",
+          message: "Ein neues Template-Draft wurde angelegt.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Das Template konnte nicht angelegt werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/templates/new?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Template konnte nicht angelegt werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.get("/templates/:id", async (request, reply) => {
+    const params = request.params as { id: string };
+    const viewModel = await createTemplateDetailViewModel(queryValue(request), params.id);
+
+    if (!viewModel) {
+      return reply.code(404).view("pages/template-not-found.ejs", await withDialog(request, {
+        title: "Template Not Found",
+        ...(await createBaseViewModel("templates", queryValue(request))),
+      }));
+    }
+
+    return reply.view("pages/template-detail.ejs", await withDialog(request, viewModel));
+  });
+
   app.get("/workflows", async (request, reply) => {
     return renderPage(request, reply, "workflows", "workflows", "Workflows");
   });
 
+  app.get("/workflows/new", async (request, reply) => {
+    return reply.view("pages/workflow-new.ejs", await withDialog(request, await createWorkflowNewViewModel(queryValue(request))));
+  });
+
+  app.post<{ Body: { name?: string; key?: string; description?: string } }>("/workflows/new", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+
+    try {
+      const result = await createWorkflowDraft({
+        name: request.body?.name ?? "",
+        key: request.body?.key ?? "",
+        ...(request.body?.description ? { description: request.body.description } : {}),
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/workflows/${result.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Workflow angelegt",
+          message: "Ein neues Workflow-Draft wurde angelegt.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Der Workflow konnte nicht angelegt werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/workflows/new?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Workflow konnte nicht angelegt werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.get("/workflows/:id", async (request, reply) => {
+    const params = request.params as { id: string };
+    const viewModel = await createWorkflowDetailViewModel(queryValue(request), params.id);
+
+    if (!viewModel) {
+      return reply.code(404).view("pages/workflow-not-found.ejs", await withDialog(request, {
+        title: "Workflow Not Found",
+        ...(await createBaseViewModel("workflows", queryValue(request))),
+      }));
+    }
+
+    return reply.view("pages/workflow-detail.ejs", await withDialog(request, viewModel));
+  });
+
   app.get("/documents", async (request, reply) => {
+    const baseViewModel = await createBaseViewModel("documents", queryValue(request));
+    const documentsList = filterDocumentsViewModel({
+      documents: baseViewModel.catalog.documents,
+      templates: baseViewModel.catalog.templates,
+      workflows: baseViewModel.catalog.workflows,
+      users: baseViewModel.users,
+      searchTerm: normalizeSearchTerm(searchValue(request)),
+      statusFilter: statusFilterValue(request),
+      showArchived: normalizeShowArchived(showArchivedValue(request)),
+    });
+
     return reply.view("pages/documents.ejs", await withDialog(request, {
       title: "Documents",
-      ...(await createBaseViewModel("documents", queryValue(request))),
+      ...baseViewModel,
+      documentsList,
       startError: startErrorValue(request),
     }));
   });
@@ -192,6 +396,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       ...viewModel,
       saveError: saveErrorValue(request),
       saveStatus: saveStatusValue(request),
+      journalError: journalErrorValue(request),
+      journalStatus: journalStatusValue(request),
       submitError: submitErrorValue(request),
       submitStatus: submitStatusValue(request),
       approveError: approveErrorValue(request),
@@ -232,6 +438,39 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
     return reply.redirect(
       `/documents/${encodeURIComponent(result.documentId)}?user=${encodeURIComponent(activeUser.key)}&saveStatus=${encodeURIComponent("Werte gespeichert.")}`,
+      303,
+    );
+  });
+
+  app.post<{ Params: { id: string }; Body: { journalFieldName?: string; entryText?: string } }>("/documents/:id/journal", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const result = await addJournalEntryForUser({
+      documentId: request.params.id,
+      userId: activeUser.id,
+      userDisplayName: activeUser.displayName,
+      journalFieldName: request.body?.journalFieldName ?? "",
+      entryText: request.body?.entryText ?? "",
+    });
+
+    if (!result.ok && result.reason === "document_not_visible") {
+      return reply.code(404).view("pages/document-not-found.ejs", {
+        ...(await withDialog(request, {})),
+        title: "Document Not Found",
+        ...(await createBaseViewModel("documents", queryValue(request))),
+        missingDocumentId: request.params.id,
+      });
+    }
+
+    if (!result.ok) {
+      return reply.redirect(
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&journalError=${encodeURIComponent(result.details ?? "Journal-Eintrag konnte nicht hinzugefuegt werden.")}`,
+        303,
+      );
+    }
+
+    return reply.redirect(
+      `/documents/${encodeURIComponent(result.documentId)}?user=${encodeURIComponent(activeUser.key)}&journalStatus=${encodeURIComponent("Journal-Eintrag hinzugefuegt.")}`,
       303,
     );
   });

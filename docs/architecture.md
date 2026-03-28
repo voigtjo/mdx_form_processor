@@ -1,257 +1,98 @@
-# Zielarchitektur für mdx_form_processor
+# Architektur und Ist-Stand für mdx_form_processor
 
-## 1. Zweck dieses Dokuments
+## Zweck
 
-Dieses Dokument beschreibt die Zielarchitektur des Projekts `mdx_form_processor` auf Basis des vollständigen Spezifikationssatzes unter `specs/`.
+Dieses Dokument beschreibt den **tatsächlichen aktuellen Stand** des Repos und dient als technische Leitplanke für die nächsten Codex-Schritte.
 
-Es hat zwei Funktionen:
+Führend bleiben die Produktspezifikationen unter `specs/`.
 
-1. Es dient als technische Leitplanke für die weitere Entwicklung mit Codex.
-2. Es stellt klar, was der aktuelle Greenfield-Stand bereits leistet und was als Nächstes umzusetzen ist.
+Dieses Dokument trennt bewusst zwischen:
 
-Dieses Dokument ist **kein Ersatz** für die Spezifikation.  
-Führend bleiben die Dateien unter `specs/`.
+- aktuellem Implementierungsstand
+- noch offenen Alt-Spec-Lücken
+- späterer, separat vorzubereitender Richtungsänderung
 
----
+## Führende Quellen
 
-## 2. Führende Quellen
+Für den aktuellen Stand besonders relevant:
 
-Die Architektur dieses Repos wird aus den Spezifikationsdateien unter `specs/` abgeleitet.
+- `specs/00_decision_record.md`
+- `specs/01_mvp_scope.md`
+- `specs/03_domain_model.md`
+- `specs/04_form_mdx_spec.md`
+- `specs/05_workflow_json_spec.md`
+- `specs/07_permissions_visibility_spec.md`
+- `specs/08_versioning_lifecycle_spec.md`
+- `specs/09_navigation_information_architecture.md`
+- `specs/10_screen_spec_workspace.md`
+- `specs/11_screen_spec_templates.md`
+- `specs/12_screen_spec_workflows.md`
+- `specs/13_screen_spec_documents.md`
+- `specs/14_screen_spec_admin.md`
+- `specs/17_reference_data_spec.md`
+- `specs/18_validation_and_rules.md`
+- `specs/19_non_goals_and_future_scope.md`
+- `specs/20_sample_data_seed.md`
 
-Besonders relevant sind:
+## Leitentscheidungen
 
-- `00_decision_record.md`
-- `01_mvp_scope.md`
-- `03_domain_model.md`
-- `04_form_mdx_spec.md`
-- `05_workflow_json_spec.md`
-- `06_operations_spec.md`
-- `07_permissions_visibility_spec.md`
-- `08_versioning_lifecycle_spec.md`
-- `09_navigation_information_architecture.md`
-- `10_screen_spec_workspace.md`
-- `11_screen_spec_templates.md`
-- `12_screen_spec_workflows.md`
-- `13_screen_spec_documents.md`
-- `14_screen_spec_admin.md`
-- `16_user_flows.md`
-- `17_reference_data_spec.md`
-- `18_validation_and_rules.md`
-- `19_non_goals_and_future_scope.md`
-- `20_sample_data_seed.md`
-
----
-
-## 3. Leitentscheidungen
-
-Für den MVP gelten diese technischen Leitentscheidungen:
+Der aktuelle Stand folgt weiterhin diesen Grundentscheidungen:
 
 - Laufzeitdaten liegen in Postgres.
-- Die App läuft als Node.js-Anwendung mit Fastify.
-- Der Codebasis wird in TypeScript gepflegt.
-- Die Web-Oberfläche rendert serverseitig über EJS.
-- Die UI folgt einem ruhigen, arbeitsorientierten Material-Design-Stil.
-- Form-Definitionen sind MDX.
-- Workflow-Definitionen sind JSON.
-- Operationen werden als TypeScript-Module geschnitten.
-- Das MVP startet mono-tenant und ohne Authentifizierung.
-- Der Nutzerkontext wird über User-Selektion statt Login bestimmt.
+- Web-Server und Routing laufen auf Node.js + Fastify.
+- Der Anwendungscode ist TypeScript.
+- Serverseitiges Rendering erfolgt mit EJS.
+- Die App ist mono-tenant.
+- Das MVP arbeitet ohne Auth; der Kontext wird über User-Selektion bestimmt.
+- Form-Definitionen werden aus `form_templates.mdx_body` gelesen.
+- Workflow-Definitionen werden aus `workflow_templates.workflow_json` gelesen.
+- Operationen bleiben als TypeScript-Referenzen modelliert, werden aktuell aber noch nicht ausgeführt.
 
----
+## Aktueller Systemzuschnitt
 
-## 4. Führende Modellwahrheiten
+### 1. Web Shell
 
-Für jeden Bereich gibt es genau ein führendes Modell:
+Der Web-Schnitt ist produktiv vorhanden:
 
-- Form = MDX
-- Workflow = JSON
-- Operation / Integration = TypeScript
-- Persistierte Laufzeitdaten = Postgres + definierte JSON-Felder
+- Fastify-App und Server-Entry
+- EJS-Rendering mit gemeinsamem Layout
+- Hauptnavigation
+- User-Selektion über Query-Kontext
+- formulargestützte POST-Routen für kleine MVP-Arbeitsschritte
+- schließbarer HTML-Fehlerdialog für HTML-basierte Fehlerpfade
 
-Nicht zulässig sind konkurrierende Primärmodelle wie:
+Zentrale Dateien:
 
-- Builder-interne Layoutmodelle als führende Wahrheit
-- parallele Workflowmodelle neben JSON
-- API-Bridge-Strukturen als neues Primärmodell
-- Sample-Daten als dauerhafte Laufzeitquelle
+- `src/app.ts`
+- `src/server.ts`
+- `src/routes/web.ts`
+- `src/views/layouts/main.ejs`
+- `src/public/js/app.js`
+- `src/public/css/app.css`
 
----
+### 2. Persistenzbasis
 
-## 5. Aktueller Ist-Stand des Projekts
+Die Persistenzbasis ist nicht mehr nur vorbereitet, sondern aktiv im Einsatz:
 
-Der aktuelle Greenfield-Stand des Repos ist:
+- SQL-Grundschema für Kernobjekte liegt vor
+- Migrationslauf ist über Skript nutzbar
+- reproduzierbarer Reference Rebuild ist vorhanden
+- Seed-Daten decken Nutzer, Gruppen, Templates, Workflows, Documents, Assignments, Tasks, Attachments und Audit ab
 
-- das Repo ist neu aufgebaut
-- der vollständige Spezifikationssatz liegt unter `specs/`
-- ein technisches Grundgerüst mit Fastify / TypeScript / EJS ist vorhanden
-- die Hauptseiten existieren bereits:
-  - `/workspace`
-  - `/templates`
-  - `/workflows`
-  - `/documents`
-  - `/admin`
-- die App läuft im Browser
-- die Postgres-Verbindung ist jetzt eingerichtet und erreichbar
-- `DATABASE_URL` ist gesetzt
-- `npm run db:check` ist grün
+Zentrale Dateien:
 
-Wichtig ist:
+- `sql/001_initial_schema.sql`
+- `src/db/migrate.ts`
+- `src/db/seed-reference.ts`
+- `src/db/reference-data.ts`
+- `src/db/rebuild-reference.ts`
+- `src/db/pool.ts`
 
-Der aktuelle Stand ist **noch kein echter persistenter MVP-Kern**.  
-Die ersten Seiten sind bisher als Greenfield-Rahmen bzw. mit Sample-/Placeholder-Daten aufgebaut worden.
+### 3. Read-Layer
 
----
+Es existiert ein kleiner modulbezogener DB-Read-Layer unter `src/modules/*/read.ts`.
 
-## 6. Architekturziel des nächsten Schritts
-
-Der nächste Entwicklungsschritt ist **nicht**:
-
-- Builder
-- volle Workflow-Engine
-- Integrationsausbau
-- Auth
-- Multitenancy
-- DMS-Ausbau
-- visuelle Designer
-
-Der nächste Entwicklungsschritt ist:
-
-**Persistente Basisschicht + Reference Seed + echte DB-Daten auf den Hauptseiten**
-
-Das ist der kleinste sinnvolle Vertikalschnitt, weil damit:
-
-- die App nicht mehr nur eine UI-Hülle ist
-- der Referenzbestand aus der Spezifikation real existiert
-- Hauptseiten mit echten Daten arbeiten
-- spätere Umsetzungsstufen sauber darauf aufbauen können
-
----
-
-## 7. Zielbild des MVP-Systemschnitts
-
-Die Anwendung ist im MVP in vier klar getrennte Bereiche zu schneiden:
-
-### 7.1 Web Shell
-Verantwortlich für:
-
-- Fastify-Server
-- Routen
-- Rendering
-- Layout
-- statische Assets
-- User-Selektion
-- Navigation
-
-### 7.2 Konfiguration
-Verantwortlich für:
-
-- Form Templates
-- Workflow Templates
-- Versionsstatus
-- Group-Zuweisungen
-- operationRef-Verweise
-
-### 7.3 Laufzeit
-Verantwortlich für:
-
-- Documents
-- Document Assignments
-- Audit Events
-- spätere Journal-/Attachment-Nutzung
-- Sichtbarkeit im Workspace
-- spätere Action-/Statusausführung
-
-### 7.4 Integration
-Verantwortlich für:
-
-- TypeScript-Operationen
-- spätere Hook-Ausführung
-- Lookup-Operationen
-- Form Actions
-- strukturierte Auth-Strategien
-
-Im aktuellen nächsten Schritt wird der Fokus bewusst auf **Konfiguration + Laufzeitbasis + Persistenz** gelegt.
-
----
-
-## 8. Ziel-Datenmodell des nächsten Vertikalschnitts
-
-Für den nächsten echten Persistenzschritt sollen mindestens diese Kernobjekte sauber in Postgres liegen:
-
-- users
-- groups
-- memberships
-- workflow_templates
-- form_templates
-- template_assignments
-- documents
-- document_assignments
-- audit_events
-
-Benennungsentscheidung für den Persistenzschnitt:
-
-- im Code bleibt das Fachmodul `assignments`
-- in Postgres wird die Tabelle `document_assignments` verwendet
-- damit bleibt die fachliche Domänensprache `Assignment` erhalten, während die DB-Benennung die dokumentbezogene Natur explizit macht
-
-Noch nicht voll auszubauen, nur falls technisch vorbereitet erforderlich:
-
-- attachments
-- journals
-- operation runtime state
-
----
-
-## 9. Ziel-Datenfluss
-
-Der führende Datenfluss soll mittelfristig so aussehen:
-
-### 9.1 Konfiguration
-- Form Template wird aus MDX definiert
-- Workflow Template wird aus JSON definiert
-- Template referenziert Workflow
-- Template ist Groups zugewiesen
-
-### 9.2 Laufzeit
-- User wählt sich aktiv aus
-- Workspace zeigt Daten passend zu Memberships und Document-Zuordnungen
-- Document wird aus publiziertem Template gestartet
-- Document bleibt an Template-Version und Workflow-Version gebunden
-
-### 9.3 Spätere Interaktion
-- Form Actions referenzieren `operationRef`
-- Workflow Hooks referenzieren `operationRef`
-- Operationen arbeiten auf dem Laufzeitkontext des Documents
-
-Im nächsten Schritt wird davon zunächst der **Read-/Übersichtspfad** umgesetzt.
-
----
-
-## 10. Verzeichnisstrategie im Repo
-
-Die Repo-Struktur soll langfristig so lesbar bleiben:
-
-- `specs/` = führende Produktspezifikation
-- `docs/` = Architektur und begleitende technische Leitdokumente
-- `sql/` = Migrationen / Setup / Rebuild-nahe SQL-Artefakte
-- `src/config/` = Konfiguration
-- `src/db/` = DB-Anbindung
-- `src/modules/` = fachliche Modulgrenzen
-- `src/routes/` = Web-Routen
-- `src/services/` = anwendungsnahe Orchestrierung
-- `src/views/` = EJS-Templates
-- `src/public/` = Assets
-
-### Wichtige Regel
-
-Views rendern Daten.  
-Views sind **nicht** der Ort für Geschäftslogik oder direkte DB-Zugriffe.
-
----
-
-## 11. Modulzuschnitt
-
-Die fachlichen Module sind im MVP zunächst entlang der Hauptobjekte zu schneiden:
+Aktiv genutzt werden Read-Pfade für:
 
 - users
 - groups
@@ -260,42 +101,38 @@ Die fachlichen Module sind im MVP zunächst entlang der Hauptobjekte zu schneide
 - workflows
 - documents
 - assignments
-- audit
-- operations
 - attachments
-
-Im nächsten Schritt sollen mindestens diese Module echte Lesepfade über Repositories bekommen:
-
-- users
-- groups
-- memberships
-- templates
-- workflows
-- documents
-- assignments
 - audit
 
----
+Die Hauptseiten und die Document-Detailseite lesen nicht mehr aus `sample-data.ts`, sondern über den DB-Layer und `src/services/app-context.ts`.
 
-## 12. Repositories statt Direktzugriffe
+### 4. Document-Arbeitsfluss
 
-Ab dem nächsten Schritt gilt:
+Im aktuellen Stand existiert ein kleiner, aber echter Arbeitsfluss für Documents:
 
-- keine DB-Zugriffe direkt in Routen
-- keine DB-Zugriffe direkt in Views
-- keine Sample-Daten als Primärquelle
+- Start eines Documents aus publiziertem Template
+- Save einfacher Formwerte nach `documents.data_json`
+- Submit
+- Approve
+- Reject
+- Archive
 
-Stattdessen:
+Diese Schritte sind jeweils bewusst klein und als eigene Module geschnitten, nicht als allgemeine Action-Engine.
 
-- Query-/Repository-Layer pro Kernmodul
-- schmale, lesbare Read-Modelle für die Hauptseiten
-- klare Trennung zwischen Persistenzzugriff und Rendering
+Zentrale Dateien:
 
----
+- `src/modules/documents/start.ts`
+- `src/modules/documents/save.ts`
+- `src/modules/documents/submit.ts`
+- `src/modules/documents/approve.ts`
+- `src/modules/documents/reject.ts`
+- `src/modules/documents/archive.ts`
 
-## 13. Seiten, die als Nächstes auf echte DB-Daten umzustellen sind
+## Aktueller fachlicher Ist-Stand
 
-Die folgenden Seiten sollen im nächsten Vertikalschnitt auf echte Daten umgestellt werden:
+### Hauptseiten
+
+Vorhanden und aus Postgres gelesen:
 
 - `/workspace`
 - `/templates`
@@ -303,121 +140,181 @@ Die folgenden Seiten sollen im nächsten Vertikalschnitt auf echte Daten umgeste
 - `/documents`
 - `/admin`
 
-Wichtig:
+Die Seiten sind lauffähig und datenbasiert, aber noch nicht durchgehend spec-nah in ihrer finalen UI-Ausprägung.
 
-- zunächst Read-only / Übersicht / Listenfokus
-- noch keine Voll-CRUD-Pflicht
-- lieber echte Daten sauber lesen als zu viel halb bauen
+### Document Detail
 
----
+Vorhanden:
 
-## 14. Reference Seed als Pflichtbestand
+- `GET /documents/:id`
+- read-only Detailkopf
+- Assignments
+- Tasks
+- Attachments
+- Audit-History
+- Form-Bereich
 
-Der Referenzbestand ist keine Nebensache, sondern ein führender Bestandteil der Architektur.
+Die Seite ist aktuell die funktional am weitesten ausgebaute Arbeitsseite.
 
-Der nächste Schritt muss daher einen reproduzierbaren **Reference Seed** schaffen, passend zu:
+### Form-Read
 
-- `17_reference_data_spec.md`
-- `20_sample_data_seed.md`
+Der Form-Bereich liest das verknüpfte `form_templates.mdx_body` aus Postgres.
 
-Dieser Referenzstand soll mindestens enthalten:
+Aktuell umgesetzt ist **kein vollwertiges MDX-Rendering**, sondern ein kleiner lokaler Analyse-/Leseschnitt:
 
-- Alice
-- Bob
-- Ops
-- Memberships
-- drei Referenz-Workflows
-- drei Referenz-Templates
-- Template Assignments
-- mindestens drei Referenz-Documents
-- passende Document Assignments
-- erste Audit Events
+- Frontmatter-Auslese
+- Sections
+- Fields
+- Actions
+- workflowbasierte `fieldRules`-Einbeziehung
+- read-only Darstellung
+- kleine Save-Freigabe für einfache Feldtypen
 
----
+Zentrale Datei:
 
-## 15. Rebuild statt losem Seed
+- `src/modules/templates/form-read.ts`
 
-Für dieses Projekt ist nicht nur „Seed“ wichtig, sondern ein reproduzierbarer **Rebuild**.
+### Start / Save / Submit / Approve / Reject / Archive
 
-Ziel ist:
+Aktuell umgesetzt:
 
-- Schema aufbauen
-- Referenzdaten zuverlässig herstellen
-- vorhandene Alt-/Testmischungen vermeiden
-- immer wieder auf einen klaren Referenzstand zurückkehren können
-
-Darum soll der nächste Umsetzungsschritt klare Kommandos für mindestens Folgendes vorsehen:
-
-- Migration ausführen
-- Reference Seed einspielen
-- kompletter Rebuild des Referenzstands
-
----
-
-## 16. Was bewusst noch nicht zur Zielarchitektur des nächsten Schritts gehört
-
-Die folgenden Themen sind **nicht** Ziel des nächsten Umsetzungsschritts:
-
-- visueller Form-Builder
-- visueller Workflow-Builder
-- Authentifizierung
-- Multitenancy
-- Secret Store
-- komplexe Integrationen
-- vollständige Workflow-Engine
-- vollständige Hook-Orchestrierung
-- Journal-/Attachment-Vollausbau
-- vollwertige Admin-CRUD-Strecken
-- generischer Low-Code-Ansatz
-
-Diese Themen dürfen die nächste Implementierungsphase nicht dominieren.
-
----
-
-## 17. Rolle von Codex in der weiteren Entwicklung
-
-Die weitere Entwicklung soll mit Codex umgesetzt werden.
-
-Für die Zusammenarbeit mit Codex gilt:
-
-- Codex soll auf den tatsächlichen Repo-Stand schauen
-- Codex soll die Spezifikation unter `specs/` als führend behandeln
-- Codex soll nicht auf Altwissen aus früheren Projekten oder Builder-Experimenten zurückfallen
-- Codex soll in kleinen, sauberen Vertikalschnitten arbeiten
-- jeder Schritt muss sichtbar, testbar und reproduzierbar sein
+- Start legt ein neues Document an und schreibt initiale Audit-Einträge.
+- Save persistiert einfache Werte in `documents.data_json`.
+- Submit / Approve / Reject / Archive lesen jeweils die konkrete Transition aus dem verknüpften Workflow-Template.
+- Der Statuswechsel wird persistiert.
+- Audit-Events werden fortgeschrieben.
+- Form-Bearbeitung wird in abgeschlossenen Status read-only.
 
 Wichtig:
-Dieses Projekt wird **nicht** durch paralleles Improvisieren vervollständigt, sondern durch kontrollierte Spezifikationsumsetzung.
 
----
+- Es gibt weiterhin **keine allgemeine Workflow-Engine**.
+- Es gibt weiterhin **keine allgemeine Action-Engine**.
+- Es gibt weiterhin **keine Hook- oder Operation-Ausführung**.
 
-## 18. Nächster verbindlicher Implementierungsauftrag
+### Attachments
 
-Der nächste verbindliche Architekturzug lautet:
+Ein erster MVP-Upload-Schnitt ist vorhanden:
 
-**Die App ist mit einer echten Postgres-Basisschicht auszustatten, so dass mit dynamischen Daten gearbeitet werden kann.**
+- Upload über die Document-Detailseite
+- lokale Dateispeicherung unter `storage/attachments`
+- Attachment-Metadaten in Postgres
+- Anzeige im Attachments-Bereich
+- Bild-Thumbnails für Bilddateien
+- read-only Content-Route für sichtbare Attachments
+- Audit-Eintrag `attachment_uploaded`
 
-Dazu gehören mindestens:
+Wichtig:
 
-1. Analyse des Ist-Stands im Repo
-2. Ableitung des minimalen Postgres-Schemas aus der Spezifikation
-3. Migrationen / SQL für die Kernobjekte
-4. reproduzierbarer Reference Seed
-5. Repository-/Query-Layer
-6. Umstellung der Hauptseiten auf echte DB-Daten
-7. Entkopplung der bisherigen Sample-Daten
-8. klare Setup-/Rebuild-Kommandos
+- keine allgemeine Storage-Plattform
+- keine Versionierung
+- keine Download-/Lifecycle-Architektur über den kleinen MVP-Schnitt hinaus
 
----
+### Audit
 
-## 19. Ergebnisregel
+Audit ist im aktuellen Stand ein echter Persistenz- und Anzeige-Schnitt:
 
-Dieses Dokument definiert die technische Zielrichtung des aktuellen Greenfield-Standes.
+- Reference Seed enthält Audit-Events
+- Start / Save / Submit / Approve / Reject / Archive / Attachment Upload schreiben Audit-Einträge
+- die Document-Detailseite rendert die History aus Postgres
 
-Es beschreibt, wie das vorhandene Grundgerüst in den nächsten sinnvollen persistierten MVP-Schritt überführt wird.
+## Datenmodell im Ist-Stand
 
-Wenn aktuelle Implementierungen davon abweichen, gelten:
+Im aktuellen Schema aktiv relevant:
 
-1. die Spezifikation unter `specs/`
-2. dieses Architekturpapier als technische Leitplanke
-3. dann erst der bestehende Code
+- `users`
+- `groups`
+- `memberships`
+- `workflow_templates`
+- `form_templates`
+- `template_assignments`
+- `operations`
+- `documents`
+- `document_assignments`
+- `tasks`
+- `attachments`
+- `audit_events`
+
+Benennungsentscheidung:
+
+- im Code bleibt das Fachmodul `assignments`
+- in Postgres heißt die Tabelle `document_assignments`
+
+Diese Entscheidung ist umgesetzt und soll bis auf Weiteres stabil bleiben.
+
+## Repo- und Modulstrategie
+
+Die aktuelle Struktur bleibt führend:
+
+- `specs/` führende Produktspezifikation
+- `docs/` technische Begleitdokumente
+- `sql/` Schema-Basis
+- `src/db/` DB-nahe Laufzeit- und Rebuild-Skripte
+- `src/modules/` fachliche Module
+- `src/services/` ViewModel- und App-Kontext-Orchestrierung
+- `src/routes/` HTTP-Routen
+- `src/views/` EJS-Templates
+- `src/public/` Assets
+
+Regel:
+
+- keine DB-Zugriffe in Views
+- keine Sample-Daten als Primärquelle für Hauptseiten
+- kein Ausbau über generische Framework-Abstraktionen, wenn ein kleiner lokaler Schnitt reicht
+
+## Tests und Reproduzierbarkeit
+
+Vorhanden:
+
+- `npm run build`
+- `npm run db:check`
+- `npm run db:migrate`
+- `npm run db:seed:reference`
+- `npm run db:rebuild:reference`
+- `npm run smoke:reference`
+
+Der Smoke-Test baut den Referenzzustand selbst neu auf und prüft den aktuellen Vertikalschnitt einschließlich:
+
+- DB-basierte Hauptseiten
+- Document Detail
+- Start
+- Save
+- Submit
+- Reject
+- Archive
+- Attachment Upload
+- Attachment Content
+
+## Offene Alt-Spec-Lücken
+
+Nicht oder nur teilweise umgesetzt sind weiterhin:
+
+- spec-nahe Detailseiten für Templates und Workflows
+- Such-/Filter-Schnitte auf Listenebene
+- Form- und Workflow-Actions gemäß voller Spec
+- Hook-/Operation-Ausführung
+- differenziertere Rechte-/Policy-Regeln
+- vollwertige Konfigurations- und Admin-CRUD-Strecken
+- spec-nahe Trennung zwischen Arbeits-UI und Review-/Konfigurations-UI auf allen Screens
+
+Diese Punkte sind **Alt-Spec-Lücken**, nicht automatisch schon Teil einer neuen Richtungsänderung.
+
+## Spätere Richtungsänderung
+
+Eine spätere Korrekturrichtung ist bereits fachlich absehbar, wird aber in diesem Stand **noch nicht umgesetzt**:
+
+- MDX soll später deutlich vereinfacht werden
+- API-/Operationsreferenzen sollen später direkter und lokaler werden
+- `|` soll später eine harte horizontale Gleichverteilungsregel bilden
+- ein UI-Umbau in diese Richtung kommt erst nach Alt-Spec-Verifikation/-Abnahme
+
+Diese Punkte sind bewusst **separat** von den offenen Alt-Spec-Lücken zu behandeln.
+
+## Ergebnisregel für die nächsten Schritte
+
+Bei Konflikten gilt weiterhin:
+
+1. `specs/`
+2. dieses Architekturpapier
+3. der aktuelle Code
+
+Wenn der Code vom Alt-Spec-Stand abweicht, wird das in der nächsten Phase zuerst transparent dokumentiert und geordnet priorisiert, statt still implizit umzubauen.

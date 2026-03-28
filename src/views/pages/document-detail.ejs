@@ -454,6 +454,84 @@
 
 <section class="panel">
   <div class="panel-header">
+    <h3>Journal</h3>
+    <span class="chip"><%= documentDetail.journals.length %></span>
+  </div>
+
+  <% if (journalStatus) { %>
+    <div class="notice-card notice-success">
+      <strong>Journal aktualisiert</strong>
+      <p><%= journalStatus %></p>
+    </div>
+  <% } %>
+
+  <% if (journalError) { %>
+    <div class="notice-card notice-error">
+      <strong>Journal nicht moeglich</strong>
+      <p><%= journalError %></p>
+    </div>
+  <% } %>
+
+  <% if (documentDetail.journals.length === 0) { %>
+    <p>Kein Journal im aktuellen Template definiert.</p>
+  <% } else { %>
+    <div class="grid two-up">
+      <% documentDetail.journals.forEach((journal) => { %>
+        <article class="subpanel">
+          <div class="panel-header">
+            <h4><%= journal.label %></h4>
+            <span class="chip"><%= journal.entries.length %> Eintraege</span>
+          </div>
+
+          <% if (journal.helpText) { %>
+            <p class="field-help"><%= journal.helpText %></p>
+          <% } %>
+
+          <% if (journal.isEditable) { %>
+            <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/journal?user=<%= activeUser.key %>">
+              <input type="hidden" name="journalFieldName" value="<%= journal.name %>" />
+              <label class="field-label" for="journal-entry-<%= journal.name %>">New Entry</label>
+              <textarea id="journal-entry-<%= journal.name %>" name="entryText" rows="3" placeholder="Journal-Eintrag erfassen"></textarea>
+              <button class="button-secondary" type="submit">Add Journal Entry</button>
+            </form>
+          <% } else { %>
+            <p class="field-help">Journal ist im aktuellen Status read-only.</p>
+          <% } %>
+
+          <div class="panel-divider"></div>
+
+          <% if (journal.entries.length === 0) { %>
+            <p>Keine Journal-Eintraege vorhanden.</p>
+          <% } else { %>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <% journal.columns.forEach((column) => { %>
+                      <th><%= column.label %></th>
+                    <% }) %>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% journal.entries.forEach((entry) => { %>
+                    <tr>
+                      <% journal.columns.forEach((column) => { %>
+                        <td><%= entry.values[column.key] ?? "-" %></td>
+                      <% }) %>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } %>
+        </article>
+      <% }) %>
+    </div>
+  <% } %>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
     <h3>History</h3>
     <span class="chip"><%= documentDetail.auditEvents.length %></span>
   </div>

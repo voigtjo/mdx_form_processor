@@ -68,6 +68,21 @@ export type WorkflowTemplate = {
   actions: WorkflowActionSummary[];
 };
 
+export type WorkflowHookSummary = {
+  trigger: string;
+  operationRef?: string;
+  description?: string;
+};
+
+export type WorkflowTemplateDetail = WorkflowTemplate & {
+  workflowJson: Record<string, unknown>;
+  hooks: WorkflowHookSummary[];
+  publishedAt?: string;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type WorkflowFieldRule = {
   editable?: string[];
   readonly?: string[];
@@ -87,6 +102,14 @@ export type FormTemplate = {
   templateKeys: string[];
   documentKeys: string[];
   tableFields: string[];
+};
+
+export type FormTemplateDetail = FormTemplate & {
+  mdxBody: string;
+  publishedAt?: string;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ReadOnlyFormField = {
@@ -110,6 +133,25 @@ export type ReadOnlyFormAction = {
   operationRef?: string;
 };
 
+export type ReadOnlyJournalColumn = {
+  key: string;
+  label: string;
+  type: string;
+};
+
+export type ReadOnlyJournalEntry = {
+  values: Record<string, string>;
+};
+
+export type ReadOnlyJournalDefinition = {
+  name: string;
+  label: string;
+  helpText?: string;
+  columns: ReadOnlyJournalColumn[];
+  entries: ReadOnlyJournalEntry[];
+  isEditable: boolean;
+};
+
 export type ReadOnlyFormDefinition = {
   templateId: string;
   templateKey: string;
@@ -121,6 +163,7 @@ export type ReadOnlyFormDefinition = {
   sourceMeta: Record<string, string>;
   sections: string[];
   fields: ReadOnlyFormField[];
+  journals: ReadOnlyJournalDefinition[];
   actions: ReadOnlyFormAction[];
 };
 

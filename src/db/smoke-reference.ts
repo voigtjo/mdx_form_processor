@@ -83,6 +83,38 @@ const main = async (): Promise<void> => {
       method: "GET",
       url: "/templates?user=alice",
     });
+    const templateDetailPage = await app.inject({
+      method: "GET",
+      url: "/templates/77777777-7777-7777-7777-777777777771?user=alice",
+    });
+    const templateNewPage = await app.inject({
+      method: "GET",
+      url: "/templates/new?user=alice",
+    });
+    const workflowsPage = await app.inject({
+      method: "GET",
+      url: "/workflows?user=alice",
+    });
+    const workflowDetailPage = await app.inject({
+      method: "GET",
+      url: "/workflows/66666666-6666-6666-6666-666666666661?user=alice",
+    });
+    const workflowNewPage = await app.inject({
+      method: "GET",
+      url: "/workflows/new?user=alice",
+    });
+    const documentsPage = await app.inject({
+      method: "GET",
+      url: "/documents?user=alice",
+    });
+    const searchedDocumentsPage = await app.inject({
+      method: "GET",
+      url: "/documents?user=alice&q=Evidence",
+    });
+    const approvedDocumentsPage = await app.inject({
+      method: "GET",
+      url: "/documents?user=alice&status=approved",
+    });
     const documentDetail = await app.inject({
       method: "GET",
       url: "/documents/99999999-9999-9999-9999-999999999991?user=alice",
@@ -102,12 +134,53 @@ const main = async (): Promise<void> => {
 
     assert.equal(workspace.statusCode, 200, "Workspace should render from DB data.");
     assert.equal(templatesPage.statusCode, 200, "Templates page should render from DB data.");
+    assert.equal(templateDetailPage.statusCode, 200, "Template detail page should render from DB data.");
+    assert.equal(templateNewPage.statusCode, 200, "Template new page should render.");
+    assert.equal(workflowsPage.statusCode, 200, "Workflows page should render from DB data.");
+    assert.equal(workflowDetailPage.statusCode, 200, "Workflow detail page should render from DB data.");
+    assert.equal(workflowNewPage.statusCode, 200, "Workflow new page should render.");
+    assert.equal(documentsPage.statusCode, 200, "Documents page should render from DB data.");
+    assert.equal(searchedDocumentsPage.statusCode, 200, "Documents search should render from DB data.");
+    assert.equal(approvedDocumentsPage.statusCode, 200, "Documents status filter should render from DB data.");
     assert.equal(documentDetail.statusCode, 200, "Document detail should render from DB data.");
     assert.equal(missingDocument.statusCode, 404, "Missing document should render as 404.");
     assert.equal(startDocument.statusCode, 303, "Document start should redirect to the new detail page.");
     assert.match(workspace.body, /Alice/);
     assert.match(workspace.body, /Production Batch/);
+    assert.match(workspace.body, /Open Document/);
+    assert.match(workspace.body, /\/documents\/99999999-9999-9999-9999-999999999991\?user=alice/);
+    assert.match(workspace.body, /Start Document/);
     assert.match(templatesPage.body, /Customer Order Test/);
+    assert.match(templatesPage.body, /New Template/);
+    assert.match(templatesPage.body, /\/templates\/77777777-7777-7777-7777-777777777771\?user=alice/);
+    assert.match(templatesPage.body, /Open Documents/);
+    assert.match(templatesPage.body, /Start Document/);
+    assert.doesNotMatch(templatesPage.body, /Template Review/);
+    assert.match(templateDetailPage.body, /Back to Templates/);
+    assert.match(templateDetailPage.body, /Customer Order Test/);
+    assert.match(templateDetailPage.body, /MDX Source/);
+    assert.match(templateDetailPage.body, /Open Workflow/);
+    assert.match(templateDetailPage.body, /customer_order_number/);
+    assert.match(templateNewPage.body, /Create Draft/);
+    assert.match(templateNewPage.body, /Workflow Template/);
+    assert.match(workflowsPage.body, /New Workflow/);
+    assert.match(workflowsPage.body, /\/workflows\/66666666-6666-6666-6666-666666666661\?user=alice/);
+    assert.match(workflowsPage.body, /Open Templates/);
+    assert.doesNotMatch(workflowsPage.body, /Workflow Review/);
+    assert.match(workflowDetailPage.body, /Back to Workflows/);
+    assert.match(workflowDetailPage.body, /Action Overview/);
+    assert.match(workflowDetailPage.body, /Sync external customer order status after approval/);
+    assert.match(workflowDetailPage.body, /customerOrders\.setStatusFromContext/);
+    assert.match(workflowDetailPage.body, /initialStatus/);
+    assert.match(workflowDetailPage.body, /created/);
+    assert.match(workflowNewPage.body, /Create Draft/);
+    assert.match(documentsPage.body, /Apply Filters/);
+    assert.match(documentsPage.body, /Evidence 2026-101/);
+    assert.doesNotMatch(documentsPage.body, /<h3>Work Summary<\/h3>/);
+    assert.match(searchedDocumentsPage.body, /Evidence 2026-101/);
+    assert.doesNotMatch(searchedDocumentsPage.body, /Batch B-2026-0042/);
+    assert.match(approvedDocumentsPage.body, /Customer Order 4709/);
+    assert.doesNotMatch(approvedDocumentsPage.body, /Evidence 2026-101/);
     assert.match(documentDetail.body, /Customer Order 4711/);
     assert.match(documentDetail.body, /contract\.pdf/);
     assert.match(documentDetail.body, /workflow_hook_executed|submitted/);
@@ -115,6 +188,68 @@ const main = async (): Promise<void> => {
     assert.match(documentDetail.body, /customer_order_number/);
     assert.match(documentDetail.body, /create_customer_order/);
     assert.doesNotMatch(documentDetail.body, /Placeholder/);
+
+    const createTemplateDraft = await app.inject({
+      method: "POST",
+      url: "/templates/new?user=alice",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: "name=Smoke%20Template&key=smoke-template&description=Smoke%20template%20draft&workflowTemplateId=66666666-6666-6666-6666-666666666662",
+    });
+    const createWorkflowDraft = await app.inject({
+      method: "POST",
+      url: "/workflows/new?user=alice",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: "name=Smoke%20Workflow&key=smoke-workflow&description=Smoke%20workflow%20draft",
+    });
+
+    assert.equal(createTemplateDraft.statusCode, 303, "Template draft creation should redirect to detail.");
+    assert.equal(createWorkflowDraft.statusCode, 303, "Workflow draft creation should redirect to detail.");
+
+    const templateDraftLocation = String(createTemplateDraft.headers.location ?? "");
+    const workflowDraftLocation = String(createWorkflowDraft.headers.location ?? "");
+    const templateDraftId = templateDraftLocation.match(/\/templates\/([^?]+)/)?.[1];
+    const workflowDraftId = workflowDraftLocation.match(/\/workflows\/([^?]+)/)?.[1];
+
+    assert.ok(templateDraftId, "Template draft redirect should include the new template id.");
+    assert.ok(workflowDraftId, "Workflow draft redirect should include the new workflow id.");
+
+    const [templateDraftDetailPage, workflowDraftDetailPage] = await Promise.all([
+      app.inject({
+        method: "GET",
+        url: templateDraftLocation,
+      }),
+      app.inject({
+        method: "GET",
+        url: workflowDraftLocation,
+      }),
+    ]);
+
+    assert.equal(templateDraftDetailPage.statusCode, 200, "Created template draft detail should render.");
+    assert.equal(workflowDraftDetailPage.statusCode, 200, "Created workflow draft detail should render.");
+    assert.match(templateDraftDetailPage.body, /Template angelegt/);
+    assert.match(templateDraftDetailPage.body, /Smoke Template/);
+    assert.match(templateDraftDetailPage.body, /draft/);
+    assert.match(workflowDraftDetailPage.body, /Workflow angelegt/);
+    assert.match(workflowDraftDetailPage.body, /Smoke Workflow/);
+    assert.match(workflowDraftDetailPage.body, /draft/);
+
+    const [templatesAfterCreate, workflowsAfterCreate] = await Promise.all([
+      listFormTemplates(),
+      listWorkflowTemplates(),
+    ]);
+
+    assert.ok(
+      templatesAfterCreate.some((template) => template.id === templateDraftId && template.status === "draft"),
+      "New template draft should persist in the database.",
+    );
+    assert.ok(
+      workflowsAfterCreate.some((workflow) => workflow.id === workflowDraftId && workflow.status === "draft"),
+      "New workflow draft should persist in the database.",
+    );
 
     const location = startDocument.headers.location;
     assert.ok(typeof location === "string", "Document start should return a redirect location.");
@@ -198,6 +333,31 @@ const main = async (): Promise<void> => {
     });
 
     assert.equal(saveEvidence.statusCode, 303, "Evidence document save should redirect.");
+
+    const addJournalEntry = await app.inject({
+      method: "POST",
+      url: "/documents/99999999-9999-9999-9999-999999999993/journal?user=bob",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: "journalFieldName=evidence_steps&entryText=Smoke%20journal%20entry",
+    });
+
+    assert.equal(addJournalEntry.statusCode, 303, "Journal entry should redirect back to the detail page.");
+
+    const journalLocation = addJournalEntry.headers.location;
+    assert.ok(typeof journalLocation === "string", "Journal add should return a redirect location.");
+
+    const journalDetailPage = await app.inject({
+      method: "GET",
+      url: journalLocation,
+    });
+
+    assert.equal(journalDetailPage.statusCode, 200, "Detail page should render after journal update.");
+    assert.match(journalDetailPage.body, /Journal-Eintrag hinzugefuegt\./);
+    assert.match(journalDetailPage.body, /Evidence Steps/);
+    assert.match(journalDetailPage.body, /Smoke journal entry/);
+    assert.match(journalDetailPage.body, /Evidence request created\./);
 
     const pngFixture = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1EAAAAASUVORK5CYII=",
@@ -295,8 +455,17 @@ const main = async (): Promise<void> => {
       "Saved values should remain visible after submit.",
     );
     assert.ok(
+      Array.isArray(submittedEvidenceDetail.documentDataJson.evidence_steps)
+      && submittedEvidenceDetail.documentDataJson.evidence_steps.length === 2,
+      "Journal values should remain persisted in documents.data_json.",
+    );
+    assert.ok(
       submittedEvidenceAuditEvents.some((event) => event.eventType === "submitted"),
       "Submitted document should persist a submitted audit event.",
+    );
+    assert.ok(
+      submittedEvidenceAuditEvents.some((event) => event.eventType === "journal_added"),
+      "Journal updates should persist a journal_added audit event.",
     );
     assert.ok(
       submittedEvidenceTasks.every((task) => task.status === "closed"),
@@ -431,6 +600,33 @@ const main = async (): Promise<void> => {
       archivedEvidenceDetailAfterBlockedSave.documentDataJson.evidence_notes,
       "Smoke submit validation",
       "Blocked save after archive must not overwrite document data.",
+    );
+
+    const defaultDocumentsAfterArchive = await app.inject({
+      method: "GET",
+      url: "/documents?user=bob",
+    });
+    const archivedDocumentsAfterArchive = await app.inject({
+      method: "GET",
+      url: "/documents?user=bob&showArchived=1&status=archived&q=Evidence",
+    });
+
+    assert.equal(defaultDocumentsAfterArchive.statusCode, 200, "Default documents page should still render after archive.");
+    assert.equal(archivedDocumentsAfterArchive.statusCode, 200, "Archived documents filter should render after archive.");
+    assert.doesNotMatch(
+      defaultDocumentsAfterArchive.body,
+      /Evidence 2026-101/,
+      "Archived documents should stay hidden in the default documents view.",
+    );
+    assert.match(
+      archivedDocumentsAfterArchive.body,
+      /Evidence 2026-101/,
+      "Archived evidence document should appear once the archive filter is enabled.",
+    );
+    assert.match(
+      archivedDocumentsAfterArchive.body,
+      /Archivierter Vorgang/,
+      "Archived filter view should label archived rows clearly.",
     );
   } finally {
     await app.close();

@@ -1,0 +1,213 @@
+<section class="hero-card">
+  <div>
+    <span class="eyebrow">Template Detail</span>
+    <h2><%= templateDetail.template.name %></h2>
+    <p>Review-Sicht fuer ein einzelnes Form Template mit Form-, Workflow-, Integrations-, Versions- und Documents-Kontext.</p>
+  </div>
+  <div class="hero-actions">
+    <a class="button-secondary" href="/templates?user=<%= activeUser.key %>">Back to Templates</a>
+  </div>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Overview</h3>
+      <span class="chip">v<%= templateDetail.template.version %></span>
+    </div>
+    <p><strong>Key:</strong> <%= templateDetail.template.key %></p>
+    <p><strong>Status:</strong> <span class="status-pill status-<%= templateDetail.template.status %>"><%= templateDetail.template.status %></span></p>
+    <p><strong>Updated:</strong> <%= templateDetail.template.updatedAt %></p>
+    <p><%= templateDetail.template.description ?? "Keine Beschreibung hinterlegt." %></p>
+    <p><strong>Template Keys:</strong> <%= templateDetail.template.templateKeys.length > 0 ? templateDetail.template.templateKeys.join(", ") : "keine" %></p>
+    <p><strong>Document Keys:</strong> <%= templateDetail.template.documentKeys.length > 0 ? templateDetail.template.documentKeys.join(", ") : "keine" %></p>
+    <p><strong>Table Fields:</strong> <%= templateDetail.template.tableFields.length > 0 ? templateDetail.template.tableFields.join(", ") : "keine" %></p>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Workflow</h3>
+      <% if (templateDetail.workflow) { %>
+        <a class="text-link" href="/workflows/<%= templateDetail.workflow.id %>?user=<%= activeUser.key %>">Open Workflow</a>
+      <% } %>
+    </div>
+    <% if (templateDetail.workflow) { %>
+      <p><strong>Name:</strong> <%= templateDetail.workflow.name %></p>
+      <p><strong>Key:</strong> <%= templateDetail.workflow.key %></p>
+      <p><strong>Version:</strong> v<%= templateDetail.workflow.version %></p>
+      <p><strong>Statusfolge:</strong> <%= templateDetail.workflow.statuses.join(" → ") %></p>
+      <ul class="stack-list compact">
+        <% templateDetail.workflow.actions.forEach((action) => { %>
+          <li>
+            <strong><%= action.name %></strong>
+            <p><%= action.from.join(", ") %> → <%= action.to %> · Rollen: <%= action.allowedRoles.join(", ") %></p>
+          </li>
+        <% }) %>
+      </ul>
+    <% } else { %>
+      <div class="empty-state">
+        <strong>Kein Workflow sichtbar.</strong>
+        <p>Dem Template ist im aktuellen Sichtkontext kein Workflow zugeordnet.</p>
+      </div>
+    <% } %>
+  </article>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <h3>Assignments</h3>
+    <% if (templateDetail.groups.length === 0) { %>
+      <div class="empty-state">
+        <strong>Keine Group-Zuordnungen.</strong>
+        <p>Dieses Template ist aktuell keiner sichtbaren Group zugeordnet.</p>
+      </div>
+    <% } else { %>
+      <ul class="stack-list compact">
+        <% templateDetail.groups.forEach((group) => { %>
+          <li>
+            <strong><%= group.name %></strong>
+            <p><%= group.key %></p>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Documents</h3>
+      <a class="text-link" href="/documents?user=<%= activeUser.key %>&q=<%= encodeURIComponent(templateDetail.template.key) %>">Open Documents</a>
+    </div>
+    <% if (templateDetail.relatedDocuments.length === 0) { %>
+      <div class="empty-state">
+        <strong>Keine sichtbaren Documents.</strong>
+        <p>Im aktuellen Sichtkontext wurden zu diesem Template noch keine sichtbaren Documents gefunden.</p>
+      </div>
+    <% } else { %>
+      <ul class="stack-list compact">
+        <% templateDetail.relatedDocuments.forEach((document) => { %>
+          <li class="action-row">
+            <div>
+              <strong><%= document.title %></strong>
+              <p>Status: <%= document.status %> · Updated: <%= document.updatedAt %></p>
+            </div>
+            <a class="text-link action-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>">Open</a>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </article>
+</section>
+
+<section class="panel">
+  <h3>Form</h3>
+  <div class="grid two-up detail-grid">
+    <article class="subpanel">
+      <h4>Sections</h4>
+      <% if (templateDetail.formDefinition.sections.length === 0) { %>
+        <p>Keine Sections erkannt.</p>
+      <% } else { %>
+        <ul class="stack-list compact">
+          <% templateDetail.formDefinition.sections.forEach((section) => { %>
+            <li><strong><%= section %></strong></li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </article>
+    <article class="subpanel">
+      <h4>Fields</h4>
+      <% if (templateDetail.formDefinition.fields.length === 0) { %>
+        <p>Keine Fields erkannt.</p>
+      <% } else { %>
+        <ul class="stack-list compact">
+          <% templateDetail.formDefinition.fields.forEach((field) => { %>
+            <li>
+              <strong><%= field.label %></strong>
+              <p><%= field.name %> · <%= field.type %></p>
+              <p><%= field.flags.length > 0 ? field.flags.join(", ") : "keine Flags" %></p>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </article>
+    <article class="subpanel">
+      <h4>Journals</h4>
+      <% if (templateDetail.formDefinition.journals.length === 0) { %>
+        <p>Keine Journals erkannt.</p>
+      <% } else { %>
+        <ul class="stack-list compact">
+          <% templateDetail.formDefinition.journals.forEach((journal) => { %>
+            <li>
+              <strong><%= journal.label %></strong>
+              <p><%= journal.columns.map((column) => column.label).join(", ") %></p>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </article>
+    <article class="subpanel">
+      <h4>Actions</h4>
+      <% if (templateDetail.formDefinition.actions.length === 0) { %>
+        <p>Keine Actions erkannt.</p>
+      <% } else { %>
+        <ul class="stack-list compact">
+          <% templateDetail.formDefinition.actions.forEach((action) => { %>
+            <li>
+              <strong><%= action.label ?? action.name %></strong>
+              <p><%= action.operationRef ?? "ohne operationRef" %></p>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </article>
+  </div>
+  <div class="panel-divider"></div>
+  <h4>MDX Source</h4>
+  <pre class="code-block"><%= templateDetail.template.mdxBody %></pre>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <h3>Integrations</h3>
+    <% if (templateDetail.integrations.actions.length === 0 && templateDetail.integrations.fields.length === 0) { %>
+      <div class="empty-state">
+        <strong>Keine Integrationsbezüge erkannt.</strong>
+        <p>Im aktuellen Template wurden keine Actions oder Felder mit operationRef erkannt.</p>
+      </div>
+    <% } else { %>
+      <ul class="stack-list compact">
+        <% templateDetail.integrations.fields.forEach((field) => { %>
+          <li>
+            <strong>Field: <%= field.label %></strong>
+            <p><%= field.operationRef %></p>
+          </li>
+        <% }) %>
+        <% templateDetail.integrations.actions.forEach((action) => { %>
+          <li>
+            <strong>Action: <%= action.label ?? action.name %></strong>
+            <p><%= action.operationRef %></p>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </article>
+
+  <article class="panel">
+    <h3>Versions</h3>
+    <ul class="stack-list compact">
+      <% templateDetail.versions.forEach((version) => { %>
+        <li class="action-row">
+          <div>
+            <strong>v<%= version.version %></strong>
+            <p><%= version.status %></p>
+          </div>
+          <% if (version.id === templateDetail.template.id) { %>
+            <span class="chip">Current</span>
+          <% } else { %>
+            <a class="text-link action-link" href="/templates/<%= version.id %>?user=<%= activeUser.key %>">Open</a>
+          <% } %>
+        </li>
+      <% }) %>
+    </ul>
+  </article>
+</section>

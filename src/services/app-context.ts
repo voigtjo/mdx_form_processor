@@ -20,9 +20,19 @@ import { getDocumentSubmitStateForUser } from "../modules/documents/submit.js";
 import { listGroups, listGroupsForUser } from "../modules/groups/read.js";
 import { listMemberships } from "../modules/memberships/read.js";
 import { buildReadOnlyFormDefinition } from "../modules/templates/form-read.js";
-import { listFormTemplates, listFormTemplatesForUser, listTemplateAssignments } from "../modules/templates/read.js";
+import {
+  findFormTemplateById,
+  listFormTemplateVersions,
+  listFormTemplates,
+  listFormTemplatesForUser,
+  listTemplateAssignments,
+} from "../modules/templates/read.js";
 import { findUserByKey, listUsers } from "../modules/users/read.js";
-import { listWorkflowTemplates } from "../modules/workflows/read.js";
+import {
+  findWorkflowTemplateById,
+  listWorkflowTemplateVersions,
+  listWorkflowTemplates,
+} from "../modules/workflows/read.js";
 import type { User } from "../types/domain.js";
 import type { NavItem } from "../types/navigation.js";
 
@@ -74,6 +84,114 @@ const createShellContext = async (section: SectionKey, userKey: string | undefin
     activeUser,
     users,
     navigation: getNavigation(section, activeUser.key),
+  };
+};
+
+export const createTemplateDetailViewModel = async (userKey: string | undefined, templateId: string) => {
+  const shellContext = await createShellContext("templates", userKey);
+  const { activeUser } = shellContext;
+
+  const template = await findFormTemplateById(templateId);
+
+  if (!template) {
+    return null;
+  }
+
+  const [groups, templateAssignments, workflows, documents, versions] = await Promise.all([
+    listGroups(),
+    listTemplateAssignments(),
+    listWorkflowTemplates(),
+    listDocumentsVisibleToUser(activeUser.id),
+    listFormTemplateVersions(template.key),
+  ]);
+
+  const workflow = workflows.find((item) => item.id === template.workflowTemplateId) ?? null;
+  const relatedAssignments = templateAssignments.filter((assignment) => assignment.templateId === template.id);
+  const relatedGroups = groups.filter((group) => relatedAssignments.some((assignment) => assignment.groupId === group.id));
+  const relatedDocuments = documents.filter((document) => document.templateId === template.id);
+  const formDefinition = buildReadOnlyFormDefinition({
+    templateId: template.id,
+    templateKey: template.key,
+    templateName: template.name,
+    templateVersion: template.version,
+    templateStatus: template.status,
+    ...(template.description ? { templateDescription: template.description } : {}),
+    mdxBody: template.mdxBody,
+    documentStatus: "template-review",
+    documentData: {},
+  });
+
+  return {
+    ...shellContext,
+    title: template.name,
+    pageSection: "templates" as const,
+    templateDetail: {
+      template,
+      workflow,
+      groups: relatedGroups,
+      assignments: relatedAssignments,
+      versions,
+      relatedDocuments,
+      formDefinition,
+      integrations: {
+        actions: formDefinition.actions.filter((action) => action.operationRef),
+        fields: formDefinition.fields.filter((field) => field.operationRef),
+      },
+    },
+  };
+};
+
+export const createTemplateNewViewModel = async (userKey: string | undefined) => {
+  const shellContext = await createShellContext("templates", userKey);
+  const workflows = await listWorkflowTemplates();
+
+  return {
+    ...shellContext,
+    title: "New Template",
+    pageSection: "templates" as const,
+    availableWorkflows: workflows,
+  };
+};
+
+export const createWorkflowDetailViewModel = async (userKey: string | undefined, workflowId: string) => {
+  const shellContext = await createShellContext("workflows", userKey);
+  const { activeUser } = shellContext;
+
+  const workflow = await findWorkflowTemplateById(workflowId);
+
+  if (!workflow) {
+    return null;
+  }
+
+  const [templates, versions, documents] = await Promise.all([
+    listFormTemplates(),
+    listWorkflowTemplateVersions(workflow.key),
+    listDocumentsVisibleToUser(activeUser.id),
+  ]);
+
+  const relatedTemplates = templates.filter((template) => template.workflowTemplateId === workflow.id);
+  const relatedDocuments = documents.filter((document) => relatedTemplates.some((template) => template.id === document.templateId));
+
+  return {
+    ...shellContext,
+    title: workflow.name,
+    pageSection: "workflows" as const,
+    workflowDetail: {
+      workflow,
+      versions,
+      relatedTemplates,
+      relatedDocuments,
+    },
+  };
+};
+
+export const createWorkflowNewViewModel = async (userKey: string | undefined) => {
+  const shellContext = await createShellContext("workflows", userKey);
+
+  return {
+    ...shellContext,
+    title: "New Workflow",
+    pageSection: "workflows" as const,
   };
 };
 
@@ -178,6 +296,7 @@ export const createDocumentDetailViewModel = async (userKey: string | undefined,
       document,
       formDefinition,
       editableFields: formDefinition.fields.filter((field) => field.isSavable),
+      journals: formDefinition.journals,
       attachmentUploadState,
       submitState,
       approveState,

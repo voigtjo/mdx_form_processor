@@ -1,0 +1,111 @@
+<section class="hero-card">
+  <div>
+    <span class="eyebrow">Workflow Detail</span>
+    <h2><%= workflowDetail.workflow.name %></h2>
+    <p>Review-Sicht fuer ein einzelnes Workflow Template mit Overview, Actions, Hooks, JSON, Usage und Versionskontext.</p>
+  </div>
+  <div class="hero-actions">
+    <a class="button-secondary" href="/workflows?user=<%= activeUser.key %>">Back to Workflows</a>
+  </div>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Overview</h3>
+      <span class="chip">v<%= workflowDetail.workflow.version %></span>
+    </div>
+    <p><strong>Key:</strong> <%= workflowDetail.workflow.key %></p>
+    <p><strong>Status:</strong> <span class="status-pill status-<%= workflowDetail.workflow.status %>"><%= workflowDetail.workflow.status %></span></p>
+    <p><strong>Initial Status:</strong> <%= workflowDetail.workflow.initialStatus %></p>
+    <p><strong>Updated:</strong> <%= workflowDetail.workflow.updatedAt %></p>
+    <p><%= workflowDetail.workflow.description ?? "Keine Beschreibung hinterlegt." %></p>
+    <p><strong>Statusfolge:</strong> <%= workflowDetail.workflow.statuses.join(" → ") %></p>
+  </article>
+
+  <article class="panel">
+    <h3>Action Overview</h3>
+    <ul class="stack-list compact">
+      <% workflowDetail.workflow.actions.forEach((action) => { %>
+        <li>
+          <strong><%= action.name %></strong>
+          <p><%= action.from.join(", ") %> → <%= action.to %></p>
+          <p>Rollen: <%= action.allowedRoles.join(", ") %></p>
+        </li>
+      <% }) %>
+    </ul>
+  </article>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <h3>Hooks</h3>
+    <% if (workflowDetail.workflow.hooks.length === 0) { %>
+      <div class="empty-state">
+        <strong>Keine Hooks definiert.</strong>
+        <p>Im aktuellen Workflow sind keine Hooks mit Trigger und operationRef hinterlegt.</p>
+      </div>
+    <% } else { %>
+      <ul class="stack-list compact">
+        <% workflowDetail.workflow.hooks.forEach((hook) => { %>
+          <li>
+            <strong><%= hook.trigger %></strong>
+            <p><%= hook.operationRef ?? "ohne operationRef" %></p>
+            <% if (hook.description) { %>
+              <p><%= hook.description %></p>
+            <% } %>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </article>
+
+  <article class="panel">
+    <h3>Usage</h3>
+    <% if (workflowDetail.relatedTemplates.length === 0) { %>
+      <div class="empty-state">
+        <strong>Keine referenzierenden Templates.</strong>
+        <p>Im aktuellen Sichtkontext nutzt kein Template diesen Workflow.</p>
+      </div>
+    <% } else { %>
+      <ul class="stack-list compact">
+        <% workflowDetail.relatedTemplates.forEach((template) => { %>
+          <li class="action-row">
+            <div>
+              <strong><%= template.name %></strong>
+              <p><%= template.key %> · v<%= template.version %> · <%= template.status %></p>
+            </div>
+            <a class="text-link action-link" href="/templates/<%= template.id %>?user=<%= activeUser.key %>">Open</a>
+          </li>
+        <% }) %>
+      </ul>
+      <p class="panel-copy"><%= workflowDetail.relatedDocuments.length %> sichtbare Documents verwenden aktuell diesen Workflow ueber die referenzierenden Templates.</p>
+    <% } %>
+  </article>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <h3>JSON</h3>
+    <pre class="code-block"><%= JSON.stringify(workflowDetail.workflow.workflowJson, null, 2) %></pre>
+  </article>
+
+  <article class="panel">
+    <h3>Versions</h3>
+    <ul class="stack-list compact">
+      <% workflowDetail.versions.forEach((version) => { %>
+        <li class="action-row">
+          <div>
+            <strong>v<%= version.version %></strong>
+            <p><%= version.status %></p>
+          </div>
+          <% if (version.id === workflowDetail.workflow.id) { %>
+            <span class="chip">Current</span>
+          <% } else { %>
+            <a class="text-link action-link" href="/workflows/<%= version.id %>?user=<%= activeUser.key %>">Open</a>
+          <% } %>
+        </li>
+      <% }) %>
+    </ul>
+  </article>
+</section>

@@ -1,7 +1,20 @@
-import type { ReadOnlyFormAction, ReadOnlyFormDefinition, ReadOnlyFormField, WorkflowFieldRules } from "../../types/domain.js";
+import type {
+  ReadOnlyFormAction,
+  ReadOnlyFormDefinition,
+  ReadOnlyFormField,
+  ReadOnlyJournalColumn,
+  ReadOnlyJournalDefinition,
+  ReadOnlyJournalEntry,
+  WorkflowFieldRules,
+} from "../../types/domain.js";
 
 const savableFieldTypes = new Set(["text", "textarea", "checkboxGroup"]);
 const lockedDocumentStatuses = new Set(["submitted", "approved", "rejected", "archived"]);
+const defaultJournalColumnLabels: Record<string, string> = {
+  at: "At",
+  text: "Entry",
+  by: "By",
+};
 
 const extractFrontmatter = (mdxBody: string): { meta: Record<string, string>; body: string } => {
   const match = mdxBody.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
@@ -240,6 +253,175 @@ const parseActions = (mdxBody: string): ReadOnlyFormAction[] => {
     .filter((value): value is ReadOnlyFormAction => value !== null);
 };
 
+const parseColumnDefs = (source: string): ReadOnlyJournalColumn[] => {
+  return [...source.matchAll(/<ColumnDef\s+([\s\S]*?)\/>/g)]
+    .flatMap((match) => {
+      const columnSource = match[1];
+      return columnSource ? [columnSource] : [];
+    })
+    .flatMap((columnSource) => {
+      const key = readQuotedAttribute(columnSource, "key");
+      const label = readQuotedAttribute(columnSource, "label");
+      const type = readQuotedAttribute(columnSource, "type");
+
+      if (!key) {
+        return [];
+      }
+
+      return [
+        {
+          key,
+          label: label ?? defaultJournalColumnLabels[key] ?? key,
+          type: type ?? "text",
+        },
+      ];
+    });
+};
+
+const parseJournalEntries = (value: unknown): ReadOnlyJournalEntry[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (typeof entry === "string") {
+      return [
+        {
+          values: {
+            text: entry,
+          },
+        },
+      ];
+    }
+
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return [];
+    }
+
+    const values = Object.entries(entry).reduce<Record<string, string>>((result, [key, rawValue]) => {
+      if (typeof rawValue === "string") {
+        result[key] = rawValue;
+        return result;
+      }
+
+      if (typeof rawValue === "number" || typeof rawValue === "boolean") {
+        result[key] = String(rawValue);
+      }
+
+      return result;
+    }, {});
+
+    return Object.keys(values).length > 0 ? [{ values }] : [];
+  });
+};
+
+const deriveJournalColumns = (entries: ReadOnlyJournalEntry[]): ReadOnlyJournalColumn[] => {
+  const seenKeys = new Set<string>();
+
+  for (const preferredKey of ["at", "text", "by"]) {
+    if (entries.some((entry) => preferredKey in entry.values)) {
+      seenKeys.add(preferredKey);
+    }
+  }
+
+  for (const entry of entries) {
+    for (const key of Object.keys(entry.values)) {
+      seenKeys.add(key);
+    }
+  }
+
+  if (seenKeys.size === 0) {
+    return [
+      { key: "at", label: "At", type: "text" },
+      { key: "text", label: "Entry", type: "text" },
+    ];
+  }
+
+  return Array.from(seenKeys).map((key) => ({
+    key,
+    label: defaultJournalColumnLabels[key] ?? key,
+    type: "text",
+  }));
+};
+
+const parseJournals = (
+  mdxBody: string,
+  context: {
+    documentStatus: string;
+    documentData: Record<string, unknown>;
+    workflowFieldRules?: WorkflowFieldRules;
+  },
+): ReadOnlyJournalDefinition[] => {
+  const journals: ReadOnlyJournalDefinition[] = [];
+  const seenNames = new Set<string>();
+
+  for (const match of mdxBody.matchAll(/<Field\s+([^>]*type="journal"[^>]*)>([\s\S]*?)<\/Field>/g)) {
+    const source = match[1];
+    const innerSource = match[2] ?? "";
+    const name = source ? readQuotedAttribute(source, "name") : undefined;
+    const label = source ? readQuotedAttribute(source, "label") : undefined;
+
+    if (!source || !name || !label || seenNames.has(name)) {
+      continue;
+    }
+
+    const editableIn = readArrayAttribute(source, "editableIn");
+    const readonlyIn = readArrayAttribute(source, "readonlyIn");
+    const helpText = readQuotedAttribute(source, "helpText");
+    const entries = parseJournalEntries(context.documentData[name]);
+    const columns = parseColumnDefs(innerSource);
+
+    journals.push({
+      name,
+      label,
+      ...(helpText ? { helpText } : {}),
+      columns: columns.length > 0 ? columns : deriveJournalColumns(entries),
+      entries,
+      isEditable: isEditableForStatus({
+        documentStatus: context.documentStatus,
+        fieldName: name,
+        ...(editableIn ? { editableIn } : {}),
+        ...(readonlyIn ? { readonlyIn } : {}),
+        ...(context.workflowFieldRules ? { workflowFieldRules: context.workflowFieldRules } : {}),
+      }),
+    });
+    seenNames.add(name);
+  }
+
+  for (const match of mdxBody.matchAll(/<Field\s+([^>]*type="journal"[^>]*)\/>/g)) {
+    const source = match[1];
+    const name = source ? readQuotedAttribute(source, "name") : undefined;
+    const label = source ? readQuotedAttribute(source, "label") : undefined;
+
+    if (!source || !name || !label || seenNames.has(name)) {
+      continue;
+    }
+
+    const editableIn = readArrayAttribute(source, "editableIn");
+    const readonlyIn = readArrayAttribute(source, "readonlyIn");
+    const helpText = readQuotedAttribute(source, "helpText");
+    const entries = parseJournalEntries(context.documentData[name]);
+
+    journals.push({
+      name,
+      label,
+      ...(helpText ? { helpText } : {}),
+      columns: deriveJournalColumns(entries),
+      entries,
+      isEditable: isEditableForStatus({
+        documentStatus: context.documentStatus,
+        fieldName: name,
+        ...(editableIn ? { editableIn } : {}),
+        ...(readonlyIn ? { readonlyIn } : {}),
+        ...(context.workflowFieldRules ? { workflowFieldRules: context.workflowFieldRules } : {}),
+      }),
+    });
+    seenNames.add(name);
+  }
+
+  return journals;
+};
+
 export const buildReadOnlyFormDefinition = (input: {
   templateId: string;
   templateKey: string;
@@ -265,6 +447,11 @@ export const buildReadOnlyFormDefinition = (input: {
     sourceMeta: meta,
     sections: parseSections(body),
     fields: parseFields(body, {
+      documentStatus: input.documentStatus,
+      documentData: input.documentData,
+      ...(input.workflowFieldRules ? { workflowFieldRules: input.workflowFieldRules } : {}),
+    }),
+    journals: parseJournals(body, {
       documentStatus: input.documentStatus,
       documentData: input.documentData,
       ...(input.workflowFieldRules ? { workflowFieldRules: input.workflowFieldRules } : {}),
