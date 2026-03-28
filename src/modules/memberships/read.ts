@@ -46,3 +46,17 @@ export const listMembershipsForUser = async (userId: string): Promise<Membership
     return result.rows.map(mapMembership);
   });
 };
+
+export const listMembershipsForGroup = async (groupId: string): Promise<Membership[]> => {
+  return withDb(async (client) => {
+    const result = await client.query<MembershipRow>(
+      `select id, user_id, group_id, rights
+       from memberships
+       where group_id = $1
+       order by user_id asc`,
+      [groupId],
+    );
+
+    return result.rows.map(mapMembership);
+  });
+};

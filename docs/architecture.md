@@ -11,6 +11,7 @@ Dieses Dokument trennt bewusst zwischen:
 - aktuellem Implementierungsstand
 - noch offenen Alt-Spec-Lücken
 - späterer, separat vorzubereitender Richtungsänderung
+- Alt-Spec-Abnahmepunkt und nächster Entscheidungsphase
 
 ## Führende Quellen
 
@@ -105,6 +106,13 @@ Aktiv genutzt werden Read-Pfade für:
 - audit
 
 Die Hauptseiten und die Document-Detailseite lesen nicht mehr aus `sample-data.ts`, sondern über den DB-Layer und `src/services/app-context.ts`.
+
+Konsolidierte kleine Regel im aktuellen Alt-Spec-Modell:
+
+- Template-Sichtbarkeit läuft im Laufzeitpfad über aktive `template_assignments` plus Membership-Recht `r`.
+- Document-Sichtbarkeit läuft über sichtbares Template plus denselben Membership-Kontext.
+- Bearbeitungsnahe Aktionen wie Save, Journal Add und Attachment Upload setzen zusätzlich aktive Editor-Zuweisung plus Membership-Recht `w` voraus.
+- Workflow-Aktionen wie Submit, Approve, Reject und Archive setzen sichtbares Document, passende Dokumentrolle, zulässigen Status und Membership-Recht `x` voraus.
 
 ### 4. Document-Arbeitsfluss
 
@@ -217,6 +225,23 @@ Audit ist im aktuellen Stand ein echter Persistenz- und Anzeige-Schnitt:
 - Start / Save / Submit / Approve / Reject / Archive / Attachment Upload schreiben Audit-Einträge
 - die Document-Detailseite rendert die History aus Postgres
 
+## Alt-Spec-Abnahmepunkt
+
+Der aktuelle Systemkern kann im Alt-Spec-Sinn heute belastbar:
+
+- Reference-Daten reproduzierbar aufbauen
+- Hauptseiten aus Postgres lesen
+- Templates, Workflows, Documents, Users und Groups als echte Objekte aufrufen
+- Documents im kleinen MVP-Schnitt starten, speichern und durch die vorhandenen Workflow-Statuspfade führen
+- Attachments und Journal-Einträge klein persistieren
+- die wichtigsten Admin-Zuordnungen sichtbar und klein pflegbar machen
+
+Gleichzeitig ist die Grenze des Alt-Modells erreicht:
+
+- weitere Alt-Ausbauten würden vor allem bestehende Mischscreens vergrößern
+- Parser-, Policy- und Action-Logik würden ohne neue Zielrichtung nur weiter implizit anwachsen
+- der nächste sinnvolle Schritt ist deshalb nicht ungeordneter Feature-Ausbau, sondern Spezifikationsänderung und neue Zielrichtung
+
 ## Datenmodell im Ist-Stand
 
 Im aktuellen Schema aktiv relevant:
@@ -296,7 +321,7 @@ Nicht oder nur teilweise umgesetzt sind weiterhin:
 - vollwertige Konfigurations- und Admin-CRUD-Strecken
 - spec-nahe Trennung zwischen Arbeits-UI und Review-/Konfigurations-UI auf allen Screens
 
-Diese Punkte sind **Alt-Spec-Lücken**, nicht automatisch schon Teil einer neuen Richtungsänderung.
+Diese Punkte sind **Alt-Spec-Lücken**, aber nicht alle sollten noch in der alten Richtung maximal ausgebaut werden.
 
 ## Spätere Richtungsänderung
 
@@ -308,6 +333,14 @@ Eine spätere Korrekturrichtung ist bereits fachlich absehbar, wird aber in dies
 - ein UI-Umbau in diese Richtung kommt erst nach Alt-Spec-Verifikation/-Abnahme
 
 Diese Punkte sind bewusst **separat** von den offenen Alt-Spec-Lücken zu behandeln.
+
+## Übergangsregel für die nächste Phase
+
+Bis zur nächsten Produktphase gilt:
+
+- keine weitere implizite Vergrößerung des Alt-Modells ohne neue Spec-Entscheidung
+- offene Restpunkte zuerst gegen Abnahme und Nutzen priorisieren
+- neue Richtung erst nach bewusstem Änderungsdokument / neuer Spec vorbereiten und umsetzen
 
 ## Ergebnisregel für die nächsten Schritte
 

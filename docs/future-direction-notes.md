@@ -8,6 +8,8 @@ Dieses Dokument trennt die **spätere Richtungsänderung** bewusst von den noch 
 
 Es ist keine neue führende Spezifikation, sondern eine Arbeitsnotiz für die Phase nach Alt-Spec-Verifikation/-Abnahme.
 
+Die konkretisierte Vorbereitungsbasis dafür liegt jetzt zusätzlich unter `docs/changes/`.
+
 ## Später geplante Korrekturrichtung
 
 ### 1. MDX deutlich vereinfachen

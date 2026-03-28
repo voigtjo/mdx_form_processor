@@ -241,7 +241,7 @@
         <span class="chip"><%= documentDetail.editableFields.length %> Felder</span>
       </div>
       <% if (documentDetail.editableFields.length === 0) { %>
-        <p>Im aktuellen Dokumentstatus stehen in dieser ersten Speicherversion keine direkt speicherbaren Felder zur Verfuegung.</p>
+        <p><%= documentDetail.editState.reason ?? "Im aktuellen Dokumentstatus stehen in dieser ersten Speicherversion keine direkt speicherbaren Felder zur Verfuegung." %></p>
       <% } else { %>
         <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/save?user=<%= activeUser.key %>">
           <% documentDetail.editableFields.forEach((field) => { %>
@@ -495,7 +495,7 @@
               <button class="button-secondary" type="submit">Add Journal Entry</button>
             </form>
           <% } else { %>
-            <p class="field-help">Journal ist im aktuellen Status read-only.</p>
+            <p class="field-help"><%= documentDetail.editState.reason ?? "Journal ist im aktuellen Status read-only." %></p>
           <% } %>
 
           <div class="panel-divider"></div>

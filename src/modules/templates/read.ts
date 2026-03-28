@@ -88,8 +88,9 @@ export const listFormTemplatesForUser = async (userId: string): Promise<FormTemp
     const result = await client.query<TemplateRow>(
       `
       ${templateQuery}
-      inner join memberships m on m.group_id = ta.group_id
-      where m.user_id = $1
+      inner join memberships m on m.group_id = ta.group_id and m.rights like '%r%'
+      where ta.status = 'active'
+        and m.user_id = $1
       group by ft.id
       order by ft.name asc, ft.version desc
       `,
@@ -97,6 +98,45 @@ export const listFormTemplatesForUser = async (userId: string): Promise<FormTemp
     );
 
     return result.rows.map(mapTemplate);
+  });
+};
+
+export const findVisiblePublishedFormTemplateById = async (
+  templateId: string,
+  userId: string,
+): Promise<FormTemplateDetail | null> => {
+  return withDb(async (client) => {
+    const result = await client.query<TemplateDetailRow>(
+      `
+      select
+        ft.id,
+        ft.key,
+        ft.name,
+        ft.description,
+        ft.version,
+        ft.status,
+        ft.workflow_template_id,
+        ft.template_keys,
+        ft.document_keys,
+        ft.table_fields,
+        coalesce(array_agg(distinct ta.group_id) filter (where ta.group_id is not null), '{}'::uuid[])::text[] as group_ids,
+        ft.mdx_body,
+        ft.published_at,
+        ft.archived_at,
+        ft.created_at,
+        ft.updated_at
+      from form_templates ft
+      inner join template_assignments ta on ta.template_id = ft.id and ta.status = 'active'
+      inner join memberships m on m.group_id = ta.group_id and m.user_id = $2 and m.rights like '%r%'
+      where ft.id = $1
+        and ft.status = 'published'
+      group by ft.id
+      `,
+      [templateId, userId],
+    );
+
+    const row = result.rows[0];
+    return row ? mapTemplateDetail(row) : null;
   });
 };
 
@@ -164,6 +204,34 @@ export const listTemplateAssignments = async (): Promise<TemplateAssignment[]> =
       `select id, template_id, group_id, status, assigned_at
        from template_assignments
        order by assigned_at asc`,
+    );
+
+    return result.rows.map(mapTemplateAssignment);
+  });
+};
+
+export const listTemplateAssignmentsForGroup = async (groupId: string): Promise<TemplateAssignment[]> => {
+  return withDb(async (client) => {
+    const result = await client.query<TemplateAssignmentRow>(
+      `select id, template_id, group_id, status, assigned_at
+       from template_assignments
+       where group_id = $1
+       order by assigned_at asc`,
+      [groupId],
+    );
+
+    return result.rows.map(mapTemplateAssignment);
+  });
+};
+
+export const listTemplateAssignmentsForTemplate = async (templateId: string): Promise<TemplateAssignment[]> => {
+  return withDb(async (client) => {
+    const result = await client.query<TemplateAssignmentRow>(
+      `select id, template_id, group_id, status, assigned_at
+       from template_assignments
+       where template_id = $1
+       order by assigned_at asc`,
+      [templateId],
     );
 
     return result.rows.map(mapTemplateAssignment);

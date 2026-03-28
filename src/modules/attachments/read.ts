@@ -63,7 +63,7 @@ export const findAttachmentAssetVisibleToUser = async (
       from attachments a
       inner join documents d on d.id = a.document_id
       inner join template_assignments ta on ta.template_id = d.template_id and ta.status = 'active'
-      inner join memberships m on m.group_id = ta.group_id
+      inner join memberships m on m.group_id = ta.group_id and m.rights like '%r%'
       where a.id = $1
         and m.user_id = $2
       order by a.id

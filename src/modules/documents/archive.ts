@@ -1,21 +1,5 @@
-import { withDb, withDbTransaction } from "../../db/pool.js";
-
-type WorkflowJson = {
-  actions?: Record<
-    string,
-    {
-      from?: string[];
-      to?: string;
-    }
-  >;
-};
-
-type ArchivableDocumentRow = {
-  id: string;
-  status: string;
-  title: string;
-  workflow_json: WorkflowJson;
-};
+import { withDbTransaction } from "../../db/pool.js";
+import { findDocumentAccessContextForUser, type WorkflowJson } from "./access.js";
 
 type ArchiveDocumentInput = {
   documentId: string;
@@ -37,42 +21,10 @@ type ArchiveDocumentSuccess = {
 type ArchiveDocumentFailure = {
   ok: false;
   reason: "document_not_visible" | "archive_not_allowed";
+  details?: string;
 };
 
 export type ArchiveDocumentResult = ArchiveDocumentSuccess | ArchiveDocumentFailure;
-
-const findVisibleDocumentForArchive = async (
-  documentId: string,
-  userId: string,
-): Promise<ArchivableDocumentRow | null> => {
-  return withDb(async (client) => {
-    const result = await client.query<ArchivableDocumentRow>(
-      `
-      select distinct on (d.id)
-        d.id,
-        d.status,
-        case
-          when ft.key = 'customer-order-test' and d.data_json->>'customer_order_number' is not null then 'Customer Order ' || (d.data_json->>'customer_order_number')
-          when ft.key = 'production-batch' and d.data_json->>'batch_id' is not null then 'Batch ' || (d.data_json->>'batch_id')
-          when ft.key = 'evidence-basic' and d.data_json->>'evidence_number' is not null then 'Evidence ' || (d.data_json->>'evidence_number')
-          else ft.name
-        end as title,
-        wt.workflow_json
-      from documents d
-      inner join form_templates ft on ft.id = d.template_id
-      inner join workflow_templates wt on wt.id = d.workflow_template_id
-      inner join template_assignments ta on ta.template_id = d.template_id and ta.status = 'active'
-      inner join memberships m on m.group_id = ta.group_id
-      where d.id = $1
-        and m.user_id = $2
-      order by d.id
-      `,
-      [documentId, userId],
-    );
-
-    return result.rows[0] ?? null;
-  });
-};
 
 const readArchiveTransition = (workflowJson: WorkflowJson): { from: string[]; to: string } | null => {
   const archiveAction = workflowJson.actions?.archive;
@@ -88,16 +40,30 @@ const readArchiveTransition = (workflowJson: WorkflowJson): { from: string[]; to
 };
 
 export const getDocumentArchiveStateForUser = async (documentId: string, userId: string): Promise<ArchiveState> => {
-  const document = await findVisibleDocumentForArchive(documentId, userId);
+  const document = await findDocumentAccessContextForUser(documentId, userId);
 
-  if (!document) {
+  if (!document || !document.canRead) {
     return {
       isAvailable: false,
       reason: "Dokument ist nicht sichtbar.",
     };
   }
 
-  const archiveTransition = readArchiveTransition(document.workflow_json);
+  if (!document.hasApproverAssignment) {
+    return {
+      isAvailable: false,
+      reason: "Archive setzt eine aktive Approver-Zuweisung voraus.",
+    };
+  }
+
+  if (!document.canExecute) {
+    return {
+      isAvailable: false,
+      reason: "Archive setzt Membership-Recht x voraus.",
+    };
+  }
+
+  const archiveTransition = readArchiveTransition(document.workflowJson);
 
   if (!archiveTransition || !archiveTransition.from.includes(document.status)) {
     return {
@@ -113,21 +79,38 @@ export const getDocumentArchiveStateForUser = async (documentId: string, userId:
 };
 
 export const archiveDocumentForUser = async ({ documentId, userId }: ArchiveDocumentInput): Promise<ArchiveDocumentResult> => {
-  const document = await findVisibleDocumentForArchive(documentId, userId);
+  const document = await findDocumentAccessContextForUser(documentId, userId);
 
-  if (!document) {
+  if (!document || !document.canRead) {
     return {
       ok: false,
       reason: "document_not_visible",
     };
   }
 
-  const archiveTransition = readArchiveTransition(document.workflow_json);
+  if (!document.hasApproverAssignment) {
+    return {
+      ok: false,
+      reason: "archive_not_allowed",
+      details: "Archive setzt eine aktive Approver-Zuweisung voraus.",
+    };
+  }
+
+  if (!document.canExecute) {
+    return {
+      ok: false,
+      reason: "archive_not_allowed",
+      details: "Archive setzt Membership-Recht x voraus.",
+    };
+  }
+
+  const archiveTransition = readArchiveTransition(document.workflowJson);
 
   if (!archiveTransition || !archiveTransition.from.includes(document.status)) {
     return {
       ok: false,
       reason: "archive_not_allowed",
+      details: "Archive ist im aktuellen Status nicht verfuegbar.",
     };
   }
 

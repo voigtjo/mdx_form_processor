@@ -1,25 +1,12 @@
-import { withDb, withDbTransaction } from "../../db/pool.js";
+import { withDbTransaction } from "../../db/pool.js";
+import { findDocumentAccessContextForUser, getDocumentEditStateForUser } from "./access.js";
 import { buildReadOnlyFormDefinition } from "../templates/form-read.js";
-import type { ReadOnlyFormField, WorkflowFieldRules } from "../../types/domain.js";
+import type { ReadOnlyFormField } from "../../types/domain.js";
 
 type SaveDocumentInput = {
   documentId: string;
   userId: string;
   submittedValues: Record<string, unknown>;
-};
-
-type SaveableDocumentRow = {
-  id: string;
-  status: string;
-  data_json: Record<string, unknown> | null;
-  template_id: string;
-  template_key: string;
-  template_name: string;
-  template_description: string | null;
-  template_status: "active" | "inactive" | "draft" | "published" | "archived";
-  template_version: number;
-  template_mdx_body: string;
-  workflow_field_rules: WorkflowFieldRules | null;
 };
 
 type SaveDocumentSuccess = {
@@ -30,45 +17,11 @@ type SaveDocumentSuccess = {
 
 type SaveDocumentFailure = {
   ok: false;
-  reason: "document_not_visible" | "no_saveable_fields";
+  reason: "document_not_visible" | "save_not_allowed" | "no_saveable_fields";
+  details?: string;
 };
 
 export type SaveDocumentResult = SaveDocumentSuccess | SaveDocumentFailure;
-
-const findSaveableDocument = async (
-  documentId: string,
-  userId: string,
-): Promise<SaveableDocumentRow | null> => {
-  return withDb(async (client) => {
-    const result = await client.query<SaveableDocumentRow>(
-      `
-      select distinct on (d.id)
-        d.id,
-        d.status,
-        d.data_json,
-        d.template_id,
-        ft.key as template_key,
-        ft.name as template_name,
-        ft.description as template_description,
-        ft.status as template_status,
-        d.template_version,
-        ft.mdx_body as template_mdx_body,
-        wt.workflow_json->'fieldRules' as workflow_field_rules
-      from documents d
-      inner join form_templates ft on ft.id = d.template_id
-      inner join workflow_templates wt on wt.id = d.workflow_template_id
-      inner join template_assignments ta on ta.template_id = d.template_id and ta.status = 'active'
-      inner join memberships m on m.group_id = ta.group_id
-      where d.id = $1
-        and m.user_id = $2
-      order by d.id
-      `,
-      [documentId, userId],
-    );
-
-    return result.rows[0] ?? null;
-  });
-};
 
 const normalizeTextValue = (value: unknown): string | undefined => {
   if (typeof value === "string") {
@@ -123,26 +76,36 @@ export const saveDocumentValuesForUser = async ({
   userId,
   submittedValues,
 }: SaveDocumentInput): Promise<SaveDocumentResult> => {
-  const visibleDocument = await findSaveableDocument(documentId, userId);
+  const visibleDocument = await findDocumentAccessContextForUser(documentId, userId);
 
-  if (!visibleDocument) {
+  if (!visibleDocument || !visibleDocument.canRead) {
     return {
       ok: false,
       reason: "document_not_visible",
     };
   }
 
+  const editState = await getDocumentEditStateForUser(documentId, userId);
+
+  if (!editState.isAvailable) {
+    return {
+      ok: false,
+      reason: "save_not_allowed",
+      ...(editState.reason ? { details: editState.reason } : {}),
+    };
+  }
+
   const formDefinition = buildReadOnlyFormDefinition({
-    templateId: visibleDocument.template_id,
-    templateKey: visibleDocument.template_key,
-    templateName: visibleDocument.template_name,
-    templateVersion: visibleDocument.template_version,
-    templateStatus: visibleDocument.template_status,
-    ...(visibleDocument.template_description ? { templateDescription: visibleDocument.template_description } : {}),
-    mdxBody: visibleDocument.template_mdx_body,
+    templateId: visibleDocument.templateId,
+    templateKey: visibleDocument.templateKey,
+    templateName: visibleDocument.templateName,
+    templateVersion: visibleDocument.templateVersion,
+    templateStatus: visibleDocument.templateStatus,
+    ...(visibleDocument.templateDescription ? { templateDescription: visibleDocument.templateDescription } : {}),
+    mdxBody: visibleDocument.templateMdxBody,
     documentStatus: visibleDocument.status,
-    documentData: visibleDocument.data_json ?? {},
-    workflowFieldRules: visibleDocument.workflow_field_rules ?? {},
+    documentData: visibleDocument.dataJson,
+    workflowFieldRules: visibleDocument.workflowFieldRules,
   });
 
   const saveableFields = formDefinition.fields.filter((field) => field.isSavable);
@@ -156,7 +119,7 @@ export const saveDocumentValuesForUser = async ({
 
   const updatedFieldValues = collectUpdatedFieldValues(saveableFields, submittedValues);
   const mergedDocumentData = {
-    ...(visibleDocument.data_json ?? {}),
+    ...visibleDocument.dataJson,
     ...updatedFieldValues,
   };
 

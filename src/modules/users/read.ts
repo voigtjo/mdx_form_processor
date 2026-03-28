@@ -45,3 +45,18 @@ export const findUserByKey = async (key: string): Promise<User | null> => {
     return row ? mapUser(row) : null;
   });
 };
+
+export const findUserById = async (id: string): Promise<User | null> => {
+  return withDb(async (client) => {
+    const result = await client.query<UserRow>(
+      `select id, key, display_name, email, description, status
+       from users
+       where id = $1
+       limit 1`,
+      [id],
+    );
+
+    const row = result.rows[0];
+    return row ? mapUser(row) : null;
+  });
+};

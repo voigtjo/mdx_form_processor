@@ -1,21 +1,5 @@
-import { withDb, withDbTransaction } from "../../db/pool.js";
-
-type WorkflowJson = {
-  actions?: Record<
-    string,
-    {
-      from?: string[];
-      to?: string;
-    }
-  >;
-};
-
-type RejectableDocumentRow = {
-  id: string;
-  status: string;
-  title: string;
-  workflow_json: WorkflowJson;
-};
+import { withDbTransaction } from "../../db/pool.js";
+import { findDocumentAccessContextForUser, type WorkflowJson } from "./access.js";
 
 type RejectDocumentInput = {
   documentId: string;
@@ -37,42 +21,10 @@ type RejectDocumentSuccess = {
 type RejectDocumentFailure = {
   ok: false;
   reason: "document_not_visible" | "reject_not_allowed";
+  details?: string;
 };
 
 export type RejectDocumentResult = RejectDocumentSuccess | RejectDocumentFailure;
-
-const findVisibleDocumentForReject = async (
-  documentId: string,
-  userId: string,
-): Promise<RejectableDocumentRow | null> => {
-  return withDb(async (client) => {
-    const result = await client.query<RejectableDocumentRow>(
-      `
-      select distinct on (d.id)
-        d.id,
-        d.status,
-        case
-          when ft.key = 'customer-order-test' and d.data_json->>'customer_order_number' is not null then 'Customer Order ' || (d.data_json->>'customer_order_number')
-          when ft.key = 'production-batch' and d.data_json->>'batch_id' is not null then 'Batch ' || (d.data_json->>'batch_id')
-          when ft.key = 'evidence-basic' and d.data_json->>'evidence_number' is not null then 'Evidence ' || (d.data_json->>'evidence_number')
-          else ft.name
-        end as title,
-        wt.workflow_json
-      from documents d
-      inner join form_templates ft on ft.id = d.template_id
-      inner join workflow_templates wt on wt.id = d.workflow_template_id
-      inner join template_assignments ta on ta.template_id = d.template_id and ta.status = 'active'
-      inner join memberships m on m.group_id = ta.group_id
-      where d.id = $1
-        and m.user_id = $2
-      order by d.id
-      `,
-      [documentId, userId],
-    );
-
-    return result.rows[0] ?? null;
-  });
-};
 
 const readRejectTransition = (workflowJson: WorkflowJson): { from: string[]; to: string } | null => {
   const rejectAction = workflowJson.actions?.reject;
@@ -88,16 +40,30 @@ const readRejectTransition = (workflowJson: WorkflowJson): { from: string[]; to:
 };
 
 export const getDocumentRejectStateForUser = async (documentId: string, userId: string): Promise<RejectState> => {
-  const document = await findVisibleDocumentForReject(documentId, userId);
+  const document = await findDocumentAccessContextForUser(documentId, userId);
 
-  if (!document) {
+  if (!document || !document.canRead) {
     return {
       isAvailable: false,
       reason: "Dokument ist nicht sichtbar.",
     };
   }
 
-  const rejectTransition = readRejectTransition(document.workflow_json);
+  if (!document.hasApproverAssignment) {
+    return {
+      isAvailable: false,
+      reason: "Reject setzt eine aktive Approver-Zuweisung voraus.",
+    };
+  }
+
+  if (!document.canExecute) {
+    return {
+      isAvailable: false,
+      reason: "Reject setzt Membership-Recht x voraus.",
+    };
+  }
+
+  const rejectTransition = readRejectTransition(document.workflowJson);
 
   if (!rejectTransition || !rejectTransition.from.includes(document.status)) {
     return {
@@ -113,21 +79,38 @@ export const getDocumentRejectStateForUser = async (documentId: string, userId: 
 };
 
 export const rejectDocumentForUser = async ({ documentId, userId }: RejectDocumentInput): Promise<RejectDocumentResult> => {
-  const document = await findVisibleDocumentForReject(documentId, userId);
+  const document = await findDocumentAccessContextForUser(documentId, userId);
 
-  if (!document) {
+  if (!document || !document.canRead) {
     return {
       ok: false,
       reason: "document_not_visible",
     };
   }
 
-  const rejectTransition = readRejectTransition(document.workflow_json);
+  if (!document.hasApproverAssignment) {
+    return {
+      ok: false,
+      reason: "reject_not_allowed",
+      details: "Reject setzt eine aktive Approver-Zuweisung voraus.",
+    };
+  }
+
+  if (!document.canExecute) {
+    return {
+      ok: false,
+      reason: "reject_not_allowed",
+      details: "Reject setzt Membership-Recht x voraus.",
+    };
+  }
+
+  const rejectTransition = readRejectTransition(document.workflowJson);
 
   if (!rejectTransition || !rejectTransition.from.includes(document.status)) {
     return {
       ok: false,
       reason: "reject_not_allowed",
+      details: "Reject ist im aktuellen Status nicht verfuegbar.",
     };
   }
 

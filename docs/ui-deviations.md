@@ -1,126 +1,62 @@
 # UI-Abweichungen zum Alt-Spec-Stand
 
-## Hauptnavigation
+Stand: verdichtete Abnahmesicht auf UI-nahe Alt-Spec-Lücken.
 
-- Grob passend zur Spec
-  - Spec: `specs/09_navigation_information_architecture.md`
-  - Code: `src/views/layouts/main.ejs`
-- Ist-Stand:
-  - die fünf führenden Hauptbereiche sind vorhanden
-  - User-Selektion ist global sichtbar
+## UI-Lücken, die inzwischen geschlossen sind
 
-## Workspace
-
-- Grob passend
-  - Spec: `specs/10_screen_spec_workspace.md`
-  - Code: `src/views/pages/workspace.ejs`
-- Bereits passend:
-  - `My Groups`
-  - `My Tasks`
-  - `My Templates`
-  - `My Documents`
-- Abweichungen:
-  - keine direkte Template-Detailöffnung aus `My Templates`
-  - keine Schnellaktionen ausser dem kleinen Document-Start aus `My Templates`
-  - die Seite bleibt ein ruhiger Uebersichtsschnitt und noch kein weitergehender persoenlicher Arbeitsfeed
-
-## Templates
-
-- Teilweise spec-nahe Listen-, Detail- und New-Sicht
-  - Spec: `specs/11_screen_spec_templates.md`
+- Documents haben echte Detailsicht statt Placeholder
+  - Code: `src/views/pages/documents.ejs`, `src/views/pages/document-detail.ejs`
+- Templates haben Liste, Einzelansicht und New-Pfad statt Inline-Review unter der Tabelle
   - Code: `src/views/pages/templates.ejs`, `src/views/pages/template-detail.ejs`, `src/views/pages/template-new.ejs`
-- Ist-Stand:
-  - Listensicht mit sichtbarem Status, Version, Workflow- und Group-Zuordnung sowie Detailsprung
-  - eigene Template-Detailseite mit `Overview`, `Form`, `Workflow`, `Integrations`, `Versions` und `Documents`
-  - kleine New-Seite fuer Draft-Anlage
-- Abweichungen:
-  - kein Template Edit
-  - keine echte Tab-Navigation `Overview / Form / Workflow / Integrations / Versions / Documents`
-  - keine bearbeitbare Edit-Sicht
-  - Listenfilter fuer Suche / Status / Group fehlen noch
-
-## Workflows
-
-- Teilweise spec-nahe Listen-, Detail- und New-Sicht
-  - Spec: `specs/12_screen_spec_workflows.md`
+- Workflows haben Liste, Einzelansicht und New-Pfad statt Inline-Review unter der Tabelle
   - Code: `src/views/pages/workflows.ejs`, `src/views/pages/workflow-detail.ejs`, `src/views/pages/workflow-new.ejs`
-- Ist-Stand:
-  - Listensicht mit sichtbarem Status, Version, Initialstatus und lesbarer Haupt-Statusfolge sowie Detailsprung
-  - eigene Workflow-Detailseite mit `Overview`, `Action Overview`, `Hooks`, `JSON`, `Usage` und `Versions`
-  - kleine New-Seite fuer Draft-Anlage
-- Abweichungen:
-  - kein Workflow Edit
-  - keine echte Tab-Navigation `Overview / JSON / Hooks / Usage`
-  - keine bearbeitbare Edit-Sicht
-  - Listenfilter fuer Suche / Status fehlen noch
+- Admin ist nicht mehr nur Read-only für Users und Groups
+  - Code: `src/views/pages/admin.ejs`, `src/views/pages/admin-user-*.ejs`, `src/views/pages/admin-group-*.ejs`
+- Memberships und Template Assignments sind im Admin nicht mehr nur statisch
+  - Code: `src/views/pages/admin-user-detail.ejs`, `src/views/pages/admin-group-detail.ejs`, `src/views/pages/template-detail.ejs`
 
-## Documents List
+## UI-Punkte, die nur teilweise alt-spec-nah sind
 
-- Teilweise passend, aber noch nicht spec-nah
-  - Spec: `specs/13_screen_spec_documents.md`
+- Workspace
+  - Code: `src/views/pages/workspace.ejs`
+  - Stand: gute Arbeitsübersicht mit Links und kleinem Start-Einstieg, aber noch kein weitergehender persönlicher Arbeitsfeed oder variantenspezifischer Screen
+- Templates
+  - Code: `src/views/pages/templates.ejs`, `src/views/pages/template-detail.ejs`
+  - Stand: Liste und Detail sind brauchbar, aber keine echte Tab-Familie und kein Edit-Screen
+- Workflows
+  - Code: `src/views/pages/workflows.ejs`, `src/views/pages/workflow-detail.ejs`
+  - Stand: Liste und Detail sind brauchbar, aber keine echte Tab-Familie und kein Edit-Screen
+- Documents List
   - Code: `src/views/pages/documents.ejs`
-- Bereits passend:
-  - sichtbare Documents
-  - Status
-  - Template-Bezug
-  - Workflow-Bezug in der Liste
-  - Link in die Detailseite
-  - kleiner Start-Einstieg
-  - kleiner Such-/Status-/Archivfilter
-- Abweichungen:
-  - keine Trennung von `My Documents` und `Documents by Template`
-  - keine Templatefilterung
-  - die Liste bleibt tabellarisch und noch ohne weitergehende Arbeitszusammenfassung oder gruppierte Varianten
-
-## Document Detail
-
-- Funktional weit, aber UI-seitig abweichend
-  - Spec: `specs/13_screen_spec_documents.md`
+  - Stand: Such-/Status-/Archivschnitt vorhanden, aber noch keine spec-nahe Trennung `My Documents` vs. `Documents by Template`
+- Document Detail
   - Code: `src/views/pages/document-detail.ejs`
-- Bereits vorhanden:
-  - Header
-  - Assignments
-  - Tasks
-  - Form-Bereich
-  - Attachments
-  - Journal in kleinem MVP-Schnitt
-  - History
-  - Workflow-Aktionspfade
-- Abweichungen:
-  - Work Summary ist nicht als eigener, klarer Bereich umgesetzt
-  - Journal ist vorhanden, aber noch nicht als voll strukturierter wiederholbarer Bearbeitungsbereich mit spaltenbezogener UI
-  - Arbeits-UI und Technik-/Spec-Sicht sind vermischt
-  - sichtbare Bereiche wie `Template Metadata`, `Sections`, `Fields`, `Actions`, `MDX Source` sind eher Review-/Techniksicht als reine Arbeits-UI
-  - primäre Actions liegen im Form-Panel statt klar im Header-Kontext
+  - Stand: funktional weit, aber noch ohne klar getrennten `Work Summary`-Bereich und mit starker Vermischung von Arbeits- und Review-Sicht
+- Admin
+  - Code: `src/views/pages/admin.ejs`, `src/views/pages/admin-user-*.ejs`, `src/views/pages/admin-group-*.ejs`
+  - Stand: erste echte Pflegepfade vorhanden, aber noch keine untergliederte Verwaltungs-UI
 
-## Admin
+## UI-Themen, die bewusst erst in der neuen Richtung angegangen werden sollen
 
-- Read-Übersicht vorhanden, aber nicht spec-nah vollständig
-  - Spec: `specs/14_screen_spec_admin.md`
-  - Code: `src/views/pages/admin.ejs`
-- Bereits passend:
-  - Users
-  - Groups
-  - Memberships
-  - Template Assignments
-- Abweichungen:
-  - keine Unter-Navigation oder Tabs
-  - keine Pflegepfade
-  - `New User` und `New Group` sind nur UI-Hüllen
+- Technische Review-Sicht von `Document Detail` sauber aus der Arbeitsseite herauslösen
+  - Heute sichtbar in: `src/views/pages/document-detail.ejs`
+  - Grund: weitere Alt-Ausbauten würden die Mischseite weiter vergrößern
+- Vollständige Form-/MDX-Darstellung als spätere vereinfachte Richtung
+  - Heute sichtbar in: `src/modules/templates/form-read.ts`, `src/views/pages/document-detail.ejs`
+  - Grund: gehört in die kommende vereinfachte MDX-Richtung, nicht in weiteren Alt-Spec-Lückenschluss
+- Größerer UI-Umbau für Templates/Workflows/Admin
+  - Heute sichtbar in: `src/views/pages/templates.ejs`, `src/views/pages/workflows.ejs`, `src/views/pages/admin.ejs`
+  - Grund: der aktuelle kleine List/Detail/New-Kern reicht als Abnahmestand; größere Screen-Familien sollen erst nach der Richtungsentscheidung kommen
 
-## Vermischung von Arbeits-UI und Technik-/Spec-Sicht
+## Stärkste verbleibende Vermischung von Arbeits-UI und Technik-/Spec-Sicht
 
-- stärkste Vermischung in `src/views/pages/document-detail.ejs`
-- schwächere Vermischung in `src/views/pages/templates.ejs` und `src/views/pages/workflows.ejs`
-- Ursache im aktuellen Ist-Stand:
-  - Document Detail dient gleichzeitig als Arbeitsfläche und als MDX-/Workflow-Verifikationsfläche
-  - Templates/Workflows sind noch keine vollwertigen Review-Screens und tragen deshalb Placeholder-Charakter
+- am stärksten: `src/views/pages/document-detail.ejs`
+- mittel: `src/views/pages/template-detail.ejs`
+- mittel: `src/views/pages/workflow-detail.ejs`
 
-## Screens ohne spec-nahen Zustand
+## Screens, die bewusst nicht als alt-spec-vollständig markiert werden
 
-- Template Detail
-- Template Edit
-- Workflow Detail
-- Workflow Edit
-- Documents by Template
-- Admin-Unterbereiche mit echten Pflegepfaden
+- `Template Edit`
+- `Workflow Edit`
+- `Documents by Template`
+- tiefere Admin-Unterbereiche über den aktuellen Pflegekern hinaus

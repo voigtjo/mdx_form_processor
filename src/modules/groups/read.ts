@@ -43,3 +43,18 @@ export const listGroupsForUser = async (userId: string): Promise<Group[]> => {
     return result.rows.map(mapGroup);
   });
 };
+
+export const findGroupById = async (id: string): Promise<Group | null> => {
+  return withDb(async (client) => {
+    const result = await client.query<GroupRow>(
+      `select id, key, name, description, status
+       from groups
+       where id = $1
+       limit 1`,
+      [id],
+    );
+
+    const row = result.rows[0];
+    return row ? mapGroup(row) : null;
+  });
+};

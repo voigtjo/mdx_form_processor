@@ -5,6 +5,7 @@ import { listAssignments } from "../modules/assignments/read.js";
 import { listAssignmentsForDocument } from "../modules/assignments/read.js";
 import { listAuditEvents } from "../modules/audit/read.js";
 import { listAuditEventsForDocument } from "../modules/audit/read.js";
+import { getDocumentEditStateForUser } from "../modules/documents/access.js";
 import { getDocumentApproveStateForUser } from "../modules/documents/approve.js";
 import { getDocumentArchiveStateForUser } from "../modules/documents/archive.js";
 import {
@@ -17,17 +18,21 @@ import {
 } from "../modules/documents/read.js";
 import { getDocumentRejectStateForUser } from "../modules/documents/reject.js";
 import { getDocumentSubmitStateForUser } from "../modules/documents/submit.js";
-import { listGroups, listGroupsForUser } from "../modules/groups/read.js";
-import { listMemberships } from "../modules/memberships/read.js";
+import { findGroupById, listGroups, listGroupsForUser } from "../modules/groups/read.js";
+import { listMemberships, listMembershipsForGroup, listMembershipsForUser } from "../modules/memberships/read.js";
+import { parseNextFormSource, readNextFormSourceText, referenceCraftsmanOrderFormPath } from "../modules/next-form/read.js";
 import { buildReadOnlyFormDefinition } from "../modules/templates/form-read.js";
 import {
   findFormTemplateById,
+  findVisiblePublishedFormTemplateById,
   listFormTemplateVersions,
   listFormTemplates,
   listFormTemplatesForUser,
   listTemplateAssignments,
+  listTemplateAssignmentsForGroup,
+  listTemplateAssignmentsForTemplate,
 } from "../modules/templates/read.js";
-import { findUserByKey, listUsers } from "../modules/users/read.js";
+import { findUserById, findUserByKey, listUsers } from "../modules/users/read.js";
 import {
   findWorkflowTemplateById,
   listWorkflowTemplateVersions,
@@ -36,7 +41,7 @@ import {
 import type { User } from "../types/domain.js";
 import type { NavItem } from "../types/navigation.js";
 
-type SectionKey = "workspace" | "templates" | "workflows" | "documents" | "admin";
+type SectionKey = "workspace" | "templates" | "workflows" | "documents" | "admin" | "next-form";
 
 const buildHref = (path: string, activeUserKey: string): string => `${path}?user=${encodeURIComponent(activeUserKey)}`;
 
@@ -91,7 +96,11 @@ export const createTemplateDetailViewModel = async (userKey: string | undefined,
   const shellContext = await createShellContext("templates", userKey);
   const { activeUser } = shellContext;
 
-  const template = await findFormTemplateById(templateId);
+  const unrestrictedTemplate = await findFormTemplateById(templateId);
+  const template =
+    unrestrictedTemplate?.status === "published"
+      ? await findVisiblePublishedFormTemplateById(templateId, activeUser.id)
+      : unrestrictedTemplate;
 
   if (!template) {
     return null;
@@ -99,15 +108,19 @@ export const createTemplateDetailViewModel = async (userKey: string | undefined,
 
   const [groups, templateAssignments, workflows, documents, versions] = await Promise.all([
     listGroups(),
-    listTemplateAssignments(),
+    listTemplateAssignmentsForTemplate(template.id),
     listWorkflowTemplates(),
     listDocumentsVisibleToUser(activeUser.id),
     listFormTemplateVersions(template.key),
   ]);
 
   const workflow = workflows.find((item) => item.id === template.workflowTemplateId) ?? null;
-  const relatedAssignments = templateAssignments.filter((assignment) => assignment.templateId === template.id);
+  const relatedAssignments = templateAssignments;
   const relatedGroups = groups.filter((group) => relatedAssignments.some((assignment) => assignment.groupId === group.id));
+  const assignmentsWithGroups = relatedAssignments.map((assignment) => ({
+    assignment,
+    group: groups.find((group) => group.id === assignment.groupId) ?? null,
+  }));
   const relatedDocuments = documents.filter((document) => document.templateId === template.id);
   const formDefinition = buildReadOnlyFormDefinition({
     templateId: template.id,
@@ -130,6 +143,7 @@ export const createTemplateDetailViewModel = async (userKey: string | undefined,
       workflow,
       groups: relatedGroups,
       assignments: relatedAssignments,
+      assignmentsWithGroups,
       versions,
       relatedDocuments,
       formDefinition,
@@ -195,6 +209,131 @@ export const createWorkflowNewViewModel = async (userKey: string | undefined) =>
   };
 };
 
+export const createAdminUserNewViewModel = async (userKey: string | undefined) => {
+  const shellContext = await createShellContext("admin", userKey);
+
+  return {
+    ...shellContext,
+    title: "New User",
+    pageSection: "admin" as const,
+  };
+};
+
+export const createAdminGroupNewViewModel = async (userKey: string | undefined) => {
+  const shellContext = await createShellContext("admin", userKey);
+
+  return {
+    ...shellContext,
+    title: "New Group",
+    pageSection: "admin" as const,
+  };
+};
+
+export const createAdminUserDetailViewModel = async (userKey: string | undefined, targetUserId: string) => {
+  const shellContext = await createShellContext("admin", userKey);
+  const targetUser = await findUserById(targetUserId);
+
+  if (!targetUser) {
+    return null;
+  }
+
+  const [groups, memberships] = await Promise.all([
+    listGroups(),
+    listMembershipsForUser(targetUser.id),
+  ]);
+  const membershipGroupIds = new Set(memberships.map((membership) => membership.groupId));
+  const availableGroups = groups.filter((group) => !membershipGroupIds.has(group.id));
+  const membershipsWithGroups = memberships.map((membership) => ({
+    membership,
+    group: groups.find((group) => group.id === membership.groupId) ?? null,
+  }));
+
+  return {
+    ...shellContext,
+    title: targetUser.displayName,
+    pageSection: "admin" as const,
+    adminUserDetail: {
+      user: targetUser,
+      memberships: membershipsWithGroups,
+      availableGroups,
+    },
+  };
+};
+
+export const createAdminUserEditViewModel = async (userKey: string | undefined, targetUserId: string) => {
+  const shellContext = await createShellContext("admin", userKey);
+  const targetUser = await findUserById(targetUserId);
+
+  if (!targetUser) {
+    return null;
+  }
+
+  return {
+    ...shellContext,
+    title: `Edit ${targetUser.displayName}`,
+    pageSection: "admin" as const,
+    adminUserEdit: {
+      user: targetUser,
+    },
+  };
+};
+
+export const createAdminGroupDetailViewModel = async (userKey: string | undefined, groupId: string) => {
+  const shellContext = await createShellContext("admin", userKey);
+  const group = await findGroupById(groupId);
+
+  if (!group) {
+    return null;
+  }
+
+  const [users, memberships, templates, templateAssignments] = await Promise.all([
+    listUsers(),
+    listMembershipsForGroup(group.id),
+    listFormTemplates(),
+    listTemplateAssignmentsForGroup(group.id),
+  ]);
+  const membershipsWithUsers = memberships.map((membership) => ({
+    membership,
+    user: users.find((user) => user.id === membership.userId) ?? null,
+  }));
+  const assignedTemplateIds = new Set(templateAssignments.map((assignment) => assignment.templateId));
+  const availableTemplates = templates.filter((template) => !assignedTemplateIds.has(template.id));
+  const templateAssignmentsWithTemplates = templateAssignments.map((assignment) => ({
+    assignment,
+    template: templates.find((template) => template.id === assignment.templateId) ?? null,
+  }));
+
+  return {
+    ...shellContext,
+    title: group.name,
+    pageSection: "admin" as const,
+    adminGroupDetail: {
+      group,
+      memberships: membershipsWithUsers,
+      templateAssignments: templateAssignmentsWithTemplates,
+      availableTemplates,
+    },
+  };
+};
+
+export const createAdminGroupEditViewModel = async (userKey: string | undefined, groupId: string) => {
+  const shellContext = await createShellContext("admin", userKey);
+  const group = await findGroupById(groupId);
+
+  if (!group) {
+    return null;
+  }
+
+  return {
+    ...shellContext,
+    title: `Edit ${group.name}`,
+    pageSection: "admin" as const,
+    adminGroupEdit: {
+      group,
+    },
+  };
+};
+
 export const createBaseViewModel = async (section: SectionKey, userKey: string | undefined) => {
   const shellContext = await createShellContext(section, userKey);
   const { activeUser, users } = shellContext;
@@ -229,6 +368,15 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
     listAuditEvents(),
   ]);
 
+  const catalogTemplates = section === "admin" ? templates : userTemplates;
+  const catalogTemplateIds = new Set(catalogTemplates.map((template) => template.id));
+  const catalogWorkflows = section === "admin" ? workflows : workflowsForTemplates(catalogTemplates, workflows);
+  const catalogTemplateAssignments =
+    section === "admin"
+      ? templateAssignments
+      : templateAssignments.filter((assignment) => catalogTemplateIds.has(assignment.templateId));
+  const workspaceDocuments = userDocuments.filter((document) => document.status !== "archived");
+
   return {
     ...shellContext,
     pageSection: section,
@@ -236,19 +384,53 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
       groups: userGroups,
       tasks: userTasks,
       templates: userTemplates,
-      documents: userDocuments,
+      documents: workspaceDocuments,
       workflows: workflowsForTemplates(userTemplates, workflows),
     },
     catalog: {
       groups,
       memberships,
-      templates,
-      templateAssignments,
-      workflows,
+      templates: catalogTemplates,
+      templateAssignments: catalogTemplateAssignments,
+      workflows: catalogWorkflows,
       documents: visibleDocuments,
       tasks,
       assignments,
       auditEvents,
+    },
+  };
+};
+
+export const createNextFormPreviewViewModel = async (input: { userKey?: string | undefined; sourceText?: string | undefined }) => {
+  const referenceSourceText = await readNextFormSourceText(referenceCraftsmanOrderFormPath);
+  const sourceText = input.sourceText ?? referenceSourceText;
+  const previewUser = {
+    id: "next-form-preview-user",
+    key: input.userKey?.trim() || "preview",
+    displayName: "Next Form Preview",
+    status: "active" as const,
+  };
+  let parsedForm;
+  let parseError: string | undefined;
+
+  try {
+    parsedForm = parseNextFormSource(sourceText);
+  } catch (error: unknown) {
+    parseError = error instanceof Error ? error.message : "Die Quelle konnte nicht gelesen werden.";
+  }
+
+  return {
+    appName: env.appName,
+    activeUser: previewUser,
+    users: [previewUser],
+    navigation: [],
+    title: "Next Form Preview",
+    pageSection: "next-form" as const,
+    nextFormPreview: {
+      sourceText,
+      referenceSourceText,
+      ...(parsedForm ? { parsedForm } : {}),
+      ...(parseError ? { parseError } : {}),
     },
   };
 };
@@ -263,12 +445,13 @@ export const createDocumentDetailViewModel = async (userKey: string | undefined,
     return null;
   }
 
-  const [assignments, tasks, attachments, auditEvents, attachmentUploadState, submitState, approveState, rejectState, archiveState] = await Promise.all([
+  const [assignments, tasks, attachments, auditEvents, attachmentUploadState, editState, submitState, approveState, rejectState, archiveState] = await Promise.all([
     listAssignmentsForDocument(document.id),
     listTasksForDocument(document.id),
     listAttachmentsForDocument(document.id),
     listAuditEventsForDocument(document.id),
     getAttachmentUploadStateForUser(document.id, activeUser.id),
+    getDocumentEditStateForUser(document.id, activeUser.id),
     getDocumentSubmitStateForUser(document.id, activeUser.id),
     getDocumentApproveStateForUser(document.id, activeUser.id),
     getDocumentRejectStateForUser(document.id, activeUser.id),
@@ -295,8 +478,12 @@ export const createDocumentDetailViewModel = async (userKey: string | undefined,
     documentDetail: {
       document,
       formDefinition,
-      editableFields: formDefinition.fields.filter((field) => field.isSavable),
-      journals: formDefinition.journals,
+      editableFields: formDefinition.fields.filter((field) => field.isSavable && editState.isAvailable),
+      journals: formDefinition.journals.map((journal) => ({
+        ...journal,
+        isEditable: journal.isEditable && editState.isAvailable,
+      })),
+      editState,
       attachmentUploadState,
       submitState,
       approveState,

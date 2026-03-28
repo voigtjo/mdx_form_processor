@@ -115,6 +115,8 @@ export const listDocumentsVisibleToUser = async (userId: string): Promise<Docume
       inner join template_assignments ta on ta.template_id = d.template_id
       inner join memberships m on m.group_id = ta.group_id
       where m.user_id = $1
+        and ta.status = 'active'
+        and m.rights like '%r%'
       group by d.id, ft.key, ft.name
       order by d.updated_at desc
       `,
@@ -130,6 +132,8 @@ export const listDocumentsAssignedToUser = async (userId: string): Promise<Docum
     const result = await client.query<DocumentRow>(
       `
       ${documentBaseQuery}
+      inner join template_assignments ta on ta.template_id = d.template_id and ta.status = 'active'
+      inner join memberships m on m.group_id = ta.group_id and m.user_id = $1 and m.rights like '%r%'
       inner join document_assignments current_assignment
         on current_assignment.document_id = d.id
        and current_assignment.user_id = $1
@@ -176,6 +180,8 @@ export const findDocumentDetailVisibleToUser = async (
       inner join memberships m on m.group_id = ta.group_id
       where d.id = $1
         and m.user_id = $2
+        and ta.status = 'active'
+        and m.rights like '%r%'
       limit 1
       `,
       [documentId, userId],
@@ -212,9 +218,12 @@ export const listTasks = async (): Promise<Task[]> => {
 export const listTasksForUser = async (userId: string): Promise<Task[]> => {
   return withDb(async (client) => {
     const result = await client.query<TaskRow>(
-      `select id, document_id, user_id, title, action, status, role, updated_at
-       from tasks
-       where user_id = $1
+      `select distinct t.id, t.document_id, t.user_id, t.title, t.action, t.status, t.role, t.updated_at
+       from tasks t
+       inner join documents d on d.id = t.document_id
+       inner join template_assignments ta on ta.template_id = d.template_id and ta.status = 'active'
+       inner join memberships m on m.group_id = ta.group_id and m.user_id = $1 and position('r' in m.rights) > 0
+       where t.user_id = $1
        order by updated_at desc`,
       [userId],
     );

@@ -1,16 +1,12 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { withDb, withDbTransaction } from "../../db/pool.js";
+import { withDbTransaction } from "../../db/pool.js";
+import { findDocumentAccessContextForUser, getDocumentEditStateForUser } from "../documents/access.js";
 
 const blockedUploadStatuses = new Set(["submitted", "approved", "rejected", "archived"]);
 const uploadStorageRoot = path.join(process.cwd(), "storage", "attachments");
 const maxAttachmentSizeBytes = 3 * 1024 * 1024;
-
-type UploadableDocumentRow = {
-  id: string;
-  status: string;
-};
 
 type AttachmentUploadState = {
   isAvailable: boolean;
@@ -42,30 +38,6 @@ type UploadAttachmentFailure = {
 
 export type UploadAttachmentResult = UploadAttachmentSuccess | UploadAttachmentFailure;
 
-const findVisibleDocumentForUpload = async (
-  documentId: string,
-  userId: string,
-): Promise<UploadableDocumentRow | null> => {
-  return withDb(async (client) => {
-    const result = await client.query<UploadableDocumentRow>(
-      `
-      select distinct on (d.id)
-        d.id,
-        d.status
-      from documents d
-      inner join template_assignments ta on ta.template_id = d.template_id and ta.status = 'active'
-      inner join memberships m on m.group_id = ta.group_id
-      where d.id = $1
-        and m.user_id = $2
-      order by d.id
-      `,
-      [documentId, userId],
-    );
-
-    return result.rows[0] ?? null;
-  });
-};
-
 const sanitizeFilename = (filename: string): string => {
   return filename.replace(/[^a-zA-Z0-9._-]/g, "_");
 };
@@ -86,12 +58,21 @@ export const getAttachmentUploadStateForUser = async (
   documentId: string,
   userId: string,
 ): Promise<AttachmentUploadState> => {
-  const document = await findVisibleDocumentForUpload(documentId, userId);
+  const document = await findDocumentAccessContextForUser(documentId, userId);
 
-  if (!document) {
+  if (!document || !document.canRead) {
     return {
       isAvailable: false,
       reason: "Dokument ist nicht sichtbar.",
+    };
+  }
+
+  const editState = await getDocumentEditStateForUser(documentId, userId);
+
+  if (!editState.isAvailable) {
+    return {
+      isAvailable: false,
+      ...(editState.reason ? { reason: editState.reason } : {}),
     };
   }
 
@@ -181,12 +162,22 @@ export const uploadAttachmentForUser = async ({
   userId,
   file,
 }: UploadAttachmentInput): Promise<UploadAttachmentResult> => {
-  const document = await findVisibleDocumentForUpload(documentId, userId);
+  const document = await findDocumentAccessContextForUser(documentId, userId);
 
-  if (!document) {
+  if (!document || !document.canRead) {
     return {
       ok: false,
       reason: "document_not_visible",
+    };
+  }
+
+  const editState = await getDocumentEditStateForUser(documentId, userId);
+
+  if (!editState.isAvailable) {
+    return {
+      ok: false,
+      reason: "upload_not_allowed",
+      ...(editState.reason ? { details: editState.reason } : {}),
     };
   }
 

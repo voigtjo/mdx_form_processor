@@ -2,9 +2,17 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyError } from "fastify";
+import type { Document, FormTemplate, User } from "../types/domain.js";
 import {
+  createAdminGroupDetailViewModel,
+  createAdminGroupEditViewModel,
+  createAdminGroupNewViewModel,
+  createAdminUserDetailViewModel,
+  createAdminUserEditViewModel,
+  createAdminUserNewViewModel,
   createBaseViewModel,
   createDocumentDetailViewModel,
+  createNextFormPreviewViewModel,
   createTemplateDetailViewModel,
   createTemplateNewViewModel,
   createWorkflowDetailViewModel,
@@ -12,6 +20,10 @@ import {
 } from "../services/app-context.js";
 import { findAttachmentAssetVisibleToUser } from "../modules/attachments/read.js";
 import { parseSingleAttachmentUpload, uploadAttachmentForUser } from "../modules/attachments/upload.js";
+import { createGroup } from "../modules/groups/create.js";
+import { updateGroup } from "../modules/groups/update.js";
+import { createMembership } from "../modules/memberships/create.js";
+import { removeMembership } from "../modules/memberships/remove.js";
 import { approveDocumentForUser } from "../modules/documents/approve.js";
 import { archiveDocumentForUser } from "../modules/documents/archive.js";
 import { rejectDocumentForUser } from "../modules/documents/reject.js";
@@ -21,7 +33,10 @@ import { submitDocumentForUser } from "../modules/documents/submit.js";
 import { addJournalEntryForUser } from "../modules/journal/add.js";
 import { getActiveUser } from "../services/app-context.js";
 import { createTemplateDraft } from "../modules/templates/create.js";
+import { createTemplateAssignment, removeTemplateAssignment } from "../modules/templates/assign.js";
+import { createUser } from "../modules/users/create.js";
 import { listUsers } from "../modules/users/read.js";
+import { updateUser } from "../modules/users/update.js";
 import { createWorkflowDraft } from "../modules/workflows/create.js";
 
 type UserQuery = {
@@ -100,10 +115,10 @@ const normalizeShowArchived = (value: string | undefined): boolean => {
 };
 
 const filterDocumentsViewModel = (input: {
-  documents: Array<{ id: string; title: string; templateId: string; status: string; assignedUserIds: string[]; updatedAt: string }>;
-  templates: Array<{ id: string; key: string; name: string; workflowTemplateId: string }>;
-  workflows: Array<{ id: string; key: string; name: string }>;
-  users: Array<{ id: string; displayName: string }>;
+  documents: Document[];
+  templates: FormTemplate[];
+  workflows: Array<{ id: string; key?: string; name?: string }>;
+  users: User[];
   searchTerm: string;
   statusFilter: string | undefined;
   showArchived: boolean;
@@ -225,6 +240,26 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   app.get("/health", async () => ({
     ok: true,
   }));
+
+  app.get("/next-form-preview/craftsman-order", async (request, reply) => {
+    return reply.view(
+      "pages/next-form-preview.ejs",
+      await withDialog(request, await createNextFormPreviewViewModel({ userKey: queryValue(request) })),
+    );
+  });
+
+  app.post<{ Body: { source?: string } }>("/next-form-preview/craftsman-order", async (request, reply) => {
+    return reply.view(
+      "pages/next-form-preview.ejs",
+      await withDialog(
+        request,
+        await createNextFormPreviewViewModel({
+          userKey: queryValue(request),
+          sourceText: request.body.source,
+        }),
+      ),
+    );
+  });
 
   app.get("/workspace", async (request, reply) => {
     return renderPage(request, reply, "workspace", "workspace", "My Workspace");
@@ -357,6 +392,334 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }));
   });
 
+  app.get("/admin/users/new", async (request, reply) => {
+    return reply.view("pages/admin-user-new.ejs", await withDialog(request, await createAdminUserNewViewModel(queryValue(request))));
+  });
+
+  app.post<{ Body: { displayName?: string; key?: string; email?: string } }>("/admin/users/new", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+
+    try {
+      await createUser({
+        displayName: request.body?.displayName ?? "",
+        key: request.body?.key ?? "",
+        ...(request.body?.email ? { email: request.body.email } : {}),
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/admin?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "User angelegt",
+          message: "Ein neuer User wurde angelegt.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Der User konnte nicht angelegt werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/admin/users/new?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "User konnte nicht angelegt werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.get("/admin/users/:id", async (request, reply) => {
+    const params = request.params as { id: string };
+    const viewModel = await createAdminUserDetailViewModel(queryValue(request), params.id);
+
+    if (!viewModel) {
+      return reply.code(404).view("pages/admin-user-not-found.ejs", await withDialog(request, {
+        title: "User Not Found",
+        ...(await createBaseViewModel("admin", queryValue(request))),
+      }));
+    }
+
+    return reply.view("pages/admin-user-detail.ejs", await withDialog(request, viewModel));
+  });
+
+  app.get("/admin/users/:id/edit", async (request, reply) => {
+    const params = request.params as { id: string };
+    const viewModel = await createAdminUserEditViewModel(queryValue(request), params.id);
+
+    if (!viewModel) {
+      return reply.code(404).view("pages/admin-user-not-found.ejs", await withDialog(request, {
+        title: "User Not Found",
+        ...(await createBaseViewModel("admin", queryValue(request))),
+      }));
+    }
+
+    return reply.view("pages/admin-user-edit.ejs", await withDialog(request, viewModel));
+  });
+
+  app.post<{ Body: { displayName?: string; email?: string; status?: string } }>("/admin/users/:id/edit", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { id: string };
+    const status = request.body?.status === "inactive" ? "inactive" : "active";
+
+    try {
+      await updateUser({
+        id: params.id,
+        displayName: request.body?.displayName ?? "",
+        ...(request.body?.email ? { email: request.body.email } : {}),
+        status,
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "User aktualisiert",
+          message: "Der User wurde aktualisiert.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Der User konnte nicht aktualisiert werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/admin/users/${params.id}/edit?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "User konnte nicht aktualisiert werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.post<{ Body: { groupId?: string; rights?: string | string[] } }>("/admin/users/:id/memberships", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { id: string };
+    const rights = Array.isArray(request.body?.rights)
+      ? request.body.rights
+      : request.body?.rights
+        ? [request.body.rights]
+        : [];
+
+    try {
+      await createMembership({
+        userId: params.id,
+        groupId: request.body?.groupId ?? "",
+        rights: {
+          read: rights.includes("r"),
+          write: rights.includes("w"),
+          execute: rights.includes("x"),
+        },
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Membership angelegt",
+          message: "Die Membership wurde angelegt.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die Membership konnte nicht angelegt werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Membership konnte nicht angelegt werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.post("/admin/users/:id/memberships/:membershipId/remove", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { id: string; membershipId: string };
+
+    try {
+      await removeMembership({
+        membershipId: params.membershipId,
+        userId: params.id,
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Membership entfernt",
+          message: "Die Membership wurde entfernt.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die Membership konnte nicht entfernt werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Membership konnte nicht entfernt werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.get("/admin/groups/new", async (request, reply) => {
+    return reply.view("pages/admin-group-new.ejs", await withDialog(request, await createAdminGroupNewViewModel(queryValue(request))));
+  });
+
+  app.post<{ Body: { name?: string; key?: string; description?: string } }>("/admin/groups/new", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+
+    try {
+      await createGroup({
+        name: request.body?.name ?? "",
+        key: request.body?.key ?? "",
+        ...(request.body?.description ? { description: request.body.description } : {}),
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/admin?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Group angelegt",
+          message: "Eine neue Group wurde angelegt.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die Group konnte nicht angelegt werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/admin/groups/new?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Group konnte nicht angelegt werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.get("/admin/groups/:id", async (request, reply) => {
+    const params = request.params as { id: string };
+    const viewModel = await createAdminGroupDetailViewModel(queryValue(request), params.id);
+
+    if (!viewModel) {
+      return reply.code(404).view("pages/admin-group-not-found.ejs", await withDialog(request, {
+        title: "Group Not Found",
+        ...(await createBaseViewModel("admin", queryValue(request))),
+      }));
+    }
+
+    return reply.view("pages/admin-group-detail.ejs", await withDialog(request, viewModel));
+  });
+
+  app.get("/admin/groups/:id/edit", async (request, reply) => {
+    const params = request.params as { id: string };
+    const viewModel = await createAdminGroupEditViewModel(queryValue(request), params.id);
+
+    if (!viewModel) {
+      return reply.code(404).view("pages/admin-group-not-found.ejs", await withDialog(request, {
+        title: "Group Not Found",
+        ...(await createBaseViewModel("admin", queryValue(request))),
+      }));
+    }
+
+    return reply.view("pages/admin-group-edit.ejs", await withDialog(request, viewModel));
+  });
+
+  app.post<{ Body: { name?: string; description?: string; status?: string } }>("/admin/groups/:id/edit", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { id: string };
+    const status = request.body?.status === "inactive" ? "inactive" : "active";
+
+    try {
+      await updateGroup({
+        id: params.id,
+        name: request.body?.name ?? "",
+        ...(request.body?.description ? { description: request.body.description } : {}),
+        status,
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/admin/groups/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Group aktualisiert",
+          message: "Die Group wurde aktualisiert.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die Group konnte nicht aktualisiert werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/admin/groups/${params.id}/edit?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Group konnte nicht aktualisiert werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.post<{ Body: { templateId?: string } }>("/admin/groups/:id/template-assignments", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { id: string };
+
+    try {
+      await createTemplateAssignment({
+        groupId: params.id,
+        templateId: request.body?.templateId ?? "",
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/admin/groups/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Template Assignment angelegt",
+          message: "Das Template wurde der Group zugeordnet.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Das Template Assignment konnte nicht angelegt werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/admin/groups/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Template Assignment konnte nicht angelegt werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.post("/admin/groups/:id/template-assignments/:assignmentId/remove", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { id: string; assignmentId: string };
+
+    try {
+      await removeTemplateAssignment({
+        assignmentId: params.assignmentId,
+        groupId: params.id,
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/admin/groups/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Template Assignment entfernt",
+          message: "Das Template Assignment wurde entfernt.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Das Template Assignment konnte nicht entfernt werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/admin/groups/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Template Assignment konnte nicht entfernt werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
   app.post<{ Body: { templateId?: string } }>("/documents/start", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
@@ -431,7 +794,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
     if (!result.ok) {
       return reply.redirect(
-        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&saveError=${encodeURIComponent("Keine speicherbaren Felder im aktuellen Status verfuegbar.")}`,
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&saveError=${encodeURIComponent(result.details ?? "Keine speicherbaren Felder im aktuellen Status verfuegbar.")}`,
         303,
       );
     }
@@ -496,7 +859,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       const message =
         result.reason === "minimal_data_missing"
           ? result.details ?? "Pflichtfelder fehlen fuer Submit."
-          : "Submit ist im aktuellen Status nicht verfuegbar.";
+          : result.details ?? "Submit ist im aktuellen Status nicht verfuegbar.";
 
       return reply.redirect(
         `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&submitError=${encodeURIComponent(message)}`,
@@ -529,7 +892,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
     if (!result.ok) {
       return reply.redirect(
-        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&approveError=${encodeURIComponent("Approve ist im aktuellen Status nicht verfuegbar.")}`,
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&approveError=${encodeURIComponent(result.details ?? "Approve ist im aktuellen Status nicht verfuegbar.")}`,
         303,
       );
     }
@@ -559,7 +922,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
     if (!result.ok) {
       return reply.redirect(
-        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&rejectError=${encodeURIComponent("Reject ist im aktuellen Status nicht verfuegbar.")}`,
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&rejectError=${encodeURIComponent(result.details ?? "Reject ist im aktuellen Status nicht verfuegbar.")}`,
         303,
       );
     }
@@ -588,7 +951,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
     if (!result.ok) {
       return reply.redirect(
-        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&archiveError=${encodeURIComponent("Archive ist im aktuellen Status nicht verfuegbar.")}`,
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&archiveError=${encodeURIComponent(result.details ?? "Archive ist im aktuellen Status nicht verfuegbar.")}`,
         303,
       );
     }

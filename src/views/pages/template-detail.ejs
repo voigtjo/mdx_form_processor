@@ -56,17 +56,28 @@
 <section class="grid two-up">
   <article class="panel">
     <h3>Assignments</h3>
-    <% if (templateDetail.groups.length === 0) { %>
+    <p class="panel-copy">Group-Sichtbarkeit dieses Templates. Pflege im ersten Schnitt ueber die jeweilige Group-Detailseite.</p>
+    <% if (templateDetail.assignmentsWithGroups.length === 0) { %>
       <div class="empty-state">
         <strong>Keine Group-Zuordnungen.</strong>
         <p>Dieses Template ist aktuell keiner sichtbaren Group zugeordnet.</p>
       </div>
     <% } else { %>
       <ul class="stack-list compact">
-        <% templateDetail.groups.forEach((group) => { %>
+        <% templateDetail.assignmentsWithGroups.forEach(({ assignment, group }) => { %>
           <li>
-            <strong><%= group.name %></strong>
-            <p><%= group.key %></p>
+            <strong>
+              <% if (group) { %>
+                <a class="text-link" href="/admin/groups/<%= group.id %>?user=<%= activeUser.key %>"><%= group.name %></a>
+              <% } else { %>
+                <%= assignment.groupId %>
+              <% } %>
+            </strong>
+            <p>
+              <%= group?.key ?? assignment.groupId %>
+              · <%= assignment.status %>
+              · assigned <%= assignment.assignedAt %>
+            </p>
           </li>
         <% }) %>
       </ul>

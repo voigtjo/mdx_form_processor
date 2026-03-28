@@ -1,32 +1,6 @@
-import { withDb, withDbTransaction } from "../../db/pool.js";
+import { withDbTransaction } from "../../db/pool.js";
+import { findDocumentAccessContextForUser, type DocumentAccessContext, type WorkflowJson } from "./access.js";
 import { buildReadOnlyFormDefinition } from "../templates/form-read.js";
-import type { WorkflowFieldRules } from "../../types/domain.js";
-
-type WorkflowJson = {
-  actions?: Record<
-    string,
-    {
-      from?: string[];
-      to?: string;
-    }
-  >;
-};
-
-type SubmittableDocumentRow = {
-  id: string;
-  status: string;
-  title: string;
-  data_json: Record<string, unknown> | null;
-  template_id: string;
-  template_key: string;
-  template_name: string;
-  template_description: string | null;
-  template_status: "active" | "inactive" | "draft" | "published" | "archived";
-  template_version: number;
-  template_mdx_body: string;
-  workflow_field_rules: WorkflowFieldRules | null;
-  workflow_json: WorkflowJson;
-};
 
 type SubmitDocumentInput = {
   documentId: string;
@@ -53,48 +27,6 @@ type SubmitDocumentFailure = {
 
 export type SubmitDocumentResult = SubmitDocumentSuccess | SubmitDocumentFailure;
 
-const findVisibleDocumentForSubmit = async (
-  documentId: string,
-  userId: string,
-): Promise<SubmittableDocumentRow | null> => {
-  return withDb(async (client) => {
-    const result = await client.query<SubmittableDocumentRow>(
-      `
-      select distinct on (d.id)
-        d.id,
-        d.status,
-        case
-          when ft.key = 'customer-order-test' and d.data_json->>'customer_order_number' is not null then 'Customer Order ' || (d.data_json->>'customer_order_number')
-          when ft.key = 'production-batch' and d.data_json->>'batch_id' is not null then 'Batch ' || (d.data_json->>'batch_id')
-          when ft.key = 'evidence-basic' and d.data_json->>'evidence_number' is not null then 'Evidence ' || (d.data_json->>'evidence_number')
-          else ft.name
-        end as title,
-        d.data_json,
-        d.template_id,
-        ft.key as template_key,
-        ft.name as template_name,
-        ft.description as template_description,
-        ft.status as template_status,
-        d.template_version,
-        ft.mdx_body as template_mdx_body,
-        wt.workflow_json->'fieldRules' as workflow_field_rules,
-        wt.workflow_json
-      from documents d
-      inner join form_templates ft on ft.id = d.template_id
-      inner join workflow_templates wt on wt.id = d.workflow_template_id
-      inner join template_assignments ta on ta.template_id = d.template_id and ta.status = 'active'
-      inner join memberships m on m.group_id = ta.group_id
-      where d.id = $1
-        and m.user_id = $2
-      order by d.id
-      `,
-      [documentId, userId],
-    );
-
-    return result.rows[0] ?? null;
-  });
-};
-
 const readSubmitTransition = (workflowJson: WorkflowJson): { from: string[]; to: string } | null => {
   const submitAction = workflowJson.actions?.submit;
 
@@ -120,37 +52,51 @@ const isMissingRequiredValue = (value: unknown): boolean => {
   return value === null || value === undefined;
 };
 
-const getMissingRequiredFieldLabels = (document: SubmittableDocumentRow): string[] => {
+const getMissingRequiredFieldLabels = (document: DocumentAccessContext): string[] => {
   const formDefinition = buildReadOnlyFormDefinition({
-    templateId: document.template_id,
-    templateKey: document.template_key,
-    templateName: document.template_name,
-    templateVersion: document.template_version,
-    templateStatus: document.template_status,
-    ...(document.template_description ? { templateDescription: document.template_description } : {}),
-    mdxBody: document.template_mdx_body,
+    templateId: document.templateId,
+    templateKey: document.templateKey,
+    templateName: document.templateName,
+    templateVersion: document.templateVersion,
+    templateStatus: document.templateStatus,
+    ...(document.templateDescription ? { templateDescription: document.templateDescription } : {}),
+    mdxBody: document.templateMdxBody,
     documentStatus: document.status,
-    documentData: document.data_json ?? {},
-    workflowFieldRules: document.workflow_field_rules ?? {},
+    documentData: document.dataJson,
+    workflowFieldRules: document.workflowFieldRules,
   });
 
   return formDefinition.fields
     .filter((field) => field.flags.includes("required") && field.isSavable)
-    .filter((field) => isMissingRequiredValue((document.data_json ?? {})[field.name]))
+    .filter((field) => isMissingRequiredValue(document.dataJson[field.name]))
     .map((field) => field.label);
 };
 
 export const getDocumentSubmitStateForUser = async (documentId: string, userId: string): Promise<SubmitState> => {
-  const document = await findVisibleDocumentForSubmit(documentId, userId);
+  const document = await findDocumentAccessContextForUser(documentId, userId);
 
-  if (!document) {
+  if (!document || !document.canRead) {
     return {
       isAvailable: false,
       reason: "Dokument ist nicht sichtbar.",
     };
   }
 
-  const submitTransition = readSubmitTransition(document.workflow_json);
+  if (!document.hasEditorAssignment) {
+    return {
+      isAvailable: false,
+      reason: "Submit setzt eine aktive Editor-Zuweisung voraus.",
+    };
+  }
+
+  if (!document.canExecute) {
+    return {
+      isAvailable: false,
+      reason: "Submit setzt Membership-Recht x voraus.",
+    };
+  }
+
+  const submitTransition = readSubmitTransition(document.workflowJson);
 
   if (!submitTransition || !submitTransition.from.includes(document.status)) {
     return {
@@ -175,21 +121,38 @@ export const getDocumentSubmitStateForUser = async (documentId: string, userId: 
 };
 
 export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocumentInput): Promise<SubmitDocumentResult> => {
-  const document = await findVisibleDocumentForSubmit(documentId, userId);
+  const document = await findDocumentAccessContextForUser(documentId, userId);
 
-  if (!document) {
+  if (!document || !document.canRead) {
     return {
       ok: false,
       reason: "document_not_visible",
     };
   }
 
-  const submitTransition = readSubmitTransition(document.workflow_json);
+  if (!document.hasEditorAssignment) {
+    return {
+      ok: false,
+      reason: "submit_not_allowed",
+      details: "Submit setzt eine aktive Editor-Zuweisung voraus.",
+    };
+  }
+
+  if (!document.canExecute) {
+    return {
+      ok: false,
+      reason: "submit_not_allowed",
+      details: "Submit setzt Membership-Recht x voraus.",
+    };
+  }
+
+  const submitTransition = readSubmitTransition(document.workflowJson);
 
   if (!submitTransition || !submitTransition.from.includes(document.status)) {
     return {
       ok: false,
       reason: "submit_not_allowed",
+      details: "Submit ist im aktuellen Status nicht verfuegbar.",
     };
   }
 

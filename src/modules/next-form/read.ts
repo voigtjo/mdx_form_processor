@@ -1,0 +1,306 @@
+import { readFile } from "node:fs/promises";
+import type {
+  NextFormElement,
+  NextFormDefinition,
+  NextFormMeta,
+  NextFormPropertyMap,
+  NextFormRow,
+  NextFormSection,
+  NextFormSlot,
+} from "./types.js";
+
+const metaKeys = ["title", "key", "version"] as const;
+
+const isCommentOrEmpty = (line: string): boolean => {
+  const trimmed = line.trim();
+  return trimmed.length === 0 || trimmed.startsWith("//");
+};
+
+const splitRowIntoSlots = (source: string): string[] => {
+  const slots: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (const character of source) {
+    if (character === "\"") {
+      inQuotes = !inQuotes;
+      current += character;
+      continue;
+    }
+
+    if (character === "|" && !inQuotes) {
+      const slot = current.trim();
+
+      if (slot.length > 0) {
+        slots.push(slot);
+      }
+
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  const finalSlot = current.trim();
+
+  if (finalSlot.length > 0) {
+    slots.push(finalSlot);
+  }
+
+  return slots;
+};
+
+const readSectionTitle = (line: string): string | null => {
+  const heading = line.match(/^##\s+(.+)$/);
+  return heading?.[1]?.trim() ?? null;
+};
+
+const splitPropertyList = (source: string): string[] => {
+  const parts: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (const character of source) {
+    if (character === "\"") {
+      inQuotes = !inQuotes;
+      current += character;
+      continue;
+    }
+
+    if (character === "," && !inQuotes) {
+      const part = current.trim();
+
+      if (part.length > 0) {
+        parts.push(part);
+      }
+
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  const finalPart = current.trim();
+
+  if (finalPart.length > 0) {
+    parts.push(finalPart);
+  }
+
+  return parts;
+};
+
+const splitCommaSeparatedValue = (value: string | undefined): string[] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const parts = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+
+  return parts.length > 0 ? parts : undefined;
+};
+
+const parsePropertyToken = (token: string, properties: NextFormPropertyMap): void => {
+  const separatorIndex = token.indexOf("=");
+
+  if (separatorIndex < 0) {
+    properties[token] = true;
+    return;
+  }
+
+  const key = token.slice(0, separatorIndex).trim();
+  const rawValue = token.slice(separatorIndex + 1).trim();
+  const value = rawValue.replace(/^"(.*)"$/, "$1");
+
+  properties[key] = value;
+};
+
+const parseControlSlot = (source: string): NextFormSlot => {
+  const match = source.match(/^(.+?):\s*([a-zA-Z][a-zA-Z0-9_]*)\((.*)\)$/);
+
+  if (!match) {
+    throw new Error(`Ungueltiger Control-Slot: "${source}"`);
+  }
+
+  const rawLabel = match[1]?.trim();
+  const controlType = match[2]?.trim();
+  const rawArgs = match[3]?.trim() ?? "";
+
+  if (!rawLabel || !controlType || rawArgs.length === 0) {
+    throw new Error(`Control-Slot unvollstaendig: "${source}"`);
+  }
+
+  const propertyTokens = splitPropertyList(rawArgs);
+  const name = propertyTokens.shift();
+
+  if (!name) {
+    throw new Error(`Control-Name fehlt: "${source}"`);
+  }
+
+  const properties: NextFormPropertyMap = {};
+
+  for (const token of propertyTokens) {
+    parsePropertyToken(token, properties);
+  }
+
+  const kind = controlType === "action" ? "action" : controlType === "lookup" ? "lookup" : "field";
+  const args = splitCommaSeparatedValue(typeof properties.args === "string" ? properties.args : undefined);
+  const bind = splitCommaSeparatedValue(typeof properties.bind === "string" ? properties.bind : undefined);
+  const control: NextFormElement = {
+    kind,
+    controlType,
+    name,
+    label: rawLabel,
+    properties,
+    ...(typeof properties.ref === "string" ? { ref: properties.ref } : {}),
+    ...(args ? { args } : {}),
+    ...(bind ? { bind } : {}),
+  };
+
+  return {
+    source,
+    element: control,
+  };
+};
+
+const parseMetaLine = (line: string, meta: Partial<NextFormMeta>): boolean => {
+  const separatorIndex = line.indexOf(":");
+
+  if (separatorIndex < 0) {
+    return false;
+  }
+
+  const key = line.slice(0, separatorIndex).trim();
+  const rawValue = line.slice(separatorIndex + 1).trim();
+
+  if (!metaKeys.includes(key as (typeof metaKeys)[number])) {
+    return false;
+  }
+
+  if (key === "title") {
+    meta.title = rawValue;
+    return true;
+  }
+
+  if (key === "key") {
+    meta.key = rawValue;
+    return true;
+  }
+
+  meta.version = rawValue;
+  return true;
+};
+
+const extractFrontmatter = (source: string): { metaLines: string[]; body: string } => {
+  const match = source.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
+
+  if (!match) {
+    throw new Error("Das neue Formularformat erwartet einen Frontmatter-Kopf mit title, key und version.");
+  }
+
+  return {
+    metaLines: match[1]?.split(/\r?\n/) ?? [],
+    body: source.slice(match[0].length),
+  };
+};
+
+const finalizeMeta = (meta: Partial<NextFormMeta>): NextFormMeta => {
+  if (!meta.title || !meta.key || !meta.version) {
+    throw new Error("Das vereinfachte Formular braucht title, key und version.");
+  }
+
+  return {
+    title: meta.title,
+    key: meta.key,
+    version: meta.version,
+  };
+};
+
+export const parseNextFormSource = (source: string): NextFormDefinition => {
+  const { metaLines, body } = extractFrontmatter(source);
+  const meta: Partial<NextFormMeta> = {};
+  const sections: NextFormSection[] = [];
+  const controls: NextFormElement[] = [];
+  const actions: NextFormElement[] = [];
+  const lines = body.split(/\r?\n/);
+  let currentSection: NextFormSection | null = null;
+
+  for (const line of metaLines) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      continue;
+    }
+
+    parseMetaLine(trimmed, meta);
+  }
+
+  for (const line of lines) {
+    if (isCommentOrEmpty(line)) {
+      continue;
+    }
+
+    const trimmed = line.trim();
+
+    const sectionTitle = readSectionTitle(trimmed);
+
+    if (sectionTitle) {
+      currentSection = {
+        title: sectionTitle,
+        rows: [],
+      };
+      sections.push(currentSection);
+      continue;
+    }
+
+    if (!currentSection) {
+      throw new Error(`Zeile ausserhalb einer Section: "${trimmed}"`);
+    }
+
+    const rowSource = trimmed.replace(/^-+\s*/, "");
+    const slots = splitRowIntoSlots(rowSource).map(parseControlSlot);
+    const row: NextFormRow = {
+      source: rowSource,
+      slots,
+    };
+
+    currentSection.rows.push(row);
+    const rowElements = slots.map((slot) => slot.element);
+    controls.push(...rowElements.filter((element) => element.kind === "field"));
+    actions.push(...rowElements.filter((element) => element.kind !== "field"));
+  }
+
+  if (sections.length === 0) {
+    throw new Error("Das vereinfachte Formular braucht mindestens eine Section.");
+  }
+
+  return {
+    meta: finalizeMeta(meta),
+    source,
+    sections,
+    controls,
+    actions,
+  };
+};
+
+export const referenceCraftsmanOrderFormPath = new URL(
+  "../../../specs/next/examples/craftsman_order.form.md",
+  import.meta.url,
+);
+
+export const readNextFormSourceText = async (fileUrl: URL): Promise<string> => {
+  return readFile(fileUrl, "utf8");
+};
+
+export const readNextFormFile = async (fileUrl: URL): Promise<NextFormDefinition> => {
+  const source = await readNextFormSourceText(fileUrl);
+  return parseNextFormSource(source);
+};
+
+export const readReferenceCraftsmanOrderForm = async (): Promise<NextFormDefinition> => {
+  return readNextFormFile(referenceCraftsmanOrderFormPath);
+};

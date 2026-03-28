@@ -1,0 +1,32 @@
+<section class="hero-card">
+  <div>
+    <span class="eyebrow">Admin-UI</span>
+    <h2>New Group</h2>
+    <p>Kleiner erster Pflegepfad fuer organisatorische Einheiten ohne Membership- oder Assignment-Ausbau.</p>
+  </div>
+  <div class="hero-actions">
+    <a class="button-secondary" href="/admin?user=<%= activeUser.key %>">Back to Admin</a>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h3>Create Group</h3>
+    <p class="panel-copy">Im ersten Schnitt werden nur die fuer den MVP noetigen Basisfelder angelegt.</p>
+  </div>
+  <form method="post" action="/admin/groups/new?user=<%= activeUser.key %>" class="form-stack">
+    <div class="field-block">
+      <label class="field-label" for="group-name">Name</label>
+      <input id="group-name" name="name" type="text" required />
+    </div>
+    <div class="field-block">
+      <label class="field-label" for="group-key">Key</label>
+      <input id="group-key" name="key" type="text" required />
+    </div>
+    <div class="field-block">
+      <label class="field-label" for="group-description">Description</label>
+      <textarea id="group-description" name="description" rows="4"></textarea>
+    </div>
+    <button class="button-primary" type="submit">Create Group</button>
+  </form>
+</section>
