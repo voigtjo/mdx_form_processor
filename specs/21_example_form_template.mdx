@@ -1,109 +1,27 @@
 ---
-key: customer-order-test
-name: Customer Order Test
-version: 3
-status: published
-workflowTemplateKey: customer-order.group-submit.v1
-description: Example MDX form template for customer order processing.
+title: Auftragsdokumentation fuer Handwerker
+key: craftsman-order
+version: 1
+attachments_enabled: true
+journal_enabled: true
 ---
 
-<Fields>
-  <Field
-    name="customer_id"
-    type="lookup"
-    label="Customer"
-    operationRef="customers.listValid"
-    valueKey="id"
-    labelKey="name"
-    templateKey
-    required
-    tableField
-    editableIn={["new", "created"]}
-    readonlyIn={["assigned", "started", "progressed", "submitted", "approved", "archived"]}
-  />
+## Auftrag
 
-  <Field
-    name="customer_order_number"
-    type="text"
-    label="Customer Order Number"
-    documentKey
-    tableField
-    editableIn={["assigned"]}
-    readonlyIn={["started", "progressed", "submitted", "approved", "archived"]}
-    helpText="Set or confirm the external customer order number."
-  />
+- Auftragsnummer: text(order_number, required) | Kundendaten laden: action(load_customer, ref="customers.lookup", args="order_number", bind="customer,service_location")
+- Datum: date(service_date) | Techniker / Monteur: text(technician)
 
-  <Field
-    name="fulfillment_flags"
-    type="checkboxGroup"
-    label="Fulfillment Flags"
-    options={["packed", "reviewed", "released"]}
-    editableIn={["started", "progressed"]}
-    readonlyIn={["submitted", "approved", "archived"]}
-  />
+## Kunde
 
-  <Field
-    name="review_notes"
-    type="textarea"
-    label="Review Notes"
-    placeholder="Optional notes for processing or approval."
-    editableIn={["started", "progressed"]}
-    readonlyIn={["submitted", "approved", "archived"]}
-  />
+- Kunde: text(customer, required)
+- Einsatzort: textarea(service_location)
 
-  <Field
-    name="attachments_main"
-    type="attachmentArea"
-    label="Attachments"
-    helpText="Upload supporting files for the customer order."
-  />
-</Fields>
+## Leistung
 
-<Action
-  name="create_customer_order"
-  label="Create Customer Order"
-  operationRef="customerOrders.create"
-  visibleIn={["started", "progressed"]}
-  enabledIn={["started", "progressed"]}
-  requestMapping={{
-    customerId: "data.customer_id",
-    notes: "data.review_notes"
-  }}
-  responseMapping={{
-    "integrationContext.customer_order_id": "result.id",
-    "external.customer_order_number": "result.orderNumber",
-    "snapshot.customer_order_created_ok": "result.ok"
-  }}
-/>
+- Taetigkeitsbeschreibung: textarea(work_description, required)
+- Material: textarea(material) | Materialvorschlag holen: lookup(suggest_material, ref="products.suggest", args="work_description", bind="material")
+- Arbeitszeit (Std.): number(labor_hours) | Fahrtzeit (Std.): number(travel_hours) | Pause (Min.): number(break_minutes)
 
-# Customer Order Test
+## Freigabe
 
-<Section title="Customer">
-  <Row>
-    <Column width={6}>
-      <FieldRef name="customer_id" />
-    </Column>
-    <Column width={6}>
-      <FieldRef name="customer_order_number" />
-    </Column>
-  </Row>
-</Section>
-
-<Section title="Processing">
-  <Row>
-    <Column width={12}>
-      <FieldRef name="fulfillment_flags" />
-    </Column>
-  </Row>
-  <Row>
-    <Column width={12}>
-      <FieldRef name="review_notes" />
-    </Column>
-  </Row>
-</Section>
-
-<Section title="Attachments">
-  <AttachmentAreaRef name="attachments_main" />
-</Section>
-
-<ActionButton name="create_customer_order" label="Create Customer Order" />
+- Status / Freigabe: select(approval_status, options="offen,pruefung,freigegeben")

@@ -89,11 +89,12 @@ const mapWorkflowDetail = (row: WorkflowRow): WorkflowTemplateDetail => ({
   updatedAt: (row.updated_at ?? new Date()).toISOString(),
 });
 
-export const listWorkflowTemplates = async (): Promise<WorkflowTemplate[]> => {
+export const listWorkflowTemplates = async (input?: { includeArchived?: boolean }): Promise<WorkflowTemplate[]> => {
   return withDb(async (client) => {
     const result = await client.query<WorkflowRow>(
       `select id, key, name, description, version, status, workflow_json
        from workflow_templates
+       ${input?.includeArchived ? "" : "where status <> 'archived'"}
        order by name asc, version desc`,
     );
 

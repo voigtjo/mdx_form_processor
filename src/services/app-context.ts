@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { fileURLToPath } from "node:url";
 import { getAttachmentUploadStateForUser } from "../modules/attachments/upload.js";
 import { listAttachmentsForDocument } from "../modules/attachments/read.js";
 import { listAssignments } from "../modules/assignments/read.js";
@@ -20,7 +21,22 @@ import { getDocumentRejectStateForUser } from "../modules/documents/reject.js";
 import { getDocumentSubmitStateForUser } from "../modules/documents/submit.js";
 import { findGroupById, listGroups, listGroupsForUser } from "../modules/groups/read.js";
 import { listMemberships, listMembershipsForGroup, listMembershipsForUser } from "../modules/memberships/read.js";
+import { buildReferenceNextFormJournalDefinition } from "../modules/journal/reference.js";
+import {
+  buildReferenceNextFormActionUi,
+  buildReferenceNextFormFieldUi,
+  buildReferenceNextFormMasterDataSections,
+  getReferenceNextFormEditState,
+  referenceNextFormLookupMetaFieldNames,
+  referenceNextFormSubmitRequiredFieldNames,
+} from "../modules/next-form/document-ui.js";
+import { findVisibleProductionBatchReferenceByMaterial } from "../modules/next-form/form-reference.js";
 import { parseNextFormSource, readNextFormSourceText, referenceCraftsmanOrderFormPath } from "../modules/next-form/read.js";
+import { executeLoadCustomerAction } from "../modules/next-form/load-customer.js";
+import { executeSuggestMaterialAction } from "../modules/next-form/suggest-material.js";
+import { loadNextFormState, saveNextFormState } from "../modules/next-form/state-store.js";
+import { readTemplateFeatureToggles } from "../modules/templates/features.js";
+import { isNextFormReferenceTemplate, mapDocumentDataToNextFormValues } from "../modules/next-form/document-bridge.js";
 import { buildReadOnlyFormDefinition } from "../modules/templates/form-read.js";
 import {
   findFormTemplateById,
@@ -38,8 +54,10 @@ import {
   listWorkflowTemplateVersions,
   listWorkflowTemplates,
 } from "../modules/workflows/read.js";
+import { parseWorkflowSourceText, serializeWorkflowSource } from "../modules/workflows/source.js";
 import type { User } from "../types/domain.js";
 import type { NavItem } from "../types/navigation.js";
+import type { NextFormDefinition } from "../modules/next-form/types.js";
 
 type SectionKey = "workspace" | "templates" | "workflows" | "documents" | "admin" | "next-form";
 
@@ -80,6 +98,10 @@ const workflowsForTemplates = (templates: { workflowTemplateId: string }[], work
   return workflows.filter((workflow) => workflowIds.has(workflow.id));
 };
 
+const getWorkflowLifecycleLabel = (status: string): string => {
+  return status === "inactive" ? "unpublished" : status;
+};
+
 const createShellContext = async (section: SectionKey, userKey: string | undefined) => {
   const users = await listUsers();
   const activeUser = await getActiveUser(userKey, users);
@@ -92,7 +114,13 @@ const createShellContext = async (section: SectionKey, userKey: string | undefin
   };
 };
 
-export const createTemplateDetailViewModel = async (userKey: string | undefined, templateId: string) => {
+export const createTemplateDetailViewModel = async (
+  userKey: string | undefined,
+  templateId: string,
+  input?: {
+    sourceText?: string | undefined;
+  },
+) => {
   const shellContext = await createShellContext("templates", userKey);
   const { activeUser } = shellContext;
 
@@ -122,6 +150,9 @@ export const createTemplateDetailViewModel = async (userKey: string | undefined,
     group: groups.find((group) => group.id === assignment.groupId) ?? null,
   }));
   const relatedDocuments = documents.filter((document) => document.templateId === template.id);
+  const sourceTextForReference = isNextFormReferenceTemplate(template.key)
+    ? input?.sourceText ?? template.mdxBody
+    : template.mdxBody;
   const formDefinition = buildReadOnlyFormDefinition({
     templateId: template.id,
     templateKey: template.key,
@@ -133,6 +164,31 @@ export const createTemplateDetailViewModel = async (userKey: string | undefined,
     documentStatus: "template-review",
     documentData: {},
   });
+  const templateFeatures = readTemplateFeatureToggles({
+    templateKey: template.key,
+    mdxBody: sourceTextForReference,
+  });
+  let nextFormReference:
+    | {
+        sourceFilePath: string;
+        sourceText: string;
+        parsedForm?: NextFormDefinition;
+        parseError?: string;
+      }
+    | undefined;
+
+  if (isNextFormReferenceTemplate(template.key)) {
+    nextFormReference = {
+      sourceFilePath: "form_templates.mdx_body",
+      sourceText: sourceTextForReference,
+    };
+
+    try {
+      nextFormReference.parsedForm = parseNextFormSource(sourceTextForReference);
+    } catch (error: unknown) {
+      nextFormReference.parseError = error instanceof Error ? error.message : "Die neue Formularquelle konnte nicht gelesen werden.";
+    }
+  }
 
   return {
     ...shellContext,
@@ -147,6 +203,8 @@ export const createTemplateDetailViewModel = async (userKey: string | undefined,
       versions,
       relatedDocuments,
       formDefinition,
+      templateFeatures,
+      ...(nextFormReference ? { nextFormReference } : {}),
       integrations: {
         actions: formDefinition.actions.filter((action) => action.operationRef),
         fields: formDefinition.fields.filter((field) => field.operationRef),
@@ -167,7 +225,13 @@ export const createTemplateNewViewModel = async (userKey: string | undefined) =>
   };
 };
 
-export const createWorkflowDetailViewModel = async (userKey: string | undefined, workflowId: string) => {
+export const createWorkflowDetailViewModel = async (
+  userKey: string | undefined,
+  workflowId: string,
+  input?: {
+    sourceText?: string | undefined;
+  },
+) => {
   const shellContext = await createShellContext("workflows", userKey);
   const { activeUser } = shellContext;
 
@@ -177,14 +241,63 @@ export const createWorkflowDetailViewModel = async (userKey: string | undefined,
     return null;
   }
 
-  const [templates, versions, documents] = await Promise.all([
+  const [templates, allTemplates, versions, documents] = await Promise.all([
     listFormTemplates(),
+    listFormTemplates({ includeArchived: true }),
     listWorkflowTemplateVersions(workflow.key),
     listDocumentsVisibleToUser(activeUser.id),
   ]);
 
   const relatedTemplates = templates.filter((template) => template.workflowTemplateId === workflow.id);
+  const publishedTemplateUsages = allTemplates.filter(
+    (template) => template.workflowTemplateId === workflow.id && template.status === "published",
+  );
   const relatedDocuments = documents.filter((document) => relatedTemplates.some((template) => template.id === document.templateId));
+  const currentDraftVersion = versions.find((version) => version.status === "draft");
+  const currentPublishedVersion = versions.find((version) => version.status === "published");
+  const workflowSourceText = input?.sourceText ?? serializeWorkflowSource(workflow.workflowJson);
+  let transitionRows = [] as ReturnType<typeof parseWorkflowSourceText>["transitionRows"];
+  let sourceStatuses = Array.isArray(workflow.statuses) ? workflow.statuses : [];
+  let sourceError: string | undefined;
+
+  try {
+    const persistedParsedSource = parseWorkflowSourceText(serializeWorkflowSource(workflow.workflowJson));
+    transitionRows = persistedParsedSource.transitionRows;
+    sourceStatuses = persistedParsedSource.statuses;
+  } catch (error) {
+    sourceError = error instanceof Error ? error.message : "Die gespeicherte Workflow-Quelle konnte nicht gelesen werden.";
+  }
+
+  if (input?.sourceText !== undefined) {
+    try {
+      const parsedSource = parseWorkflowSourceText(workflowSourceText);
+      transitionRows = parsedSource.transitionRows;
+      sourceStatuses = parsedSource.statuses;
+      sourceError = undefined;
+    } catch (error) {
+      sourceError = error instanceof Error ? error.message : "Die Workflow-Quelle konnte nicht gelesen werden.";
+    }
+  }
+
+  const highestKnownVersion = versions.reduce((maxVersion, version) => Math.max(maxVersion, version.version), workflow.version);
+  const nextDraftVersion = workflow.status === "draft"
+    ? workflow.version
+    : currentDraftVersion
+      ? currentDraftVersion.version
+      : highestKnownVersion + 1;
+  const publishTargetVersion = workflow.status === "draft"
+    ? workflow.version
+    : currentDraftVersion
+      ? currentDraftVersion.version
+      : highestKnownVersion + 1;
+  const unpublishBlockedReason = workflow.status !== "published"
+    ? "Unpublish ist nur fuer publizierte Workflow-Versionen verfuegbar."
+    : publishedTemplateUsages.length > 0
+      ? `Nicht moeglich, solange publizierte Templates diese Version nutzen: ${publishedTemplateUsages.map((template) => `${template.name} v${template.version}`).join(", ")}`
+      : undefined;
+  const archiveBlockedReason = workflow.status !== "inactive"
+    ? "Archive ist erst moeglich, wenn die betrachtete Version unveroeffentlicht ist."
+    : undefined;
 
   return {
     ...shellContext,
@@ -195,6 +308,20 @@ export const createWorkflowDetailViewModel = async (userKey: string | undefined,
       versions,
       relatedTemplates,
       relatedDocuments,
+      lifecycleLabel: getWorkflowLifecycleLabel(workflow.status),
+      currentDraftVersion,
+      currentPublishedVersion,
+      nextDraftVersion,
+      publishTargetVersion,
+      publishedTemplateUsages,
+      canUnpublish: workflow.status === "published" && publishedTemplateUsages.length === 0,
+      unpublishBlockedReason,
+      canArchive: workflow.status === "inactive",
+      archiveBlockedReason,
+      transitionRows,
+      sourceStatuses,
+      workflowSourceText,
+      sourceError,
     },
   };
 };
@@ -360,9 +487,9 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
     listTasksForUser(activeUser.id),
     listGroups(),
     listMemberships(),
-    listFormTemplates(),
+    listFormTemplates({ includeArchived: section === "admin" }),
     listTemplateAssignments(),
-    listWorkflowTemplates(),
+    listWorkflowTemplates({ includeArchived: section === "admin" }),
     listTasks(),
     listAssignments(),
     listAuditEvents(),
@@ -401,9 +528,18 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
   };
 };
 
-export const createNextFormPreviewViewModel = async (input: { userKey?: string | undefined; sourceText?: string | undefined }) => {
-  const referenceSourceText = await readNextFormSourceText(referenceCraftsmanOrderFormPath);
-  const sourceText = input.sourceText ?? referenceSourceText;
+export const createNextFormPreviewViewModel = async (input: {
+  userKey?: string | undefined;
+  sourceText?: string | undefined;
+  fieldValues?: Record<string, string | undefined>;
+  intent?: string | undefined;
+  actionName?: string | undefined;
+}) => {
+  const fileSourceText = await readNextFormSourceText(referenceCraftsmanOrderFormPath);
+  const sourceText = input.sourceText ?? fileSourceText;
+  let fieldValues = Object.fromEntries(
+    Object.entries(input.fieldValues ?? {}).map(([key, value]) => [key, value?.toString() ?? ""]),
+  );
   const previewUser = {
     id: "next-form-preview-user",
     key: input.userKey?.trim() || "preview",
@@ -412,9 +548,100 @@ export const createNextFormPreviewViewModel = async (input: { userKey?: string |
   };
   let parsedForm;
   let parseError: string | undefined;
+  let actionState:
+    | {
+        type: "info" | "error";
+        title: string;
+        message: string;
+        actionName: string;
+      }
+    | undefined;
+  let savedState:
+    | {
+        savedAt: string;
+      }
+    | undefined;
 
   try {
     parsedForm = parseNextFormSource(sourceText);
+
+    if (input.intent === "load-state") {
+      try {
+        const persistedState = await loadNextFormState();
+
+        if (!persistedState) {
+          actionState = {
+            type: "info",
+            title: "Kein gespeicherter Zustand",
+            message: "Fuer dieses Referenzformular wurde bisher noch kein gespeicherter Zustand gefunden.",
+            actionName: "load-state",
+          };
+        } else {
+          fieldValues = { ...fieldValues, ...persistedState.values };
+          savedState = {
+            savedAt: persistedState.savedAt,
+          };
+          actionState = {
+            type: "info",
+            title: "Gespeicherter Zustand geladen",
+            message: "Der zuletzt gespeicherte Formularzustand wurde in die isolierte Formularansicht uebernommen.",
+            actionName: "load-state",
+          };
+        }
+      } catch (error: unknown) {
+        actionState = {
+          type: "error",
+          title: "Laden fehlgeschlagen",
+          message: error instanceof Error ? error.message : "Der gespeicherte Zustand konnte nicht geladen werden.",
+          actionName: "load-state",
+        };
+      }
+    }
+
+    if (input.intent === "run-action" && (input.actionName === "load_customer" || input.actionName === "suggest_material")) {
+      const action = parsedForm.actions.find((element) => element.name === input.actionName);
+
+      if (action) {
+        const result = action.name === "suggest_material"
+          ? await executeSuggestMaterialAction({
+              action,
+              fieldValues,
+            })
+          : await executeLoadCustomerAction({
+              action,
+              fieldValues,
+            });
+
+        fieldValues = result.fieldValues;
+        actionState = result.actionState;
+      }
+    }
+
+    if (input.intent === "save-state") {
+      try {
+        const persistedState = await saveNextFormState({
+          formKey: parsedForm.meta.key,
+          values: fieldValues,
+        });
+
+        savedState = {
+          savedAt: persistedState.savedAt,
+        };
+        actionState = {
+          type: "info",
+          title: "Formularzustand gespeichert",
+          message: "Der aktuelle isolierte Formularzustand wurde lokal gespeichert und kann spaeter wieder geladen werden.",
+          actionName: "save-state",
+        };
+      } catch (error: unknown) {
+        actionState = {
+          type: "error",
+          title: "Speichern fehlgeschlagen",
+          message: error instanceof Error ? error.message : "Der Formularzustand konnte nicht gespeichert werden.",
+          actionName: "save-state",
+        };
+      }
+    }
   } catch (error: unknown) {
     parseError = error instanceof Error ? error.message : "Die Quelle konnte nicht gelesen werden.";
   }
@@ -428,14 +655,23 @@ export const createNextFormPreviewViewModel = async (input: { userKey?: string |
     pageSection: "next-form" as const,
     nextFormPreview: {
       sourceText,
-      referenceSourceText,
+      sourceFilePath: fileURLToPath(referenceCraftsmanOrderFormPath),
+      fieldValues,
       ...(parsedForm ? { parsedForm } : {}),
+      ...(actionState ? { actionState } : {}),
+      ...(savedState ? { savedState } : {}),
       ...(parseError ? { parseError } : {}),
     },
   };
 };
 
-export const createDocumentDetailViewModel = async (userKey: string | undefined, documentId: string) => {
+export const createDocumentDetailViewModel = async (
+  userKey: string | undefined,
+  documentId: string,
+  input?: {
+    nextFormFieldValues?: Record<string, string | undefined>;
+  },
+) => {
   const shellContext = await createShellContext("documents", userKey);
   const { activeUser, users } = shellContext;
 
@@ -470,6 +706,112 @@ export const createDocumentDetailViewModel = async (userKey: string | undefined,
     documentData: document.documentDataJson,
     workflowFieldRules: document.workflowFieldRules,
   });
+  const templateFeatures = readTemplateFeatureToggles({
+    templateKey: document.templateKey,
+    mdxBody: document.formTemplateMdxBody,
+  });
+  let nextFormReference:
+    | {
+        sourceFilePath: string;
+        sourceText: string;
+        fieldValues: Record<string, string>;
+        fieldUi: Record<string, {
+          controlType: "text" | "date" | "textarea" | "number" | "select";
+          runtimeRole: "lookup_input" | "lookup_prefill" | "manual_input" | "derived_readonly" | "workflow_readonly";
+          lookupRole: "none" | "input" | "result" | "masterdata";
+          isSubmitRequired: boolean;
+          isEditable: boolean;
+          isReadOnly: boolean;
+          state: "editable" | "readonly";
+          emptyValueLabel?: string;
+          helpText?: string;
+        }>;
+        actionUi: Record<string, {
+          controlType: "action" | "lookup";
+          runtimeRole: "lookup_trigger";
+          lookupRole: "trigger";
+          args: string[];
+          bind: string[];
+          isEnabled: boolean;
+          hint?: string;
+        }>;
+        lookupMetaFieldNames: string[];
+        editState: {
+          isAvailable: boolean;
+          reason?: string;
+        };
+        masterDataSections: Array<{
+          key: "customer" | "product";
+          title: string;
+          summary: string;
+          entries: Array<{
+            label: string;
+            value: string;
+            emptyValueLabel: string;
+          }>;
+        }>;
+        linkedFormReferences: Array<{
+          key: "production_batch";
+          title: string;
+          href: string;
+          sourceLabel: string;
+          summary: string;
+          entries: Array<{
+            label: string;
+            value: string;
+            emptyValueLabel: string;
+          }>;
+        }>;
+        submitRequiredFieldNames: string[];
+        parsedForm?: NextFormDefinition;
+        parseError?: string;
+      }
+    | undefined;
+
+  if (isNextFormReferenceTemplate(document.templateKey)) {
+    const nextFormEditState = getReferenceNextFormEditState({
+      documentStatus: document.status,
+      baseEditState: editState,
+    });
+    const nextFormFieldUi = buildReferenceNextFormFieldUi({
+      canEdit: nextFormEditState.isAvailable,
+    });
+    const nextFormActionUi = buildReferenceNextFormActionUi({
+      canEdit: nextFormEditState.isAvailable,
+    });
+    const nextFormFieldValues = {
+      ...mapDocumentDataToNextFormValues(document.templateKey, document.documentDataJson),
+      ...Object.fromEntries(
+        Object.entries(input?.nextFormFieldValues ?? {}).map(([key, value]) => [key, value?.toString() ?? ""]),
+      ),
+    };
+    const linkedProductionBatchReference = await findVisibleProductionBatchReferenceByMaterial({
+      userId: activeUser.id,
+      activeUserKey: activeUser.key,
+      materialName: nextFormFieldValues.material ?? "",
+    });
+
+    nextFormReference = {
+      sourceFilePath: "documents.template_mdx_body",
+      sourceText: document.formTemplateMdxBody,
+      fieldValues: nextFormFieldValues,
+      fieldUi: nextFormFieldUi,
+      actionUi: nextFormActionUi,
+      lookupMetaFieldNames: [...referenceNextFormLookupMetaFieldNames],
+      editState: nextFormEditState,
+      masterDataSections: buildReferenceNextFormMasterDataSections({
+        fieldValues: nextFormFieldValues,
+      }),
+      linkedFormReferences: linkedProductionBatchReference ? [linkedProductionBatchReference] : [],
+      submitRequiredFieldNames: [...referenceNextFormSubmitRequiredFieldNames],
+    };
+
+    try {
+      nextFormReference.parsedForm = parseNextFormSource(document.formTemplateMdxBody);
+    } catch (error: unknown) {
+      nextFormReference.parseError = error instanceof Error ? error.message : "Die neue Formularquelle konnte nicht gelesen werden.";
+    }
+  }
 
   return {
     ...shellContext,
@@ -478,11 +820,24 @@ export const createDocumentDetailViewModel = async (userKey: string | undefined,
     documentDetail: {
       document,
       formDefinition,
+      templateFeatures,
+      ...(nextFormReference ? { nextFormReference } : {}),
       editableFields: formDefinition.fields.filter((field) => field.isSavable && editState.isAvailable),
-      journals: formDefinition.journals.map((journal) => ({
-        ...journal,
-        isEditable: journal.isEditable && editState.isAvailable,
-      })),
+      journals: templateFeatures.journal.enabled
+        ? (
+          formDefinition.journals.length > 0
+            ? formDefinition.journals.map((journal) => ({
+              ...journal,
+              isEditable: journal.isEditable && editState.isAvailable,
+            }))
+            : isNextFormReferenceTemplate(document.templateKey)
+              ? [buildReferenceNextFormJournalDefinition({
+                documentData: document.documentDataJson,
+                isEditable: editState.isAvailable,
+              })]
+              : []
+        )
+        : [],
       editState,
       attachmentUploadState,
       submitState,

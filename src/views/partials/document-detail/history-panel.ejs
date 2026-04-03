@@ -1,0 +1,32 @@
+<details class="panel panel-collapsible">
+  <summary class="collapsible-summary">
+    <div class="collapsible-summary-copy">
+      <strong>History</strong>
+      <% if (latestAuditEvent) { %>
+        <% const latestActor = users.find((entry) => entry.id === latestAuditEvent.actorUserId); %>
+        <span>Letzte Aktion: <%= latestAuditEvent.eventType %> · <%= latestActor?.displayName ?? "System" %> · <%= latestAuditEvent.createdAt %></span>
+      <% } else { %>
+        <span>Keine Audit Events vorhanden.</span>
+      <% } %>
+    </div>
+    <div class="collapsible-summary-meta">
+      <span><%= documentDetail.auditEvents.length %> Eintraege</span>
+    </div>
+  </summary>
+  <div class="collapsible-body">
+    <% if (documentDetail.auditEvents.length === 0) { %>
+      <p>Keine Audit Events vorhanden.</p>
+    <% } else { %>
+      <ul class="stack-list">
+        <% documentDetail.auditEvents.forEach((event) => { %>
+          <% const actor = users.find((entry) => entry.id === event.actorUserId); %>
+          <li>
+            <strong><%= event.eventType %></strong>
+            <p><%= event.message %></p>
+            <p><%= actor?.displayName ?? "System" %> · <%= event.createdAt %></p>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+</details>

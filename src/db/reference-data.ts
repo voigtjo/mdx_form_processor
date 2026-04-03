@@ -609,8 +609,8 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
         workflowTemplateVersion: 1,
         status: "progressed",
         dataJson: {
-          product_id: "product-42",
-          product_name: "Widget 42",
+          product_id: "product-batch-a",
+          product_name: "Batch Product A",
           batch_id: "B-2026-0042",
           fulfillment_flags: ["prepared", "checked"],
           inspection_steps: [

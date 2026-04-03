@@ -1,552 +1,107 @@
-<section class="hero-card">
-  <div>
-    <span class="eyebrow">Arbeits-UI</span>
-    <h2><%= documentDetail.document.title %></h2>
-    <p>Detailsicht fuer ein einzelnes Dokument mit erstem Save-Schnitt fuer einfache Formwerte.</p>
-  </div>
-  <div class="hero-metrics">
-    <article>
-      <strong><%= documentDetail.document.status %></strong>
-      <span>Status</span>
-    </article>
-    <article>
-      <strong>v<%= documentDetail.document.templateVersion %></strong>
-      <span>Template</span>
-    </article>
-    <article>
-      <strong>v<%= documentDetail.document.workflowTemplateVersion %></strong>
-      <span>Workflow</span>
-    </article>
-  </div>
+<% const assignmentSummary = documentDetail.assignments.slice(0, 2).map((assignment) => { const user = users.find((entry) => entry.id === assignment.userId); return `${user?.displayName ?? assignment.userId} (${assignment.role})`; }).join(", "); %>
+<% const activeAssignments = documentDetail.assignments.filter((assignment) => assignment.active); %>
+<% const openTasks = documentDetail.tasks.filter((task) => task.status === "open"); %>
+<% const leadTask = openTasks[0] ?? documentDetail.tasks[0]; %>
+<% const activeApproverNamesForHeader = documentDetail.assignments
+  .filter((assignment) => assignment.active && assignment.role === "approver")
+  .map((assignment) => users.find((entry) => entry.id === assignment.userId)?.displayName ?? assignment.userId); %>
+<% const workflowStepsForHeader = ["created", "submitted", "approved"]; %>
+<% let nextStepLabel = "Kein weiterer direkter Schritt fuer den aktuellen User."; %>
+<% if (documentDetail.submitState.isAvailable) { nextStepLabel = "Naechster Schritt: Submit"; } %>
+<% if (documentDetail.approveState.isAvailable || documentDetail.rejectState.isAvailable) { nextStepLabel = "Naechster Schritt: Approve oder Reject"; } %>
+<% if (!documentDetail.approveState.isAvailable && !documentDetail.rejectState.isAvailable && documentDetail.document.status === "submitted" && activeApproverNamesForHeader.length > 0) { nextStepLabel = `Naechster Schritt: Approve oder Reject durch ${activeApproverNamesForHeader.join(", ")}`; } %>
+<% const latestAuditEvent = documentDetail.auditEvents[documentDetail.auditEvents.length - 1]; %>
+
+<section id="document-header-fragment" data-fragment="document-header">
+  <%- include("../partials/document-detail/document-header", {
+    documentDetail,
+    activeUser,
+    users,
+    assignmentSummary,
+    activeAssignments,
+    workflowStepsForHeader,
+    nextStepLabel
+  }) %>
 </section>
 
-<section class="panel">
-  <div class="panel-header">
-    <h3>Document Header</h3>
-    <a class="text-link" href="/documents?user=<%= activeUser.key %>">Back to Documents</a>
-  </div>
-  <div class="grid two-up detail-grid">
-    <div>
-      <p><strong>Document</strong><br /><%= documentDetail.document.title %></p>
-      <p><strong>Status</strong><br /><span class="status-pill"><%= documentDetail.document.status %></span></p>
-      <p><strong>Updated</strong><br /><%= documentDetail.document.updatedAt %></p>
-    </div>
-    <div>
-      <p><strong>Template</strong><br /><%= documentDetail.document.templateName %> (<%= documentDetail.document.templateKey %>)</p>
-      <p><strong>Workflow</strong><br /><%= documentDetail.document.workflowTemplateName %> (<%= documentDetail.document.workflowTemplateKey %>)</p>
-      <p><strong>Created</strong><br /><%= documentDetail.document.createdAt %></p>
-    </div>
-  </div>
+<section id="document-context-fragment" data-fragment="document-context">
+  <%- include("../partials/document-detail/document-context", {
+    documentDetail,
+    activeUser,
+    users,
+    assignmentSummary,
+    activeAssignments,
+    openTasks,
+    leadTask
+  }) %>
 </section>
 
-<section class="grid two-up">
-  <article class="panel">
-    <div class="panel-header">
-      <h3>Assignments</h3>
-      <span class="chip"><%= documentDetail.assignments.length %></span>
-    </div>
-    <% if (documentDetail.assignments.length === 0) { %>
-      <p>Keine Assignments vorhanden.</p>
-    <% } else { %>
-      <ul class="stack-list compact">
-        <% documentDetail.assignments.forEach((assignment) => { %>
-          <% const user = users.find((entry) => entry.id === assignment.userId); %>
-          <li>
-            <strong><%= user?.displayName ?? assignment.userId %></strong>
-            <p>Role: <%= assignment.role %> · Active: <%= assignment.active ? "yes" : "no" %></p>
-          </li>
-        <% }) %>
-      </ul>
-    <% } %>
-  </article>
+<% if (documentDetail.nextFormReference) { %>
+  <section id="document-workspace-fragment" data-fragment="document-workspace">
+    <%- include("../partials/document-detail/next-form-workspace", {
+      documentDetail,
+      activeUser,
+      users,
+      nextFormStatus,
+      nextFormError,
+      submitStatus,
+      submitError,
+      approveStatus,
+      approveError,
+      rejectStatus,
+      rejectError,
+      archiveStatus,
+      archiveError
+    }) %>
+  </section>
+<% } %>
 
-  <article class="panel">
-    <div class="panel-header">
-      <h3>Tasks</h3>
-      <span class="chip"><%= documentDetail.tasks.length %></span>
-    </div>
-    <% if (documentDetail.tasks.length === 0) { %>
-      <p>Keine Tasks vorhanden.</p>
-    <% } else { %>
-      <ul class="stack-list compact">
-        <% documentDetail.tasks.forEach((task) => { %>
-          <% const user = users.find((entry) => entry.id === task.userId); %>
-          <li>
-            <strong><%= task.title %></strong>
-            <p><%= user?.displayName ?? task.userId %> · <%= task.role %> · <%= task.status %> · <%= task.updatedAt %></p>
-          </li>
-        <% }) %>
-      </ul>
-    <% } %>
-  </article>
-</section>
+<% if (documentDetail.templateFeatures.attachments.enabled) { %>
+  <section id="document-attachments-fragment" data-fragment="document-attachments">
+    <%- include("../partials/document-detail/attachments-panel", {
+      documentDetail,
+      activeUser,
+      users,
+      uploadStatus,
+      uploadError
+    }) %>
+  </section>
+<% } %>
 
-<section class="grid two-up">
-  <article class="panel">
-    <div class="panel-header">
-      <h3>Attachments</h3>
-      <span class="chip"><%= documentDetail.attachments.length %></span>
-    </div>
-    <% if (uploadStatus) { %>
-      <div class="notice-card notice-success">
-        <strong>Upload erfolgreich</strong>
-        <p><%= uploadStatus %></p>
-      </div>
-    <% } %>
-    <% if (uploadError) { %>
-      <div class="notice-card notice-error">
-        <strong>Upload nicht moeglich</strong>
-        <p><%= uploadError %></p>
-      </div>
-    <% } %>
-    <div class="subpanel">
-      <div class="panel-header">
-        <h4>Upload Attachment</h4>
-        <span class="chip">1 Datei</span>
-      </div>
-      <% if (documentDetail.attachmentUploadState.isAvailable) { %>
-        <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/attachments?user=<%= activeUser.key %>" enctype="multipart/form-data">
-          <input type="file" name="attachment" />
-          <p class="field-help">In diesem ersten MVP-Schnitt sind einzelne Dateien, auch Bilder, bis 3 MB vorgesehen.</p>
-          <button class="button-secondary" type="submit">Upload Attachment</button>
-        </form>
-      <% } else { %>
-        <p><%= documentDetail.attachmentUploadState.reason %></p>
-      <% } %>
-    </div>
-    <div class="panel-divider"></div>
-    <% if (documentDetail.attachments.length === 0) { %>
-      <p>Keine Attachments vorhanden.</p>
-    <% } else { %>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Filename</th>
-              <th>Type</th>
-              <th>Uploaded By</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% documentDetail.attachments.forEach((attachment) => { %>
-              <% const user = users.find((entry) => entry.id === attachment.uploadedBy); %>
-              <% const attachmentHref = `/attachments/${attachment.id}/content?user=${activeUser.key}`; %>
-              <% const isImage = attachment.mimeType.startsWith("image/"); %>
-              <tr>
-                <td>
-                  <div class="attachment-cell">
-                    <% if (isImage) { %>
-                      <a href="<%= attachmentHref %>" target="_blank" rel="noreferrer">
-                        <img class="attachment-thumb" src="<%= attachmentHref %>" alt="<%= attachment.filename %>" />
-                      </a>
-                    <% } else { %>
-                      <a class="attachment-icon" href="<%= attachmentHref %>" target="_blank" rel="noreferrer">FILE</a>
-                    <% } %>
-                    <a class="attachment-link" href="<%= attachmentHref %>" target="_blank" rel="noreferrer"><%= attachment.filename %></a>
-                  </div>
-                </td>
-                <td><%= attachment.mimeType %></td>
-                <td><%= user?.displayName ?? attachment.uploadedBy %></td>
-                <td><%= attachment.createdAt %></td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
-    <% } %>
-  </article>
+<% if (!documentDetail.nextFormReference) { %>
+  <section id="document-legacy-model-fragment" data-fragment="document-legacy-model">
+    <%- include("../partials/document-detail/legacy-panel", {
+      documentDetail,
+      activeUser,
+      saveStatus,
+      saveError,
+      submitStatus,
+      submitError,
+      approveStatus,
+      approveError,
+      rejectStatus,
+      rejectError,
+      archiveStatus,
+      archiveError
+    }) %>
+  </section>
+<% } %>
 
-  <article class="panel">
-    <div class="panel-header">
-      <h3>Form</h3>
-      <span class="chip">Read + Save</span>
-    </div>
-    <p>Dieses Dokument verwendet das Template <strong><%= documentDetail.formDefinition.templateName %></strong> mit dem Key <strong><%= documentDetail.formDefinition.templateKey %></strong> in Version <strong><%= documentDetail.formDefinition.templateVersion %></strong>.</p>
-    <p>Die Formdefinition wird hier aus <code>form_templates.mdx_body</code> gelesen. In diesem ersten Save-Schnitt sind nur einfache Feldtypen direkt auf der Detailseite bearbeitbar und speicherbar.</p>
+<% if (documentDetail.templateFeatures.journal.enabled) { %>
+  <section id="document-journal-fragment" data-fragment="document-journal">
+    <%- include("../partials/document-detail/journal-panel", {
+      documentDetail,
+      activeUser,
+      journalStatus,
+      journalError
+    }) %>
+  </section>
+<% } %>
 
-    <% if (saveStatus) { %>
-      <div class="notice-card notice-success">
-        <strong>Save erfolgreich</strong>
-        <p><%= saveStatus %></p>
-      </div>
-    <% } %>
-
-    <% if (saveError) { %>
-      <div class="notice-card notice-error">
-        <strong>Save nicht moeglich</strong>
-        <p><%= saveError %></p>
-      </div>
-    <% } %>
-
-    <% if (submitStatus) { %>
-      <div class="notice-card notice-success">
-        <strong>Submit erfolgreich</strong>
-        <p><%= submitStatus %></p>
-      </div>
-    <% } %>
-
-    <% if (submitError) { %>
-      <div class="notice-card notice-error">
-        <strong>Submit nicht moeglich</strong>
-        <p><%= submitError %></p>
-      </div>
-    <% } %>
-
-    <% if (approveStatus) { %>
-      <div class="notice-card notice-success">
-        <strong>Approve erfolgreich</strong>
-        <p><%= approveStatus %></p>
-      </div>
-    <% } %>
-
-    <% if (approveError) { %>
-      <div class="notice-card notice-error">
-        <strong>Approve nicht moeglich</strong>
-        <p><%= approveError %></p>
-      </div>
-    <% } %>
-
-    <% if (rejectStatus) { %>
-      <div class="notice-card notice-success">
-        <strong>Reject erfolgreich</strong>
-        <p><%= rejectStatus %></p>
-      </div>
-    <% } %>
-
-    <% if (rejectError) { %>
-      <div class="notice-card notice-error">
-        <strong>Reject nicht moeglich</strong>
-        <p><%= rejectError %></p>
-      </div>
-    <% } %>
-
-    <% if (archiveStatus) { %>
-      <div class="notice-card notice-success">
-        <strong>Archive erfolgreich</strong>
-        <p><%= archiveStatus %></p>
-      </div>
-    <% } %>
-
-    <% if (archiveError) { %>
-      <div class="notice-card notice-error">
-        <strong>Archive nicht moeglich</strong>
-        <p><%= archiveError %></p>
-      </div>
-    <% } %>
-
-    <div class="subpanel">
-      <div class="panel-header">
-        <h4>Save Values</h4>
-        <span class="chip"><%= documentDetail.editableFields.length %> Felder</span>
-      </div>
-      <% if (documentDetail.editableFields.length === 0) { %>
-        <p><%= documentDetail.editState.reason ?? "Im aktuellen Dokumentstatus stehen in dieser ersten Speicherversion keine direkt speicherbaren Felder zur Verfuegung." %></p>
-      <% } else { %>
-        <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/save?user=<%= activeUser.key %>">
-          <% documentDetail.editableFields.forEach((field) => { %>
-            <div class="field-block">
-              <label class="field-label" for="field-<%= field.name %>"><%= field.label %></label>
-              <p class="field-help"><code><%= field.name %></code> · <%= field.type %></p>
-              <% if (field.helpText) { %>
-                <p class="field-help"><%= field.helpText %></p>
-              <% } %>
-
-              <% if (field.type === "textarea") { %>
-                <textarea id="field-<%= field.name %>" name="<%= field.name %>" rows="4"><%= typeof field.currentValue === "string" ? field.currentValue : "" %></textarea>
-              <% } else if (field.type === "checkboxGroup") { %>
-                <div class="checkbox-list">
-                  <% const selectedValues = Array.isArray(field.currentValue) ? field.currentValue : []; %>
-                  <% (field.options ?? []).forEach((option) => { %>
-                    <label class="checkbox-item">
-                      <input
-                        type="checkbox"
-                        name="<%= field.name %>"
-                        value="<%= option %>"
-                        <%= selectedValues.includes(option) ? "checked" : "" %>
-                      />
-                      <span><%= option %></span>
-                    </label>
-                  <% }) %>
-                </div>
-              <% } else { %>
-                <input id="field-<%= field.name %>" type="text" name="<%= field.name %>" value="<%= typeof field.currentValue === "string" ? field.currentValue : "" %>" />
-              <% } %>
-
-              <% if (field.currentValue !== undefined) { %>
-                <p class="field-help">
-                  Current Value:
-                  <% if (Array.isArray(field.currentValue)) { %>
-                    <%= field.currentValue.length > 0 ? field.currentValue.join(", ") : "leer" %>
-                  <% } else { %>
-                    <%= field.currentValue.length > 0 ? field.currentValue : "leer" %>
-                  <% } %>
-                </p>
-              <% } %>
-            </div>
-          <% }) %>
-          <button class="button-primary" type="submit">Save Values</button>
-        </form>
-      <% } %>
-    </div>
-
-    <div class="subpanel">
-      <div class="panel-header">
-        <h4>Submit</h4>
-        <span class="chip">Workflow Step</span>
-      </div>
-      <% if (documentDetail.submitState.isAvailable) { %>
-        <p>Submit fuehrt dieses Dokument von <strong><%= documentDetail.document.status %></strong> nach <strong><%= documentDetail.submitState.nextStatus %></strong>.</p>
-        <form method="post" action="/documents/<%= documentDetail.document.id %>/submit?user=<%= activeUser.key %>">
-          <button class="button-secondary" type="submit">Submit Document</button>
-        </form>
-      <% } else { %>
-        <p><%= documentDetail.submitState.reason %></p>
-      <% } %>
-    </div>
-
-    <div class="subpanel">
-      <div class="panel-header">
-        <h4>Approve</h4>
-        <span class="chip">Workflow Step</span>
-      </div>
-      <% if (documentDetail.approveState.isAvailable) { %>
-        <p>Approve fuehrt dieses Dokument von <strong><%= documentDetail.document.status %></strong> nach <strong><%= documentDetail.approveState.nextStatus %></strong>.</p>
-        <form method="post" action="/documents/<%= documentDetail.document.id %>/approve?user=<%= activeUser.key %>">
-          <button class="button-secondary" type="submit">Approve Document</button>
-        </form>
-      <% } else { %>
-        <p><%= documentDetail.approveState.reason %></p>
-      <% } %>
-    </div>
-
-    <div class="subpanel">
-      <div class="panel-header">
-        <h4>Reject</h4>
-        <span class="chip">Workflow Step</span>
-      </div>
-      <% if (documentDetail.rejectState.isAvailable) { %>
-        <p>Reject fuehrt dieses Dokument von <strong><%= documentDetail.document.status %></strong> nach <strong><%= documentDetail.rejectState.nextStatus %></strong>.</p>
-        <form method="post" action="/documents/<%= documentDetail.document.id %>/reject?user=<%= activeUser.key %>">
-          <button class="button-secondary" type="submit">Reject Document</button>
-        </form>
-      <% } else { %>
-        <p><%= documentDetail.rejectState.reason %></p>
-      <% } %>
-    </div>
-
-    <div class="subpanel">
-      <div class="panel-header">
-        <h4>Archive</h4>
-        <span class="chip">Workflow Step</span>
-      </div>
-      <% if (documentDetail.archiveState.isAvailable) { %>
-        <p>Archive fuehrt dieses Dokument von <strong><%= documentDetail.document.status %></strong> nach <strong><%= documentDetail.archiveState.nextStatus %></strong>.</p>
-        <form method="post" action="/documents/<%= documentDetail.document.id %>/archive?user=<%= activeUser.key %>">
-          <button class="button-secondary" type="submit">Archive Document</button>
-        </form>
-      <% } else { %>
-        <p><%= documentDetail.archiveState.reason %></p>
-      <% } %>
-    </div>
-
-    <div class="grid two-up detail-grid">
-      <div class="subpanel">
-        <h4>Template Metadata</h4>
-        <ul class="stack-list compact">
-          <li>
-            <strong>Name</strong>
-            <p><%= documentDetail.formDefinition.templateName %></p>
-          </li>
-          <li>
-            <strong>Status</strong>
-            <p><span class="status-pill status-<%= documentDetail.formDefinition.templateStatus %>"><%= documentDetail.formDefinition.templateStatus %></span></p>
-          </li>
-          <li>
-            <strong>Workflow Template Key</strong>
-            <p><%= documentDetail.formDefinition.sourceMeta.workflowTemplateKey ?? documentDetail.document.workflowTemplateKey %></p>
-          </li>
-        </ul>
-      </div>
-
-      <div class="subpanel">
-        <h4>Sections</h4>
-        <% if (documentDetail.formDefinition.sections.length === 0) { %>
-          <p>Keine Sections aus dem MDX ableitbar.</p>
-        <% } else { %>
-          <ul class="stack-list compact">
-            <% documentDetail.formDefinition.sections.forEach((section) => { %>
-              <li>
-                <strong><%= section %></strong>
-              </li>
-            <% }) %>
-          </ul>
-        <% } %>
-      </div>
-    </div>
-
-    <div class="panel-divider"></div>
-
-    <div class="grid two-up detail-grid">
-      <div class="subpanel">
-        <h4>Fields</h4>
-        <% if (documentDetail.formDefinition.fields.length === 0) { %>
-          <p>Keine Felder aus dem MDX ableitbar.</p>
-        <% } else { %>
-          <ul class="stack-list compact">
-            <% documentDetail.formDefinition.fields.forEach((field) => { %>
-              <li>
-                <strong><%= field.label %></strong>
-                <p><code><%= field.name %></code> · <%= field.type %><%= field.flags.length > 0 ? " · " + field.flags.join(", ") : "" %></p>
-                <% if (field.operationRef) { %>
-                  <p>operationRef: <code><%= field.operationRef %></code></p>
-                <% } %>
-                <% if (field.helpText) { %>
-                  <p><%= field.helpText %></p>
-                <% } %>
-                <% if (field.currentValue !== undefined) { %>
-                  <p>Current Value:
-                    <% if (Array.isArray(field.currentValue)) { %>
-                      <%= field.currentValue.length > 0 ? field.currentValue.join(", ") : "leer" %>
-                    <% } else { %>
-                      <%= field.currentValue.length > 0 ? field.currentValue : "leer" %>
-                    <% } %>
-                  </p>
-                <% } %>
-                <% if (field.editableIn && field.editableIn.length > 0) { %>
-                  <p>editableIn: <code><%= field.editableIn.join(", ") %></code></p>
-                <% } %>
-                <% if (field.readonlyIn && field.readonlyIn.length > 0) { %>
-                  <p>readonlyIn: <code><%= field.readonlyIn.join(", ") %></code></p>
-                <% } %>
-              </li>
-            <% }) %>
-          </ul>
-        <% } %>
-      </div>
-
-      <div class="subpanel">
-        <h4>Actions</h4>
-        <% if (documentDetail.formDefinition.actions.length === 0) { %>
-          <p>Keine Form Actions im Template vorhanden.</p>
-        <% } else { %>
-          <ul class="stack-list compact">
-            <% documentDetail.formDefinition.actions.forEach((action) => { %>
-              <li>
-                <strong><%= action.label ?? action.name %></strong>
-                <p><code><%= action.name %></code><%= action.operationRef ? " · operationRef: " + action.operationRef : "" %></p>
-              </li>
-            <% }) %>
-          </ul>
-        <% } %>
-      </div>
-    </div>
-
-    <div class="panel-divider"></div>
-
-    <div class="subpanel">
-      <h4>MDX Source</h4>
-      <p>Kontrollierte read-only Sicht der zugrunde liegenden Formdefinition.</p>
-      <pre class="code-block"><code><%= documentDetail.formDefinition.mdxBody %></code></pre>
-    </div>
-  </article>
-</section>
-
-<section class="panel">
-  <div class="panel-header">
-    <h3>Journal</h3>
-    <span class="chip"><%= documentDetail.journals.length %></span>
-  </div>
-
-  <% if (journalStatus) { %>
-    <div class="notice-card notice-success">
-      <strong>Journal aktualisiert</strong>
-      <p><%= journalStatus %></p>
-    </div>
-  <% } %>
-
-  <% if (journalError) { %>
-    <div class="notice-card notice-error">
-      <strong>Journal nicht moeglich</strong>
-      <p><%= journalError %></p>
-    </div>
-  <% } %>
-
-  <% if (documentDetail.journals.length === 0) { %>
-    <p>Kein Journal im aktuellen Template definiert.</p>
-  <% } else { %>
-    <div class="grid two-up">
-      <% documentDetail.journals.forEach((journal) => { %>
-        <article class="subpanel">
-          <div class="panel-header">
-            <h4><%= journal.label %></h4>
-            <span class="chip"><%= journal.entries.length %> Eintraege</span>
-          </div>
-
-          <% if (journal.helpText) { %>
-            <p class="field-help"><%= journal.helpText %></p>
-          <% } %>
-
-          <% if (journal.isEditable) { %>
-            <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/journal?user=<%= activeUser.key %>">
-              <input type="hidden" name="journalFieldName" value="<%= journal.name %>" />
-              <label class="field-label" for="journal-entry-<%= journal.name %>">New Entry</label>
-              <textarea id="journal-entry-<%= journal.name %>" name="entryText" rows="3" placeholder="Journal-Eintrag erfassen"></textarea>
-              <button class="button-secondary" type="submit">Add Journal Entry</button>
-            </form>
-          <% } else { %>
-            <p class="field-help"><%= documentDetail.editState.reason ?? "Journal ist im aktuellen Status read-only." %></p>
-          <% } %>
-
-          <div class="panel-divider"></div>
-
-          <% if (journal.entries.length === 0) { %>
-            <p>Keine Journal-Eintraege vorhanden.</p>
-          <% } else { %>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <% journal.columns.forEach((column) => { %>
-                      <th><%= column.label %></th>
-                    <% }) %>
-                  </tr>
-                </thead>
-                <tbody>
-                  <% journal.entries.forEach((entry) => { %>
-                    <tr>
-                      <% journal.columns.forEach((column) => { %>
-                        <td><%= entry.values[column.key] ?? "-" %></td>
-                      <% }) %>
-                    </tr>
-                  <% }) %>
-                </tbody>
-              </table>
-            </div>
-          <% } %>
-        </article>
-      <% }) %>
-    </div>
-  <% } %>
-</section>
-
-<section class="panel">
-  <div class="panel-header">
-    <h3>History</h3>
-    <span class="chip"><%= documentDetail.auditEvents.length %></span>
-  </div>
-  <% if (documentDetail.auditEvents.length === 0) { %>
-    <p>Keine Audit Events vorhanden.</p>
-  <% } else { %>
-    <ul class="stack-list">
-      <% documentDetail.auditEvents.forEach((event) => { %>
-        <% const actor = users.find((entry) => entry.id === event.actorUserId); %>
-        <li>
-          <strong><%= event.eventType %></strong>
-          <p><%= event.message %></p>
-          <p><%= actor?.displayName ?? "System" %> · <%= event.createdAt %></p>
-        </li>
-      <% }) %>
-    </ul>
-  <% } %>
+<section id="document-history-fragment" data-fragment="document-history">
+  <%- include("../partials/document-detail/history-panel", {
+    documentDetail,
+    users,
+    latestAuditEvent
+  }) %>
 </section>

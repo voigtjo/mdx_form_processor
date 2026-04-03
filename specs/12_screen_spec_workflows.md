@@ -108,24 +108,25 @@ Die Workflows List ist nicht:
 
 ## 5.1 Zweck
 
-Workflow Detail ist die führende Review- und Übersichtssicht eines konkreten Workflow Templates.
+Workflow Detail ist die führende Review- und Pflegevorbereitungssicht eines konkreten Workflow Templates.
 
 Es dient dazu:
 
-- die wesentlichen Workflow-Informationen lesbar darzustellen
-- Statusfolge, Actions und Rollen zu prüfen
-- Hooks und deren operationRef zu sehen
-- Version und Status zu sehen
+- die führende Workflow-Quelle sichtbar zu machen
+- den Workflow fachlich als Transition-Modell lesbar zu machen
+- Statusfolge, Actions, Rollen und Übergänge zu prüfen
+- Version und Status kompakt zu sehen
 - die Verwendung des Workflows in Templates zu verstehen
 
-Workflow Detail ist die führende **Review-Sicht** eines Workflows.
+Workflow Detail ist die führende **Review- und Draft-Pflegesicht** eines Workflows.
 
 ## 5.2 Hauptaktionen im Workflow Detail
 
-Mindestens:
+Im normalen editierbaren Pflegepfad mindestens:
 
-- Edit
+- Save Draft
 - Publish
+- Unpublish
 - Archive
 
 Optional später:
@@ -134,24 +135,28 @@ Optional später:
 
 ---
 
-## 6. Tabs des Workflow Detail
+## 6. Führende Struktur des Workflow Detail
 
-Das Workflow Detail besitzt im MVP genau diese Tabs:
+Das Workflow Detail ist im führenden Pfad nicht mehr primär als Tab-Sammlung gedacht.
+Die Seite ist stattdessen ruhig und linear aufgebaut:
 
-- Overview
-- JSON
-- Hooks
-- Usage
+1. kompakter Workflow-Kopf
+2. kompakter Context-/Versionsbereich
+3. editierbare Workflow-Quelle
+4. fachliche Transition-Darstellung aus genau dieser Quelle
 
-Diese Tabs sind führend.
+Der Lifecycle-/Versionsschnitt bleibt dabei klein und verdichtet.
+Er liegt im Workflow Detail im selben ruhigen Pflegebereich wie die Quelle und nicht als dominante Nebenansicht.
+
+Diese Struktur ist führend.
 
 ---
 
-## 7. Tab: Overview
+## 7. Fachliche Darstellung
 
 ## 7.1 Zweck
 
-Der Overview-Tab zeigt die wichtigsten Workflow-Metadaten und die lesbare fachliche Zusammenfassung des Workflows.
+Die fachliche Darstellung zeigt die wichtigsten Workflow-Metadaten und die lesbare Zusammenfassung des Workflows.
 
 ## 7.2 Sichtbare Inhalte
 
@@ -164,48 +169,107 @@ Mindestens sichtbar:
 - Status
 - Initialstatus
 - lesbare Statusfolge
-- Action-Übersicht
+- Transition-Tabelle
 - Rollen-/Approval-Logik in lesbarer Form
 
-## 7.3 Lesbare Action-Zusammenfassung
+## 7.3 Lesbares Transition-Modell
 
-Die Overview-Sicht muss mindestens die Actions in dieser Form verständlich machen:
+Die Workflow-Seite muss Actions mindestens in dieser fachlichen Leserichtung verständlich machen:
 
 - Aktionsname
 - `from`
 - `to`
 - erlaubte Rollen
-- Completion Mode, wenn relevant
+- Modus `OR` oder `AND`
+- optionale API
+- optionale Bedingung
 
 Beispielhaft lesbar:
 
-- assign: created → assigned, role: editor
-- submit: assigned/progressed → submitted, role: editor
-- approve: submitted → approved, role: approver, completion: all
+- assign: created → assigned, role: editor, mode: OR
+- submit: assigned/progressed → submitted, role: editor, mode: OR
+- approve: submitted → approved, role: approver, mode: AND
 
 ## 7.4 Sichtbarkeitsprinzip
 
-Der Overview-Tab ist lesbar und nicht technisch überfrachtet.
-Er ist keine Editorfläche.
+Die fachliche Darstellung ist lesbar und nicht technisch überfrachtet.
+Sie ist keine eigene Editorfläche, sondern die direkte Ableitung der aktuell bearbeiteten Workflow-Quelle.
 
 ---
 
-## 8. Tab: JSON
+## 8. Workflow-Quelle
 
 ## 8.1 Zweck
 
-Der JSON-Tab zeigt das führende Workflow-JSON.
+Die Workflow-Quelle zeigt das führende Workflow-JSON als primäre Quelle.
+Im normalen Workflow Detail ist sie als editierbarer Draft-Bereich nutzbar.
 
 ## 8.2 Sichtbare Inhalte
 
 Mindestens sichtbar:
 
 - das vollständige führende Workflow-JSON der aktuell geöffneten Version
+- ein editierbarer Source-Bereich
+- Save Draft
+- oberhalb der fachlichen Transition-Darstellung
 
 ## 8.3 Regel
 
-Der JSON-Tab ist ein **Konfigurations- und Review-Tab**.
-Er gehört nicht zur normalen Arbeits-UI.
+Die Workflow-Quelle ist die führende technische Konfigurationsquelle.
+Die fachliche Darstellung darunter wird aus genau dieser Quelle gelesen.
+
+Ein Save Draft schreibt den aktuellen Bearbeitungsstand als Workflow-Draft.
+Die Transition View unterhalb der Quelle wird danach aus genau diesem aktuellen Draft-Stand abgeleitet.
+
+## 8.5 Fehlerpfad
+
+Wenn die Workflow-Quelle syntaktisch oder fachlich ungueltig ist:
+
+- bleibt die Seite renderbar
+- bleibt der aktuelle Bearbeitungsstand sichtbar
+- wird eine verständliche Fehlermeldung im Workflow-Kontext gezeigt
+- wird die Transition View nicht aus einem konkurrierenden Nebenstand gerendert
+
+---
+
+## 9. Workflow-Lifecycle
+
+## 9.1 Ziel
+
+Workflow Detail trägt im normalen Pflegepfad auch den Lifecycle der Workflow-Version:
+
+- Save Draft
+- Publish
+- Unpublish
+- Archive
+
+## 9.2 Publish
+
+Publish macht den aktuellen bearbeiteten Stand zu einer publizierten Workflow-Version.
+
+Dabei gilt:
+
+- die Workflow Source bleibt die führende Quelle
+- Publish arbeitet aus genau dieser aktuellen Quelle
+- frühere Versionen bleiben nachvollziehbar
+
+## 9.3 Unpublish-Regel
+
+Unpublish ist fachlich nur erlaubt, wenn **kein publiziertes Template** genau diese Workflow-Version nutzt.
+
+Wenn publizierte Templates diese Version nutzen:
+
+- ist Unpublish gesperrt
+- zeigt die UI den Sperrgrund ruhig und verständlich an
+
+## 9.4 Archive
+
+Archive ist im normalen Pflegepfad erst möglich, wenn die betrachtete Version unveröffentlicht ist.
+
+Eine archivierte Workflow-Version:
+
+- bleibt historisch nachvollziehbar
+- verschwindet aber aus den normalen Standardübersichten
 
 ## 8.4 Nicht Ziel des JSON-Tabs
 
@@ -216,20 +280,18 @@ Der JSON-Tab ist nicht:
 
 ---
 
-## 9. Tab: Hooks
+## 9. Hooks in der Workflow-Seite
 
 ## 9.1 Zweck
 
-Der Hooks-Tab zeigt die im Workflow definierten Hooks in lesbarer Form.
+Hooks sollen fachlich lesbar bleiben, aber die Seite nicht als eigener dominanter Hauptblock überfrachten.
 
 ## 9.2 Sichtbare Inhalte
 
-Für jeden Hook mindestens sichtbar:
+Wenn Hooks für die fachliche Darstellung relevant sind, sollen mindestens sichtbar bleiben:
 
 - Trigger
 - operationRef
-- Request-Information, soweit fachlich lesbar
-- Response-Mapping-Ziele in lesbarer Form
 - optional Beschreibung
 
 ## 9.3 Hook-Sichtbarkeitsprinzip
@@ -245,11 +307,11 @@ Der Hooks-Tab ist nicht:
 
 ---
 
-## 10. Tab: Usage
+## 10. Context und Usage
 
 ## 10.1 Zweck
 
-Der Usage-Tab zeigt, welche Form Templates dieses Workflow Template verwenden.
+Der kompakte Context-Bereich zeigt, welche Form Templates dieses Workflow Template verwenden und welche Versionen sichtbar sind.
 
 ## 10.2 Sichtbare Inhalte
 

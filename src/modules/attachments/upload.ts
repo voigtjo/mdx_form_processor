@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { withDbTransaction } from "../../db/pool.js";
 import { findDocumentAccessContextForUser, getDocumentEditStateForUser } from "../documents/access.js";
+import { readTemplateFeatureToggles } from "../templates/features.js";
 
 const blockedUploadStatuses = new Set(["submitted", "approved", "rejected", "archived"]);
 const uploadStorageRoot = path.join(process.cwd(), "storage", "attachments");
@@ -73,6 +74,18 @@ export const getAttachmentUploadStateForUser = async (
     return {
       isAvailable: false,
       ...(editState.reason ? { reason: editState.reason } : {}),
+    };
+  }
+
+  const templateFeatures = readTemplateFeatureToggles({
+    templateKey: document.templateKey,
+    mdxBody: document.templateMdxBody,
+  });
+
+  if (!templateFeatures.attachments.enabled) {
+    return {
+      isAvailable: false,
+      reason: "Attachments sind im aktuellen Template nicht aktiviert.",
     };
   }
 
@@ -178,6 +191,19 @@ export const uploadAttachmentForUser = async ({
       ok: false,
       reason: "upload_not_allowed",
       ...(editState.reason ? { details: editState.reason } : {}),
+    };
+  }
+
+  const templateFeatures = readTemplateFeatureToggles({
+    templateKey: document.templateKey,
+    mdxBody: document.templateMdxBody,
+  });
+
+  if (!templateFeatures.attachments.enabled) {
+    return {
+      ok: false,
+      reason: "upload_not_allowed",
+      details: "Attachments sind im aktuellen Template nicht aktiviert.",
     };
   }
 

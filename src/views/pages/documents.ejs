@@ -25,18 +25,24 @@
     <h3>Start Document</h3>
     <span class="chip"><%= activeUser.displayName %></span>
   </div>
+  <% const startableTemplates = workspaceSummary.templates
+    .map((template) => ({
+      template,
+      workflow: catalog.workflows.find((workflow) => workflow.id === template.workflowTemplateId),
+    }))
+    .filter(({ template, workflow }) => template.status === "published" && workflow?.status === "published"); %>
   <div class="hero-actions">
     <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form">
       <label class="sr-only" for="templateId">Template</label>
       <select id="templateId" name="templateId">
-        <% const startableTemplates = workspaceSummary.templates.filter((template) => template.status === "published"); %>
-        <% startableTemplates.forEach((template) => { %>
-          <option value="<%= template.id %>"><%= template.name %> (v<%= template.version %>)</option>
+        <% startableTemplates.forEach(({ template, workflow }) => { %>
+          <option value="<%= template.id %>"><%= template.name %> (v<%= template.version %>) · <%= workflow?.name ?? "Workflow" %> (v<%= workflow?.version ?? "?" %>)</option>
         <% }) %>
       </select>
       <button class="button-primary" type="submit" <%= startableTemplates.length === 0 ? "disabled" : "" %>>Start Document</button>
     </form>
   </div>
+  <p class="panel-copy">Startbar sind publizierte, nicht archivierte Template-Staende mit publiziertem Workflow. Neue Dokumente bleiben danach auf genau dieser Template- und Workflow-Version gebunden.</p>
 </section>
 
 <% if (typeof startError === "string" && startError.length > 0) { %>
@@ -117,11 +123,11 @@
               </td>
               <td>
                 <strong><%= template?.name ?? "Unbekannt" %></strong>
-                <p class="table-meta"><%= template?.key ?? "ohne Template-Key" %></p>
+                <p class="table-meta"><%= template?.key ?? "ohne Template-Key" %><% if (template) { %> · v<%= template.version %><% } %></p>
               </td>
               <td>
                 <strong><%= workflow?.name ?? "Unbekannt" %></strong>
-                <p class="table-meta"><%= workflow?.key ?? "ohne Workflow-Key" %></p>
+                <p class="table-meta"><%= workflow?.key ?? "ohne Workflow-Key" %><% if (workflow) { %> · v<%= workflow.version %><% } %></p>
               </td>
               <td><span class="status-pill"><%= document.status %></span></td>
               <td><%= assignedUsers || "Keine aktiven Assignments" %></td>

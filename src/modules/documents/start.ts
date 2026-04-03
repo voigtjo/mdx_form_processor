@@ -124,6 +124,9 @@ export const startDocumentForUser = async ({ templateId, userId }: StartDocument
         JSON.stringify({
           templateId: template.template_id,
           templateKey: template.template_key,
+          templateVersion: template.template_version,
+          workflowTemplateId: template.workflow_template_id,
+          workflowTemplateVersion: template.workflow_template_version,
           status: initialStatus,
         }),
         "Creator assigned as initial editor.",

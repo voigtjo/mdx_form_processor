@@ -16,5 +16,5 @@ export const env = {
   host: process.env.HOST ?? "127.0.0.1",
   port: toNumber(process.env.PORT, 3000),
   databaseUrl: process.env.DATABASE_URL ?? "",
+  erpSimBaseUrl: process.env.ERP_SIM_BASE_URL ?? "http://localhost:3001",
 } as const;
-

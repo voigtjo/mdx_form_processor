@@ -315,6 +315,7 @@ Zweck:
 ### 17.2 Batch B-2026-0042
 Zweck:
 - Template Key / Document Key / Journal / Attachments / Save
+- erster sichtbarer formularuebergreifender Referenzdatensatz fuer Customer Order
 
 ### 17.3 Evidence 2026-101
 Zweck:
@@ -365,9 +366,12 @@ Optional später:
 
 ### Empfohlene Daten
 - `product_id` gesetzt
+- `product_name` = `Batch Product A`
 - `batch_id` = `B-2026-0042`
 - `fulfillment_flags` gesetzt
 - `inspection_steps` mit mindestens zwei Zeilen gefüllt
+
+Diese Batch ist der erste sichtbare formularuebergreifende Referenzdatensatz fuer den normalen Customer-Order-Produktpfad.
 
 ### Empfohlenes Assignment
 - Alice = Editor

@@ -1,111 +1,168 @@
-<section class="hero-card">
+<% const viewedVersion = workflowDetail.workflow.version; %>
+<section class="hero-card hero-card-compact">
   <div>
-    <span class="eyebrow">Workflow Detail</span>
+    <span class="eyebrow">Workflow</span>
     <h2><%= workflowDetail.workflow.name %></h2>
-    <p>Review-Sicht fuer ein einzelnes Workflow Template mit Overview, Actions, Hooks, JSON, Usage und Versionskontext.</p>
+    <p class="hero-inline-meta"><strong>Workflow:</strong> <%= workflowDetail.workflow.name %> v<%= workflowDetail.workflow.version %> · <strong>Key:</strong> <%= workflowDetail.workflow.key %></p>
+    <p class="hero-inline-meta"><strong>Status:</strong> <%= workflowDetail.lifecycleLabel %> · <strong>Initial:</strong> <%= workflowDetail.workflow.initialStatus %> · <strong>Updated:</strong> <%= workflowDetail.workflow.updatedAt %></p>
+    <p class="hero-inline-meta"><strong>Betrachtet:</strong> v<%= viewedVersion %> · <strong>Draft in Arbeit:</strong> <%= workflowDetail.currentDraftVersion ? `v${workflowDetail.currentDraftVersion.version}` : `noch keiner (naechster Draft v${workflowDetail.nextDraftVersion})` %> · <strong>Published:</strong> <%= workflowDetail.currentPublishedVersion ? `v${workflowDetail.currentPublishedVersion.version}` : "keine" %></p>
   </div>
   <div class="hero-actions">
     <a class="button-secondary" href="/workflows?user=<%= activeUser.key %>">Back to Workflows</a>
   </div>
 </section>
 
-<section class="grid two-up">
-  <article class="panel">
-    <div class="panel-header">
-      <h3>Overview</h3>
-      <span class="chip">v<%= workflowDetail.workflow.version %></span>
+<details class="panel panel-collapsible">
+  <summary class="collapsible-summary">
+    <div class="collapsible-summary-copy">
+      <strong>Context</strong>
+      <span><%= workflowDetail.workflow.statuses.length %> Status · <%= workflowDetail.transitionRows.length %> Actions · <%= workflowDetail.relatedTemplates.length %> Templates · <%= workflowDetail.relatedDocuments.length %> Documents</span>
     </div>
-    <p><strong>Key:</strong> <%= workflowDetail.workflow.key %></p>
-    <p><strong>Status:</strong> <span class="status-pill status-<%= workflowDetail.workflow.status %>"><%= workflowDetail.workflow.status %></span></p>
-    <p><strong>Initial Status:</strong> <%= workflowDetail.workflow.initialStatus %></p>
-    <p><strong>Updated:</strong> <%= workflowDetail.workflow.updatedAt %></p>
-    <p><%= workflowDetail.workflow.description ?? "Keine Beschreibung hinterlegt." %></p>
-    <p><strong>Statusfolge:</strong> <%= workflowDetail.workflow.statuses.join(" → ") %></p>
-  </article>
+    <div class="collapsible-summary-meta">
+      <span><%= workflowDetail.versions.length %> Versionen</span>
+    </div>
+  </summary>
+  <div class="collapsible-body">
+    <div class="grid two-up detail-grid">
+      <div>
+        <p><strong>Beschreibung</strong><br /><%= workflowDetail.workflow.description ?? "Keine Beschreibung hinterlegt." %></p>
+        <p><strong>Statusfolge</strong><br /><%= workflowDetail.workflow.statuses.join(" → ") %></p>
+        <p><strong>Templates</strong><br /><%= workflowDetail.relatedTemplates.length > 0 ? workflowDetail.relatedTemplates.map((template) => `${template.name} v${template.version}`).join(", ") : "keine sichtbaren Templates" %></p>
+        <p><strong>Hooks im Quellmodell</strong><br /><%= workflowDetail.workflow.hooks.length %> definiert</p>
+      </div>
+      <div>
+        <h4>Versions</h4>
+        <ul class="stack-list compact">
+          <% workflowDetail.versions.forEach((version) => { %>
+            <% const versionLifecycleLabel = version.status === "inactive" ? "unpublished" : version.status; %>
+            <li class="action-row">
+              <div>
+                <strong>v<%= version.version %></strong>
+                <p><%= versionLifecycleLabel %></p>
+              </div>
+              <% if (version.id === workflowDetail.workflow.id) { %>
+                <span class="chip">Current</span>
+              <% } else { %>
+                <a class="text-link action-link" href="/workflows/<%= version.id %>?user=<%= activeUser.key %>">Open</a>
+              <% } %>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    </div>
+  </div>
+</details>
 
-  <article class="panel">
-    <h3>Action Overview</h3>
-    <ul class="stack-list compact">
-      <% workflowDetail.workflow.actions.forEach((action) => { %>
-        <li>
-          <strong><%= action.name %></strong>
-          <p><%= action.from.join(", ") %> → <%= action.to %></p>
-          <p>Rollen: <%= action.allowedRoles.join(", ") %></p>
-        </li>
-      <% }) %>
-    </ul>
-  </article>
-</section>
+<section class="panel">
+  <div class="panel-header">
+    <h3>Workflow Source</h3>
+    <span class="chip"><%= workflowDetail.lifecycleLabel %> · v<%= workflowDetail.workflow.version %></span>
+  </div>
 
-<section class="grid two-up">
-  <article class="panel">
-    <h3>Hooks</h3>
-    <% if (workflowDetail.workflow.hooks.length === 0) { %>
-      <div class="empty-state">
-        <strong>Keine Hooks definiert.</strong>
-        <p>Im aktuellen Workflow sind keine Hooks mit Trigger und operationRef hinterlegt.</p>
+  <form method="post" action="/workflows/<%= workflowDetail.workflow.id %>/source?user=<%= activeUser.key %>" class="stack-list">
+    <article class="subpanel">
+      <div class="panel-header">
+        <h4>Lifecycle</h4>
+        <span class="chip">Versionen</span>
+      </div>
+      <p class="panel-copy lifecycle-copy">
+        Betrachtet: v<%= viewedVersion %> ·
+        Draft in Arbeit: <%= workflowDetail.currentDraftVersion ? `v${workflowDetail.currentDraftVersion.version}` : "noch keiner" %> ·
+        Published: <%= workflowDetail.currentPublishedVersion ? `v${workflowDetail.currentPublishedVersion.version}` : "keine" %>
+      </p>
+      <div class="template-lifecycle-actions">
+        <button class="button-secondary" type="submit" name="intent" value="save_draft">
+          Save Draft v<%= workflowDetail.nextDraftVersion %>
+        </button>
+        <button class="button-primary" type="submit" name="intent" value="publish" <%= workflowDetail.sourceError ? "disabled" : "" %>>
+          Publish v<%= workflowDetail.publishTargetVersion %>
+        </button>
+        <button
+          class="button-secondary"
+          type="submit"
+          name="intent"
+          value="unpublish"
+          <%= workflowDetail.canUnpublish ? "" : "disabled" %>>
+          Unpublish v<%= viewedVersion %>
+        </button>
+        <button
+          class="button-secondary"
+          type="submit"
+          name="intent"
+          value="archive"
+          <%= workflowDetail.canArchive ? "" : "disabled" %>>
+          Archive v<%= viewedVersion %>
+        </button>
+      </div>
+      <% if (workflowDetail.publishedTemplateUsages.length > 0) { %>
+        <p class="panel-copy"><strong>Published Templates auf dieser Version:</strong> <%= workflowDetail.publishedTemplateUsages.map((template) => `${template.name} v${template.version}`).join(", ") %></p>
+      <% } %>
+      <% if (workflowDetail.unpublishBlockedReason) { %>
+        <p class="panel-copy"><strong>Unpublish:</strong> <%= workflowDetail.unpublishBlockedReason %></p>
+      <% } %>
+      <% if (workflowDetail.archiveBlockedReason) { %>
+        <p class="panel-copy"><strong>Archive:</strong> <%= workflowDetail.archiveBlockedReason %></p>
+      <% } %>
+    </article>
+
+    <article class="subpanel">
+      <div class="panel-header">
+        <h4>JSON Source</h4>
+        <span class="chip">Primaerquelle</span>
+      </div>
+      <textarea name="source" rows="24" class="next-form-source-editor"><%= workflowDetail.workflowSourceText %></textarea>
+    </article>
+  </form>
+
+  <% if (workflowDetail.sourceError) { %>
+    <div class="notice-card notice-error">
+      <strong>Workflow Source aktuell nicht lesbar</strong>
+      <p><%= workflowDetail.sourceError %></p>
+    </div>
+  <% } %>
+
+  <article class="subpanel">
+    <div class="panel-header">
+      <h4>Transition View</h4>
+      <span class="chip"><%= workflowDetail.transitionRows.length %> Actions</span>
+    </div>
+    <p class="panel-copy workflow-model-copy"><strong>Lesemodell:</strong> Status + Actions + Uebergaenge. Die Tabelle zeigt den Workflow bereits als fachliches Transition-Modell statt als reine JSON-Review.</p>
+    <% if (!workflowDetail.sourceError) { %>
+      <p class="panel-copy workflow-status-line"><strong>Statusfolge:</strong> <%= workflowDetail.sourceStatuses.join(" → ") %></p>
+
+      <div class="table-wrap">
+        <table class="workflow-transition-table">
+          <thead>
+            <tr>
+              <th>Action</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Roles</th>
+              <th>Mode</th>
+              <th>API</th>
+              <th>Condition</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% workflowDetail.transitionRows.forEach((row) => { %>
+              <tr>
+                <td><strong><%= row.actionName %></strong></td>
+                <td><%= row.from.length > 0 ? row.from.join(", ") : "—" %></td>
+                <td><%= row.to %></td>
+                <td><%= row.rolesLabel %></td>
+                <td><span class="chip workflow-mode-chip"><%= row.modeLabel %></span></td>
+                <td class="workflow-transition-cell"><%= row.apiLabel %></td>
+                <td class="workflow-transition-cell"><%= row.conditionLabel %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
       </div>
     <% } else { %>
-      <ul class="stack-list compact">
-        <% workflowDetail.workflow.hooks.forEach((hook) => { %>
-          <li>
-            <strong><%= hook.trigger %></strong>
-            <p><%= hook.operationRef ?? "ohne operationRef" %></p>
-            <% if (hook.description) { %>
-              <p><%= hook.description %></p>
-            <% } %>
-          </li>
-        <% }) %>
-      </ul>
-    <% } %>
-  </article>
-
-  <article class="panel">
-    <h3>Usage</h3>
-    <% if (workflowDetail.relatedTemplates.length === 0) { %>
       <div class="empty-state">
-        <strong>Keine referenzierenden Templates.</strong>
-        <p>Im aktuellen Sichtkontext nutzt kein Template diesen Workflow.</p>
+        <strong>Transition View aktuell nicht ableitbar.</strong>
+        <p>Bitte korrigiere die Workflow Source und speichere den Draft erneut.</p>
       </div>
-    <% } else { %>
-      <ul class="stack-list compact">
-        <% workflowDetail.relatedTemplates.forEach((template) => { %>
-          <li class="action-row">
-            <div>
-              <strong><%= template.name %></strong>
-              <p><%= template.key %> · v<%= template.version %> · <%= template.status %></p>
-            </div>
-            <a class="text-link action-link" href="/templates/<%= template.id %>?user=<%= activeUser.key %>">Open</a>
-          </li>
-        <% }) %>
-      </ul>
-      <p class="panel-copy"><%= workflowDetail.relatedDocuments.length %> sichtbare Documents verwenden aktuell diesen Workflow ueber die referenzierenden Templates.</p>
     <% } %>
-  </article>
-</section>
-
-<section class="grid two-up">
-  <article class="panel">
-    <h3>JSON</h3>
-    <pre class="code-block"><%= JSON.stringify(workflowDetail.workflow.workflowJson, null, 2) %></pre>
-  </article>
-
-  <article class="panel">
-    <h3>Versions</h3>
-    <ul class="stack-list compact">
-      <% workflowDetail.versions.forEach((version) => { %>
-        <li class="action-row">
-          <div>
-            <strong>v<%= version.version %></strong>
-            <p><%= version.status %></p>
-          </div>
-          <% if (version.id === workflowDetail.workflow.id) { %>
-            <span class="chip">Current</span>
-          <% } else { %>
-            <a class="text-link action-link" href="/workflows/<%= version.id %>?user=<%= activeUser.key %>">Open</a>
-          <% } %>
-        </li>
-      <% }) %>
-    </ul>
   </article>
 </section>

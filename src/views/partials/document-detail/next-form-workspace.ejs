@@ -1,0 +1,43 @@
+<section class="panel panel-primary-slice">
+  <div class="panel-header">
+    <h3>Formular</h3>
+    <span class="chip"><%= documentDetail.document.status %></span>
+  </div>
+
+  <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/next-form?user=<%= activeUser.key %>">
+    <% const activeApproverNames = documentDetail.assignments
+      .filter((assignment) => assignment.active && assignment.role === "approver")
+      .map((assignment) => users.find((entry) => entry.id === assignment.userId)?.displayName ?? assignment.userId); %>
+    <div id="document-workflow-zone-fragment" data-fragment="document-workflow-zone">
+      <% if (typeof workflowZoneHtml === "string") { %>
+        <%- workflowZoneHtml %>
+      <% } else { %>
+        <%- include("next-form-workflow-zone", {
+          documentDetail,
+          activeUser,
+          nextFormStatus,
+          nextFormError,
+          submitStatus,
+          submitError,
+          approveStatus,
+          approveError,
+          rejectStatus,
+          rejectError,
+          archiveStatus,
+          archiveError,
+          activeApproverNames
+        }) %>
+      <% } %>
+    </div>
+    <div id="document-form-body-fragment" data-fragment="document-form-body">
+      <% if (typeof formBodyHtml === "string") { %>
+        <%- formBodyHtml %>
+      <% } else { %>
+        <%- include("next-form-form-body", {
+          documentDetail,
+          activeUser
+        }) %>
+      <% } %>
+    </div>
+  </form>
+</section>

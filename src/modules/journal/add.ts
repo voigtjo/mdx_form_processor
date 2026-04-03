@@ -1,5 +1,8 @@
 import { withDbTransaction } from "../../db/pool.js";
 import { findDocumentAccessContextForUser, getDocumentEditStateForUser } from "../documents/access.js";
+import { buildReferenceNextFormJournalDefinition, referenceNextFormJournalFieldName } from "./reference.js";
+import { isNextFormReferenceTemplate } from "../next-form/document-bridge.js";
+import { readTemplateFeatureToggles } from "../templates/features.js";
 import { buildReadOnlyFormDefinition } from "../templates/form-read.js";
 
 type AddJournalEntryInput = {
@@ -80,8 +83,28 @@ export const addJournalEntryForUser = async ({
     documentData: visibleDocument.dataJson,
     workflowFieldRules: visibleDocument.workflowFieldRules,
   });
+  const templateFeatures = readTemplateFeatureToggles({
+    templateKey: visibleDocument.templateKey,
+    mdxBody: visibleDocument.templateMdxBody,
+  });
 
-  const journal = formDefinition.journals.find((entry) => entry.name === journalFieldName);
+  if (!templateFeatures.journal.enabled) {
+    return {
+      ok: false,
+      reason: "journal_not_editable",
+      details: "Journal ist im aktuellen Template nicht aktiviert.",
+    };
+  }
+
+  const journal = formDefinition.journals.find((entry) => entry.name === journalFieldName)
+    ?? (
+      isNextFormReferenceTemplate(visibleDocument.templateKey) && journalFieldName === referenceNextFormJournalFieldName
+        ? buildReferenceNextFormJournalDefinition({
+          documentData: visibleDocument.dataJson,
+          isEditable: editState.isAvailable,
+        })
+        : undefined
+    );
 
   if (!journal || !journal.isEditable) {
     return {

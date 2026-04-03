@@ -42,13 +42,10 @@
               <td>
                 <strong><a class="text-link" href="/templates/<%= template.id %>?user=<%= activeUser.key %>"><%= template.name %></a></strong>
                 <p class="table-meta"><%= template.key %></p>
-                <% if (template.description) { %>
-                  <p class="table-meta"><%= template.description %></p>
-                <% } %>
               </td>
               <td>
                 <strong><%= workflow?.name ?? "Nicht zugeordnet" %></strong>
-                <p class="table-meta"><%= workflow?.key ?? "ohne Workflow-Key" %></p>
+                <p class="table-meta"><%= workflow?.key ?? "ohne Workflow-Key" %><% if (workflow) { %> · v<%= workflow.version %><% } %></p>
               </td>
               <td><%= groupNames.length > 0 ? groupNames.join(", ") : "Keine Group-Zuordnung" %></td>
               <td><span class="status-pill status-<%= template.status %>"><%= template.status %></span></td>
@@ -58,11 +55,13 @@
                 <div class="table-actions">
                   <a class="text-link" href="/templates/<%= template.id %>?user=<%= activeUser.key %>">View</a>
                   <a class="text-link" href="/documents?user=<%= activeUser.key %>&q=<%= encodeURIComponent(template.key) %>">Open Documents</a>
-                  <% if (template.status === "published") { %>
+                  <% if (template.status === "published" && workflow?.status === "published") { %>
                     <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form compact">
                       <input type="hidden" name="templateId" value="<%= template.id %>" />
                       <button class="button-secondary" type="submit">Start Document</button>
                     </form>
+                  <% } else { %>
+                    <span class="table-meta">Nicht startbar</span>
                   <% } %>
                 </div>
               </td>

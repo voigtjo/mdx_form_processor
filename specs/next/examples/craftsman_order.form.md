@@ -4,20 +4,22 @@ key: craftsman-order
 version: 1
 ---
 
-## Auftragsdaten
+## Auftrag
 
-- Auftragsnummer: text(order_number, required) | Datum: date(service_date, required)
-- Kunde: text(customer, required) | Techniker / Monteur: text(technician, required)
-- Einsatzort: textarea(service_location, required)
-- Kundendaten laden: action(load_customer, ref="customers.lookup", args="order_number", bind="customer,service_location")
+- Auftragsnummer: text(order_number, required) | Kundendaten laden: action(load_customer, ref="customers.lookup", args="order_number", bind="customer,service_location")
+- Datum: date(service_date) | Techniker / Monteur: text(technician)
+
+## Kunde
+
+- Kunde: text(customer, required)
+- Einsatzort: textarea(service_location)
 
 ## Leistung
 
 - Taetigkeitsbeschreibung: textarea(work_description, required)
-- Materialvorschlag holen: lookup(suggest_material, ref="materials.suggest", args="work_description", bind="material")
-- Material: textarea(material)
-- Arbeitszeit (Std.): number(labor_hours, required) | Fahrtzeit (Std.): number(travel_hours) | Pause (Min.): number(break_minutes)
+- Material: textarea(material) | Materialvorschlag holen: lookup(suggest_material, ref="products.suggest", args="work_description", bind="material")
+- Arbeitszeit (Std.): number(labor_hours) | Fahrtzeit (Std.): number(travel_hours) | Pause (Min.): number(break_minutes)
 
 ## Freigabe
 
-- Status / Freigabe: select(approval_status, options="offen,pruefung,freigegeben", required)
+- Status / Freigabe: select(approval_status, options="offen,pruefung,freigegeben")

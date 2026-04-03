@@ -242,6 +242,7 @@ Diese drei Templates decken die wichtigsten Muster des MVP ab.
 Referenztemplate für:
 - Lookup-Felder
 - Form Action
+- erste readonly Referenz auf ein anderes Formular im normalen Produktpfad
 - Submit / Approve
 - Workflow Hook
 - Integrationskontext
@@ -274,6 +275,7 @@ Referenztemplate für:
 - Document Key
 - Journal
 - Attachment Area
+- readonly referenzierbarer Begleitdatensatz fuer Customer Order
 - Save-/Start-/Submit-Abläufe
 
 ## 14.2 Erwartete Felder

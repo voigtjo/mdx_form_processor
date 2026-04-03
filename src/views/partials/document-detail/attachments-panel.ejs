@@ -1,0 +1,101 @@
+<section class="panel">
+  <div class="panel-header">
+    <h3>Attachments</h3>
+    <span class="chip"><%= documentDetail.attachments.length %></span>
+  </div>
+  <% const latestAttachment = documentDetail.attachments.at(-1); %>
+  <p class="field-help">
+    <% if (latestAttachment) { %>
+      Letztes Attachment: <strong><%= latestAttachment.filename %></strong> · <%= latestAttachment.createdAt %>
+    <% } else { %>
+      Noch kein Attachment vorhanden.
+    <% } %>
+  </p>
+  <% if (uploadStatus) { %>
+    <div class="notice-card notice-success">
+      <strong>Upload erfolgreich</strong>
+      <p><%= uploadStatus %></p>
+    </div>
+  <% } %>
+  <% if (uploadError) { %>
+    <div class="notice-card notice-error">
+      <strong>Upload nicht moeglich</strong>
+      <p><%= uploadError %></p>
+    </div>
+  <% } %>
+  <div class="notice-card notice-muted">
+    <% if (documentDetail.attachmentUploadState.isAvailable) { %>
+      <strong>Upload aktuell erlaubt</strong>
+      <p>Upload ist mit aktiver Editor-Zuweisung, aktivierter Template-Freigabe und solange das Dokument noch nicht submitted, approved, rejected oder archived ist verfuegbar.</p>
+    <% } else { %>
+      <strong>Upload aktuell nicht verfuegbar</strong>
+      <p><%= documentDetail.attachmentUploadState.reason ?? "Upload ist fuer dieses Dokument derzeit nicht freigeschaltet." %></p>
+      <p>Upload ist nur mit aktiver Editor-Zuweisung, aktivierter Template-Freigabe und vor den gesperrten Status submitted, approved, rejected oder archived moeglich.</p>
+    <% } %>
+  </div>
+  <div class="subpanel">
+    <div class="panel-header">
+      <h4>Upload Attachment</h4>
+      <span class="chip"><%= documentDetail.attachmentUploadState.isAvailable ? "erlaubt" : "gesperrt" %></span>
+    </div>
+    <% if (documentDetail.attachmentUploadState.isAvailable) { %>
+      <form
+        class="form-stack"
+        method="post"
+        action="/documents/<%= documentDetail.document.id %>/attachments?user=<%= activeUser.key %>"
+        enctype="multipart/form-data"
+        hx-post="/documents/<%= documentDetail.document.id %>/attachments?user=<%= activeUser.key %>"
+        hx-target="#document-attachments-fragment"
+        hx-swap="outerHTML"
+        hx-encoding="multipart/form-data"
+      >
+        <input type="file" name="attachment" />
+        <p class="field-help">In diesem ersten MVP-Schnitt sind einzelne Dateien, auch Bilder, bis 3 MB vorgesehen.</p>
+        <button class="button-secondary" type="submit">Upload Attachment</button>
+      </form>
+    <% } else { %>
+      <p><%= documentDetail.attachmentUploadState.reason %></p>
+    <% } %>
+  </div>
+  <div class="panel-divider"></div>
+  <% if (documentDetail.attachments.length === 0) { %>
+    <p>Keine Attachments vorhanden.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Filename</th>
+            <th>Type</th>
+            <th>Uploaded By</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% documentDetail.attachments.forEach((attachment) => { %>
+            <% const user = users.find((entry) => entry.id === attachment.uploadedBy); %>
+            <% const attachmentHref = `/attachments/${attachment.id}/content?user=${activeUser.key}`; %>
+            <% const isImage = attachment.mimeType.startsWith("image/"); %>
+            <tr>
+              <td>
+                <div class="attachment-cell">
+                  <% if (isImage) { %>
+                    <a href="<%= attachmentHref %>" target="_blank" rel="noreferrer">
+                      <img class="attachment-thumb" src="<%= attachmentHref %>" alt="<%= attachment.filename %>" />
+                    </a>
+                  <% } else { %>
+                    <a class="attachment-icon" href="<%= attachmentHref %>" target="_blank" rel="noreferrer">FILE</a>
+                  <% } %>
+                  <a class="attachment-link" href="<%= attachmentHref %>" target="_blank" rel="noreferrer"><%= attachment.filename %></a>
+                </div>
+              </td>
+              <td><%= attachment.mimeType %></td>
+              <td><%= user?.displayName ?? attachment.uploadedBy %></td>
+              <td><%= attachment.createdAt %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>

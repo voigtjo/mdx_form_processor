@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type {
   NextFormElement,
+  NextFormControlType,
   NextFormDefinition,
   NextFormMeta,
   NextFormPropertyMap,
@@ -8,6 +9,7 @@ import type {
   NextFormSection,
   NextFormSlot,
 } from "./types.js";
+import { nextFormControlTypes } from "./types.js";
 
 const metaKeys = ["title", "key", "version"] as const;
 
@@ -119,6 +121,9 @@ const parsePropertyToken = (token: string, properties: NextFormPropertyMap): voi
   properties[key] = value;
 };
 
+const isNextFormControlType = (value: string): value is NextFormControlType =>
+  (nextFormControlTypes as readonly string[]).includes(value);
+
 const parseControlSlot = (source: string): NextFormSlot => {
   const match = source.match(/^(.+?):\s*([a-zA-Z][a-zA-Z0-9_]*)\((.*)\)$/);
 
@@ -132,6 +137,10 @@ const parseControlSlot = (source: string): NextFormSlot => {
 
   if (!rawLabel || !controlType || rawArgs.length === 0) {
     throw new Error(`Control-Slot unvollstaendig: "${source}"`);
+  }
+
+  if (!isNextFormControlType(controlType)) {
+    throw new Error(`Control-Typ ${controlType} wird im vereinfachten Formularmodell aktuell nicht unterstuetzt.`);
   }
 
   const propertyTokens = splitPropertyList(rawArgs);

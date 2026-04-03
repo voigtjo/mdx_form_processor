@@ -217,6 +217,24 @@ Jede Workflow Action wird in der Arbeits-UI als Action-Button sichtbar, wenn:
 - die Rolle die Action erlaubt
 - der User die nötige Berechtigung hat
 
+Für die führende Workflow-Seite wird `actions` fachlich als Transition-Modell gelesen:
+
+- die JSON-Quelle bleibt die technische Primaerquelle
+- die fachliche Transition View ist eine direkte Ableitung derselben aktuellen Quelle
+- Save Draft im Workflow-Detail speichert genau diesen aktuellen JSON-Stand als Draft
+- Publish im Workflow-Detail publiziert genau diesen aktuellen JSON-Stand als Workflow-Version
+- Unpublish ist nur erlaubt, wenn kein publiziertes Template genau diese Workflow-Version nutzt
+- Archive nimmt unveroeffentlichte Workflow-Versionen aus normalen Standarduebersichten heraus
+- bei ungueltiger Quelle bleibt die Seite renderbar, zeigt aber eine Fehlermeldung statt einer konkurrierenden Transition-Ableitung
+
+- Action
+- From
+- To
+- Roles
+- Mode
+- optionale API
+- optionale Condition
+
 ---
 
 ## 8.2 Führende Struktur von actions

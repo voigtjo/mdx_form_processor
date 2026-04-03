@@ -1,0 +1,225 @@
+<% if (documentDetail.nextFormReference.parseError) { %>
+  <div class="notice-card notice-error">
+    <strong>Formularquelle aktuell nicht lesbar</strong>
+    <p><%= documentDetail.nextFormReference.parseError %></p>
+  </div>
+<% } else if (documentDetail.nextFormReference.parsedForm) { %>
+  <% const masterDataSections = documentDetail.nextFormReference.masterDataSections ?? []; %>
+  <% const linkedFormReferences = documentDetail.nextFormReference.linkedFormReferences ?? []; %>
+  <% const customerMasterSection = masterDataSections.find((section) => section.key === "customer"); %>
+  <% const productMasterSection = masterDataSections.find((section) => section.key === "product"); %>
+  <% const productionBatchReference = linkedFormReferences.find((section) => section.key === "production_batch"); %>
+  <div class="next-form-readonly-stack">
+    <% (documentDetail.nextFormReference.lookupMetaFieldNames ?? []).forEach((fieldName) => { %>
+      <input type="hidden" name="<%= fieldName %>" value="<%= documentDetail.nextFormReference.fieldValues[fieldName] ?? "" %>" />
+    <% }) %>
+    <% documentDetail.nextFormReference.parsedForm.sections.forEach((section) => { %>
+      <article class="subpanel next-form-readonly-section">
+        <div class="panel-header">
+          <h4><%= section.title %></h4>
+          <span class="chip"><%= section.rows.length %> Zeilen</span>
+        </div>
+
+        <% section.rows.forEach((row) => { %>
+          <% const inlineLoadCustomerAction = row.slots.find((slot) => slot.element.name === "load_customer"); %>
+          <% const inlineSuggestMaterialAction = row.slots.find((slot) => slot.element.name === "suggest_material"); %>
+          <% const visibleSlots = row.slots.filter((slot) => !["load_customer", "suggest_material"].includes(slot.element.name)); %>
+          <div class="next-form-readonly-row next-form-columns-<%= Math.min(Math.max(visibleSlots.length, 1), 3) %>">
+            <% row.slots.forEach((slot) => { %>
+              <% const element = slot.element; %>
+              <% const currentValue = documentDetail.nextFormReference.fieldValues[element.name] ?? ""; %>
+              <% const fieldUi = documentDetail.nextFormReference.fieldUi?.[element.name] ?? { controlType: element.controlType, runtimeRole: "derived_readonly", lookupRole: "none", isSubmitRequired: false, isEditable: false, isReadOnly: true, state: "readonly" }; %>
+              <% const actionUi = documentDetail.nextFormReference.actionUi?.[element.name]; %>
+              <% const emptyValueLabel = fieldUi.emptyValueLabel ?? (element.controlType === "select" ? "Noch keine Auswahl" : "Noch kein Wert"); %>
+              <% if (element.kind === "field") { %>
+                <article
+                  class="field-block next-form-readonly-field next-form-type-<%= element.controlType %>"
+                  data-field-name="<%= element.name %>"
+                  data-control-type="<%= fieldUi.controlType %>"
+                  data-control-runtime-role="<%= fieldUi.runtimeRole %>"
+                  data-control-lookup-role="<%= fieldUi.lookupRole %>"
+                  data-field-required="<%= fieldUi.isSubmitRequired ? "true" : "false" %>"
+                  data-field-state="<%= fieldUi.state %>">
+                  <div class="next-form-field-head">
+                    <label class="field-label"><%= element.label ?? element.name %><% if (fieldUi.isSubmitRequired) { %><span class="field-required" aria-hidden="true">*</span><span class="sr-only"> Pflichtfeld</span><% } %></label>
+                    <div class="next-form-field-side">
+                      <% if (element.name === "order_number" && inlineLoadCustomerAction) { %>
+                        <button
+                          type="submit"
+                          class="button-secondary next-form-inline-action"
+                          data-inline-action="load_customer"
+                          data-action-control-type="<%= actionUi?.controlType ?? "action" %>"
+                          data-action-runtime-role="<%= actionUi?.runtimeRole ?? "lookup_trigger" %>"
+                          data-action-lookup-role="<%= actionUi?.lookupRole ?? "trigger" %>"
+                          formaction="/documents/<%= documentDetail.document.id %>/next-form?user=<%= activeUser.key %>&intent=run-action&actionName=load_customer"
+                          hx-post="/documents/<%= documentDetail.document.id %>/next-form?user=<%= activeUser.key %>&intent=run-action&actionName=load_customer"
+                          hx-target="#document-workspace-fragment"
+                          hx-swap="outerHTML show:none"
+                          <%= documentDetail.nextFormReference.actionUi?.load_customer?.isEnabled === false ? "disabled" : "" %>
+                        >Kundendaten laden</button>
+                      <% } %>
+                      <% if (element.name === "material" && inlineSuggestMaterialAction) { %>
+                        <button
+                          type="submit"
+                          class="button-secondary next-form-inline-action"
+                          data-inline-action="suggest_material"
+                          data-action-control-type="<%= actionUi?.controlType ?? "lookup" %>"
+                          data-action-runtime-role="<%= actionUi?.runtimeRole ?? "lookup_trigger" %>"
+                          data-action-lookup-role="<%= actionUi?.lookupRole ?? "trigger" %>"
+                          formaction="/documents/<%= documentDetail.document.id %>/next-form?user=<%= activeUser.key %>&intent=run-action&actionName=suggest_material"
+                          hx-post="/documents/<%= documentDetail.document.id %>/next-form?user=<%= activeUser.key %>&intent=run-action&actionName=suggest_material"
+                          hx-target="#document-workspace-fragment"
+                          hx-swap="outerHTML show:none"
+                          <%= documentDetail.nextFormReference.actionUi?.suggest_material?.isEnabled === false ? "disabled" : "" %>
+                        >Materialvorschlag holen</button>
+                      <% } %>
+                      <div class="next-form-field-badges">
+                      <% if (fieldUi.isSubmitRequired) { %>
+                        <span class="chip">Pflicht</span>
+                      <% } %>
+                      <% if (fieldUi.isReadOnly) { %>
+                        <span class="chip">Read-only</span>
+                      <% } %>
+                      </div>
+                    </div>
+                  </div>
+
+                  <% if (element.name === "order_number") { %>
+                    <% if (fieldUi.isEditable) { %>
+                      <input class="text-input" type="text" name="order_number" value="<%= currentValue %>" placeholder="z. B. O-ca26a72f-1" />
+                    <% } else { %>
+                      <input class="text-input text-input-readonly" type="text" name="order_number" value="<%= currentValue %>" readonly />
+                    <% } %>
+                  <% } else if (element.name === "customer") { %>
+                    <input class="text-input text-input-readonly" type="text" name="customer" value="<%= currentValue %>" placeholder="<%= emptyValueLabel %>" readonly />
+                  <% } else if (element.name === "service_location") { %>
+                    <% if (fieldUi.isEditable) { %>
+                      <textarea class="next-form-runtime-textarea" name="service_location" placeholder="<%= emptyValueLabel %>"><%= currentValue %></textarea>
+                    <% } else { %>
+                      <textarea class="next-form-runtime-textarea is-readonly" name="service_location" placeholder="<%= emptyValueLabel %>" readonly><%= currentValue %></textarea>
+                    <% } %>
+                  <% } else if (element.name === "work_description") { %>
+                    <% if (fieldUi.isEditable) { %>
+                      <textarea class="next-form-runtime-textarea" name="work_description" placeholder="z. B. Batch fuer Montage vorbereiten"><%= currentValue %></textarea>
+                    <% } else { %>
+                      <textarea class="next-form-runtime-textarea is-readonly" name="work_description" readonly><%= currentValue %></textarea>
+                    <% } %>
+                  <% } else if (element.name === "material") { %>
+                    <textarea class="next-form-runtime-textarea is-readonly" name="material" placeholder="<%= emptyValueLabel %>" readonly><%= currentValue %></textarea>
+                  <% } else if (element.name === "labor_hours") { %>
+                    <input class="text-input <%= fieldUi.isEditable ? "" : "text-input-readonly" %>" type="number" step="0.25" min="0" name="labor_hours" value="<%= currentValue %>" placeholder="z. B. 2.5" <%= fieldUi.isEditable ? "" : "readonly" %> />
+                  <% } else if (element.name === "travel_hours") { %>
+                    <input class="text-input <%= fieldUi.isEditable ? "" : "text-input-readonly" %>" type="number" step="0.25" min="0" name="travel_hours" value="<%= currentValue %>" placeholder="z. B. 0.5" <%= fieldUi.isEditable ? "" : "readonly" %> />
+                  <% } else if (element.name === "break_minutes") { %>
+                    <input class="text-input <%= fieldUi.isEditable ? "" : "text-input-readonly" %>" type="number" step="5" min="0" name="break_minutes" value="<%= currentValue %>" placeholder="z. B. 30" <%= fieldUi.isEditable ? "" : "readonly" %> />
+                  <% } else if (element.controlType === "textarea") { %>
+                    <div class="next-form-value next-form-value-textarea next-form-value-readonly"><%= currentValue || emptyValueLabel %></div>
+                  <% } else if (element.controlType === "select") { %>
+                    <div class="next-form-value next-form-value-readonly"><%= currentValue || emptyValueLabel %></div>
+                  <% } else { %>
+                    <div class="next-form-value next-form-value-readonly"><%= currentValue || emptyValueLabel %></div>
+                  <% } %>
+
+                  <% if (fieldUi.helpText) { %>
+                    <p class="field-help"><%= fieldUi.helpText %></p>
+                  <% } %>
+                </article>
+              <% } else { %>
+                <% if (element.name !== "load_customer" && element.name !== "suggest_material") { %>
+                  <article
+                    class="field-block next-form-readonly-field next-form-action-card next-form-type-<%= element.controlType %>"
+                    data-action-name="<%= element.name %>"
+                    data-action-state="<%= actionUi?.isEnabled === false ? "disabled" : "enabled" %>">
+                    <div class="next-form-field-head">
+                      <label class="field-label"><%= element.label ?? element.name %></label>
+                      <span class="chip"><%= element.kind === "action" ? "Action" : "Lookup" %></span>
+                    </div>
+                    <div class="next-form-action-button" aria-disabled="true"><%= element.label ?? element.name %></div>
+                    <div class="next-form-action-meta">
+                      <% if (actionUi?.hint) { %>
+                        <p><%= actionUi.hint %></p>
+                      <% } %>
+                      <% if (actionUi?.isEnabled === false) { %>
+                        <p>Im aktuellen Status nicht verfuegbar.</p>
+                      <% } %>
+                    </div>
+                  </article>
+                <% } %>
+              <% } %>
+            <% }) %>
+          </div>
+        <% }) %>
+
+        <% if (section.title === "Kunde" && customerMasterSection) { %>
+          <article class="subpanel next-form-masterdata-section" data-masterdata-section="customer">
+            <div class="panel-header">
+              <h4><%= customerMasterSection.title %></h4>
+              <span class="chip">Read-only</span>
+            </div>
+            <p class="field-help next-form-masterdata-summary"><%= customerMasterSection.summary %></p>
+            <div class="next-form-masterdata-grid">
+              <% customerMasterSection.entries.forEach((entry) => { %>
+                <article class="field-block next-form-readonly-field next-form-masterdata-entry">
+                  <div class="next-form-field-head">
+                    <label class="field-label"><%= entry.label %></label>
+                    <div class="next-form-field-badges">
+                      <span class="chip">Read-only</span>
+                    </div>
+                  </div>
+                  <div class="next-form-value next-form-value-readonly"><%= entry.value || entry.emptyValueLabel %></div>
+                </article>
+              <% }) %>
+            </div>
+          </article>
+        <% } %>
+
+        <% if (section.title === "Leistung" && productMasterSection) { %>
+          <article class="subpanel next-form-masterdata-section" data-masterdata-section="product">
+            <div class="panel-header">
+              <h4><%= productMasterSection.title %></h4>
+              <span class="chip">Read-only</span>
+            </div>
+            <p class="field-help next-form-masterdata-summary"><%= productMasterSection.summary %></p>
+            <div class="next-form-masterdata-grid">
+              <% productMasterSection.entries.forEach((entry) => { %>
+                <article class="field-block next-form-readonly-field next-form-masterdata-entry">
+                  <div class="next-form-field-head">
+                    <label class="field-label"><%= entry.label %></label>
+                    <div class="next-form-field-badges">
+                      <span class="chip">Read-only</span>
+                    </div>
+                  </div>
+                  <div class="next-form-value next-form-value-readonly"><%= entry.value || entry.emptyValueLabel %></div>
+                </article>
+              <% }) %>
+            </div>
+          </article>
+        <% } %>
+
+        <% if (section.title === "Leistung" && productionBatchReference) { %>
+          <article class="subpanel next-form-masterdata-section" data-form-reference-section="production_batch">
+            <div class="panel-header">
+              <h4><%= productionBatchReference.title %></h4>
+              <span class="chip">Anderes Formular</span>
+            </div>
+            <p class="field-help next-form-masterdata-summary"><%= productionBatchReference.summary %></p>
+            <p class="field-help">Quelle: <strong><%= productionBatchReference.sourceLabel %></strong> · <a class="text-link" href="<%= productionBatchReference.href %>">Dokument öffnen</a></p>
+            <div class="next-form-masterdata-grid">
+              <% productionBatchReference.entries.forEach((entry) => { %>
+                <article class="field-block next-form-readonly-field next-form-masterdata-entry">
+                  <div class="next-form-field-head">
+                    <label class="field-label"><%= entry.label %></label>
+                    <div class="next-form-field-badges">
+                      <span class="chip">Read-only</span>
+                    </div>
+                  </div>
+                  <div class="next-form-value next-form-value-readonly"><%= entry.value || entry.emptyValueLabel %></div>
+                </article>
+              <% }) %>
+            </div>
+          </article>
+        <% } %>
+      </article>
+    <% }) %>
+  </div>
+<% } %>

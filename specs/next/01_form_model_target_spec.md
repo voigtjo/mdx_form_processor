@@ -50,6 +50,59 @@ Ein Control beschreibt:
 
 Controls sind primaer fachliche Formelemente und keine technischen Beschreibungscontainer.
 
+## Aktuell explizit unterstuetzte Control-Typen
+
+Im aktuellen `.form.md`-Stand sind diese Control-Typen explizit vorgesehen:
+
+- `text`
+- `date`
+- `textarea`
+- `number`
+- `select`
+- `action`
+- `lookup`
+
+Diese Control-Typen sind die aktuell erlaubte Teilmenge des neuen Modells. Weitere Typen sollen erst nach expliziter Erweiterung eingefuehrt werden.
+
+## Explizite Control-Semantik
+
+Die aktuelle Semantik trennt bewusst:
+
+- Control-Typ
+- Editierbarkeit
+- Pflichtstatus
+- Lookup-Rolle
+
+Ein Feld kann damit z. B. sein:
+
+- editierbares Eingabefeld
+- editierbares, durch Lookup vorbefuellbares Feld
+- readonly Lookup-Ergebnis
+- readonly Workflow-/Statusfeld
+- readonly Stammdatenanzeige
+
+Wichtig:
+
+- `required` bedeutet fachlich fuer das aktuelle Submit-Gate relevant
+- `readonly` bedeutet nicht bearbeitbar im aktuellen Arbeitskontext
+- Lookup-Ergebnisse duerfen readonly oder editierbar-vorbefuellt sein
+- Stammdatenanzeigen sind eigene readonly Ausgaben und keine normalen Eingabefelder
+
+## Lookup-nahe Rollen
+
+Lookup-nahe Controls werden im Zielbild klar unterschieden:
+
+- Lookup-Eingabe
+  Beispiel: `Auftragsnummer`, `Taetigkeitsbeschreibung`
+- Lookup-Ergebnis
+  Beispiel: `Kunde`, `Material`
+- Lookup-vorbefuelltes editierbares Feld
+  Beispiel: `Einsatzort`
+- readonly Stammdatenanzeige
+  Beispiel: Kunden- oder Produktattribute im Formularumfeld
+
+Die Lookup-Aktion selbst soll lokal beim fachlich passenden Feld erscheinen und nicht als separater technischer Bedienblock.
+
 ## Property-Form
 
 Die Property-Form ist:
@@ -75,15 +128,19 @@ Eine Section:
 - enthaelt Controls, Actions und Layout-Zeilen
 - bildet den primären Leserahmen fuer das Formular
 
-## Journals und wiederholbare Bereiche
+Lookup-Aktionen sollen spaeter direkt im fachlich passenden Feldkontext erscheinen.
+Readonly Stammdaten duerfen im Document als ruhige Form-Nebensektionen sichtbar werden, wenn sie aus denselben Lookup-Ergebnissen abgeleitet werden.
+Ein erster formularuebergreifender Produktpfad darf readonly Werte aus einem anderen Formular im normalen Document Detail einblenden, wenn der Bezug klein, fachlich eindeutig und testbar ist.
 
-Wiederholbare Bereiche bleiben fachliche Formelemente.
+## Journale und Attachments im Zielbild
+
+Journale und Attachments gehoeren im Zielbild nicht in den eigentlichen `.form.md`-Body.
 
 Sie sollen:
 
-- im Formular als fachlicher Bereich erscheinen
-- nicht als technische Sonderarchitektur beschrieben werden
-- denselben Lesefluss wie andere Controls behalten
+- ueber den Header derselben Template-Quelle freigeschaltet werden
+- im Document als eigene Arbeitsbereiche ausserhalb des Formularlayouts erscheinen
+- fachlich sichtbar bleiben, ohne als normale Formularfelder modelliert zu werden
 
 ## Nicht Teil des Zielmodells
 
@@ -101,6 +158,8 @@ Diese Spec korrigiert vor allem:
 - `specs/04_form_mdx_spec.md`
 - `docs/changes/01_form_mdx_change.md`
 - die heute sichtbare Komplexitaet in `src/modules/templates/form-read.ts`
+
+Der Preview-Pfad `/next-form-preview/craftsman-order` kann als Dev-/Debug-Referenz bestehen bleiben, ist aber nicht mehr der fuehrende Produktweg fuer neue Form-Funktionen.
 
 ## In dieser Spec bewusst noch nicht festgelegt
 

@@ -1,10 +1,22 @@
 export type NextFormPropertyMap = Record<string, string | boolean>;
 
+export const nextFormControlTypes = [
+  "text",
+  "date",
+  "textarea",
+  "number",
+  "select",
+  "action",
+  "lookup",
+] as const;
+
+export type NextFormControlType = (typeof nextFormControlTypes)[number];
 export type NextFormElementKind = "field" | "action" | "lookup";
+export type NextFormFieldControlType = Exclude<NextFormControlType, "action" | "lookup">;
 
 export type NextFormElement = {
   kind: NextFormElementKind;
-  controlType: string;
+  controlType: NextFormControlType;
   name: string;
   label?: string;
   properties: NextFormPropertyMap;

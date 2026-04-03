@@ -42,3 +42,34 @@ if (appDialog instanceof HTMLElement) {
     }
   });
 }
+
+document.addEventListener("click", (event) => {
+  const openTrigger = event.target instanceof Element ? event.target.closest("[data-journal-dialog-open]") : null;
+
+  if (openTrigger instanceof HTMLElement) {
+    const dialogId = openTrigger.dataset.journalDialogOpen;
+    const dialog = dialogId ? document.getElementById(dialogId) : null;
+
+    if (dialog instanceof HTMLDialogElement) {
+      dialog.showModal();
+    }
+
+    return;
+  }
+
+  const closeTrigger = event.target instanceof Element ? event.target.closest("[data-journal-dialog-close]") : null;
+
+  if (closeTrigger instanceof HTMLElement) {
+    const dialog = closeTrigger.closest("dialog");
+
+    if (dialog instanceof HTMLDialogElement) {
+      dialog.close();
+    }
+
+    return;
+  }
+
+  if (event.target instanceof HTMLDialogElement && event.target.classList.contains("journal-entry-dialog")) {
+    event.target.close();
+  }
+});

@@ -26,6 +26,7 @@
     "dotenv": "^17.0.0",
     "ejs": "^3.1.10",
     "fastify": "^5.0.0",
+    "htmx.org": "^2.0.8",
     "pg": "^8.16.0"
   },
   "devDependencies": {

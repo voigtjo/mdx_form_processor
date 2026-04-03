@@ -71,10 +71,11 @@ const mapTemplateDetail = (row: TemplateDetailRow): FormTemplateDetail => ({
   updatedAt: row.updated_at.toISOString(),
 });
 
-export const listFormTemplates = async (): Promise<FormTemplate[]> => {
+export const listFormTemplates = async (input?: { includeArchived?: boolean }): Promise<FormTemplate[]> => {
   return withDb(async (client) => {
     const result = await client.query<TemplateRow>(`
       ${templateQuery}
+      ${input?.includeArchived ? "" : "where ft.status <> 'archived'"}
       group by ft.id
       order by ft.name asc, ft.version desc
     `);
@@ -83,7 +84,10 @@ export const listFormTemplates = async (): Promise<FormTemplate[]> => {
   });
 };
 
-export const listFormTemplatesForUser = async (userId: string): Promise<FormTemplate[]> => {
+export const listFormTemplatesForUser = async (
+  userId: string,
+  input?: { includeArchived?: boolean },
+): Promise<FormTemplate[]> => {
   return withDb(async (client) => {
     const result = await client.query<TemplateRow>(
       `
@@ -91,6 +95,7 @@ export const listFormTemplatesForUser = async (userId: string): Promise<FormTemp
       inner join memberships m on m.group_id = ta.group_id and m.rights like '%r%'
       where ta.status = 'active'
         and m.user_id = $1
+        ${input?.includeArchived ? "" : "and ft.status <> 'archived'"}
       group by ft.id
       order by ft.name asc, ft.version desc
       `,

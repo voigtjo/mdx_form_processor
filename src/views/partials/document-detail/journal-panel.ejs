@@ -1,0 +1,184 @@
+<%
+  const journalTimestampKeys = ["at", "created_at", "createdAt", "timestamp", "time", "date"];
+  const journalUserKeys = ["by", "user", "author", "actor", "created_by"];
+  const journalTextKeys = ["text", "entry", "message", "note", "description"];
+  const truncateJournalText = (value, maxLength = 160) => {
+    if (typeof value !== "string") {
+      return "-";
+    }
+
+    const normalized = value.trim();
+
+    if (normalized.length === 0) {
+      return "-";
+    }
+
+    return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3).trimEnd()}...` : normalized;
+  };
+  const pickJournalValue = (entry, keys, fallbackKey) => {
+    for (const key of keys) {
+      const value = entry.values[key];
+
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value;
+      }
+    }
+
+    if (fallbackKey) {
+      const value = entry.values[fallbackKey];
+
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value;
+      }
+    }
+
+    return "-";
+  };
+  const buildJournalRows = (journal) => {
+    const timestampFallbackKey = journal.columns.find((column) => journalTimestampKeys.includes(column.key))?.key;
+    const userFallbackKey = journal.columns.find((column) => journalUserKeys.includes(column.key))?.key;
+    const textFallbackKey = journal.columns.find((column) => journalTextKeys.includes(column.key))?.key ?? journal.columns[0]?.key;
+
+    return journal.entries
+      .map((entry, index) => ({
+        journal,
+        entry,
+        index,
+        timestamp: pickJournalValue(entry, journalTimestampKeys, timestampFallbackKey),
+        by: pickJournalValue(entry, journalUserKeys, userFallbackKey),
+        text: pickJournalValue(entry, journalTextKeys, textFallbackKey),
+      }))
+      .sort((left, right) => {
+        const byTimestamp = right.timestamp.localeCompare(left.timestamp);
+        return byTimestamp !== 0 ? byTimestamp : right.index - left.index;
+      });
+  };
+  const totalJournalEntries = documentDetail.journals.reduce((total, journal) => total + journal.entries.length, 0);
+  const latestJournalEntry = documentDetail.journals
+    .flatMap((journal) => buildJournalRows(journal))
+    .sort((left, right) => {
+      const byTimestamp = right.timestamp.localeCompare(left.timestamp);
+      return byTimestamp !== 0 ? byTimestamp : right.index - left.index;
+    })[0];
+%>
+
+<section class="panel">
+  <div class="panel-header">
+    <h3>Journal</h3>
+    <span class="chip"><%= totalJournalEntries %></span>
+  </div>
+
+  <p class="field-help">
+    <% if (latestJournalEntry) { %>
+      Letzter Eintrag: <strong><%= latestJournalEntry.journal.label %></strong> · <%= truncateJournalText(latestJournalEntry.text, 72) %> · <%= latestJournalEntry.by %>
+    <% } else { %>
+      Noch kein Journal-Eintrag vorhanden.
+    <% } %>
+  </p>
+
+  <% if (journalStatus) { %>
+    <div class="notice-card notice-success">
+      <strong>Journal aktualisiert</strong>
+      <p><%= journalStatus %></p>
+    </div>
+  <% } %>
+
+  <% if (journalError) { %>
+    <div class="notice-card notice-error">
+      <strong>Journal nicht moeglich</strong>
+      <p><%= journalError %></p>
+    </div>
+  <% } %>
+
+  <% if (documentDetail.journals.length === 0) { %>
+    <p>Kein Journal im aktuellen Template definiert.</p>
+  <% } else { %>
+    <div class="journal-panel-stack">
+      <% documentDetail.journals.forEach((journal) => { %>
+        <% const journalRows = buildJournalRows(journal); %>
+        <article class="subpanel">
+          <div class="panel-header">
+            <h4><%= journal.label %></h4>
+            <span class="chip"><%= journal.entries.length %> Eintraege</span>
+          </div>
+
+          <% if (journal.helpText) { %>
+            <p class="field-help"><%= journal.helpText %></p>
+          <% } %>
+
+          <% if (journal.isEditable) { %>
+            <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/journal?user=<%= activeUser.key %>">
+              <input type="hidden" name="journalFieldName" value="<%= journal.name %>" />
+              <label class="field-label" for="journal-entry-<%= journal.name %>">New Entry</label>
+              <textarea id="journal-entry-<%= journal.name %>" name="entryText" rows="3" placeholder="Journal-Eintrag erfassen"></textarea>
+              <button
+                class="button-secondary"
+                type="submit"
+                hx-post="/documents/<%= documentDetail.document.id %>/journal?user=<%= activeUser.key %>"
+                hx-target="#document-journal-fragment"
+                hx-swap="outerHTML"
+              >Add Journal Entry</button>
+            </form>
+          <% } else { %>
+            <p class="field-help"><%= documentDetail.editState.reason ?? "Journal ist im aktuellen Status read-only." %></p>
+          <% } %>
+
+          <div class="panel-divider"></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Zeitpunkt</th>
+                  <th>Von</th>
+                  <th>Eintrag</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% if (journalRows.length === 0) { %>
+                  <tr>
+                    <td colspan="3">Keine Journal-Eintraege vorhanden.</td>
+                  </tr>
+                <% } else { %>
+                  <% journalRows.forEach((row) => { %>
+                    <% const journalDialogId = `journal-entry-dialog-${journal.name}-${row.index}`; %>
+                    <tr>
+                      <td><%= row.timestamp %></td>
+                      <td><%= row.by %></td>
+                      <td class="journal-entry-cell">
+                        <button
+                          class="journal-entry-preview-button"
+                          type="button"
+                          data-journal-dialog-open="<%= journalDialogId %>"
+                        >
+                          <div class="journal-entry-preview"><%= truncateJournalText(row.text) %></div>
+                          <span class="journal-entry-summary-hint">Vollansicht</span>
+                        </button>
+                        <dialog id="<%= journalDialogId %>" class="journal-entry-dialog">
+                          <form class="journal-entry-dialog-card" method="dialog">
+                            <div class="panel-header">
+                              <div>
+                                <h4>Vollansicht</h4>
+                                <p class="field-help"><%= journal.label %></p>
+                              </div>
+                              <button class="button-secondary" type="submit" data-journal-dialog-close>Schliessen</button>
+                            </div>
+                            <div class="journal-entry-full-meta">
+                              <span><strong>Zeitpunkt:</strong> <%= row.timestamp %></span>
+                              <span><strong>Von:</strong> <%= row.by %></span>
+                            </div>
+                            <div class="journal-entry-full-text"><%= row.text %></div>
+                          </form>
+                        </dialog>
+                      </td>
+                    </tr>
+                  <% }) %>
+                <% } %>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      <% }) %>
+    </div>
+  <% } %>
+</section>

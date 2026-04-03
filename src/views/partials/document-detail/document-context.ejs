@@ -1,0 +1,134 @@
+<% if (documentDetail.nextFormReference) { %>
+  <details class="panel panel-collapsible">
+    <summary class="collapsible-summary">
+      <div class="collapsible-summary-copy">
+        <strong>Assignments & Tasks</strong>
+        <span><%= activeAssignments.length %> aktiv<%= assignmentSummary ? " · " + assignmentSummary : "" %><%= leadTask ? " · " + leadTask.title + " (" + leadTask.status + ")" : " · Keine Tasks" %></span>
+      </div>
+      <div class="collapsible-summary-meta">
+        <span><%= openTasks.length %> offen</span>
+        <span><%= documentDetail.tasks.length %> Tasks</span>
+      </div>
+    </summary>
+    <div class="collapsible-body">
+      <div class="grid two-up detail-grid">
+        <div>
+          <h4>Assignments</h4>
+          <% if (documentDetail.assignments.length === 0) { %>
+            <p>Keine Assignments vorhanden.</p>
+          <% } else { %>
+            <ul class="stack-list compact">
+              <% documentDetail.assignments.forEach((assignment) => { %>
+                <% const user = users.find((entry) => entry.id === assignment.userId); %>
+                <li>
+                  <strong><%= user?.displayName ?? assignment.userId %></strong>
+                  <p>Role: <%= assignment.role %> · Active: <%= assignment.active ? "yes" : "no" %></p>
+                </li>
+              <% }) %>
+            </ul>
+          <% } %>
+        </div>
+        <div>
+          <h4>Tasks</h4>
+          <% if (documentDetail.tasks.length === 0) { %>
+            <p>Keine Tasks vorhanden.</p>
+          <% } else { %>
+            <ul class="stack-list compact">
+              <% documentDetail.tasks.forEach((task) => { %>
+                <% const user = users.find((entry) => entry.id === task.userId); %>
+                <li>
+                  <strong><%= task.title %></strong>
+                  <p><%= user?.displayName ?? task.userId %> · <%= task.role %> · <%= task.status %> · <%= task.updatedAt %></p>
+                </li>
+              <% }) %>
+            </ul>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </details>
+<% } else { %>
+  <details class="panel panel-collapsible">
+    <summary class="collapsible-summary">
+      <div class="collapsible-summary-copy">
+        <strong>Document Header</strong>
+        <span><%= documentDetail.document.title %> · <span class="status-pill"><%= documentDetail.document.status %></span> · <%= documentDetail.document.templateName %> · <%= documentDetail.document.workflowTemplateName %></span>
+      </div>
+      <div class="collapsible-summary-meta">
+        <span>Updated <%= documentDetail.document.updatedAt %></span>
+        <span>Created <%= documentDetail.document.createdAt %></span>
+        <a class="text-link" href="/documents?user=<%= activeUser.key %>">Back to Documents</a>
+      </div>
+    </summary>
+    <div class="collapsible-body">
+      <div class="grid two-up detail-grid">
+        <div>
+          <p><strong>Document</strong><br /><%= documentDetail.document.title %></p>
+          <p><strong>Status</strong><br /><span class="status-pill"><%= documentDetail.document.status %></span></p>
+          <p><strong>Updated</strong><br /><%= documentDetail.document.updatedAt %></p>
+        </div>
+        <div>
+          <p><strong>Template</strong><br /><%= documentDetail.document.templateName %> (<%= documentDetail.document.templateKey %>)</p>
+          <p><strong>Workflow</strong><br /><%= documentDetail.document.workflowTemplateName %> (<%= documentDetail.document.workflowTemplateKey %>)</p>
+          <p><strong>Created</strong><br /><%= documentDetail.document.createdAt %></p>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <section class="grid two-up">
+    <details class="panel panel-collapsible">
+      <summary class="collapsible-summary">
+        <div class="collapsible-summary-copy">
+          <strong>Assignments</strong>
+          <span><%= documentDetail.assignments.length %> Eintraege<%= assignmentSummary ? " · " + assignmentSummary : " · Keine aktiven Zuweisungen" %></span>
+        </div>
+        <div class="collapsible-summary-meta">
+          <span><%= activeAssignments.length %> aktiv</span>
+        </div>
+      </summary>
+      <div class="collapsible-body">
+        <% if (documentDetail.assignments.length === 0) { %>
+          <p>Keine Assignments vorhanden.</p>
+        <% } else { %>
+          <ul class="stack-list compact">
+            <% documentDetail.assignments.forEach((assignment) => { %>
+              <% const user = users.find((entry) => entry.id === assignment.userId); %>
+              <li>
+                <strong><%= user?.displayName ?? assignment.userId %></strong>
+                <p>Role: <%= assignment.role %> · Active: <%= assignment.active ? "yes" : "no" %></p>
+              </li>
+            <% }) %>
+          </ul>
+        <% } %>
+      </div>
+    </details>
+
+    <details class="panel panel-collapsible">
+      <summary class="collapsible-summary">
+        <div class="collapsible-summary-copy">
+          <strong>Tasks</strong>
+          <span><%= openTasks.length %> offen<%= leadTask ? " · " + leadTask.title + " (" + leadTask.status + ")" : " · Keine Tasks" %></span>
+        </div>
+        <div class="collapsible-summary-meta">
+          <span><%= documentDetail.tasks.length %> gesamt</span>
+        </div>
+      </summary>
+      <div class="collapsible-body">
+        <% if (documentDetail.tasks.length === 0) { %>
+          <p>Keine Tasks vorhanden.</p>
+        <% } else { %>
+          <ul class="stack-list compact">
+            <% documentDetail.tasks.forEach((task) => { %>
+              <% const user = users.find((entry) => entry.id === task.userId); %>
+              <li>
+                <strong><%= task.title %></strong>
+                <p><%= user?.displayName ?? task.userId %> · <%= task.role %> · <%= task.status %> · <%= task.updatedAt %></p>
+              </li>
+            <% }) %>
+          </ul>
+        <% } %>
+      </div>
+    </details>
+  </section>
+<% } %>

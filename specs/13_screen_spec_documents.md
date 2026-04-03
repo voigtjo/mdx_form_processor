@@ -74,6 +74,18 @@ Im MVP gibt es zwei führende Varianten:
 - **My Documents**
 - **Documents by Template**
 
+## 4.3 Dokumentstart
+
+Der normale Dokumentstart erfolgt aus startbaren Template-Staenden.
+
+Startbar sind:
+
+- publizierte Templates
+- nicht archivierte Templates
+- nur zusammen mit einer publizierten Workflow-Version
+
+Ein gestartetes Document wird danach fest an genau diese Template- und Workflow-Version gebunden.
+
 ### My Documents
 Zeigt alle für den aktuellen User sichtbaren und relevanten Documents.
 
@@ -242,6 +254,12 @@ Der Form-Bereich zeigt das aus dem Template gerenderte Formular des Documents.
 
 - das Formular wird aus der gebundenen Template-Version gerendert
 - Felder sind entsprechend Workflowstatus und Rechtemodell editierbar oder readonly
+- sichtbare Pflichtmarkierungen muessen zum aktuellen Submit-Gate passen
+- nur Felder, die fuer den aktuellen Schritt wirklich erforderlich sind, tragen `*`
+- Lookup-Eingaben, Lookup-Ergebnisse, vorbefuellbare Felder und reine readonly Statusfelder sollen im Rendering klar unterscheidbar sein
+- kleine Lookup-Aktionen sitzen direkt am fachlich passenden Feldkontext
+- readonly Stammdaten duerfen im Formularkontext als eigene ruhige Sektionen erscheinen, z. B. fuer Kunde und Produkt
+- erste readonly Referenzen auf andere Formulare duerfen im normalen Document-Pfad als ruhige Nebensektion erscheinen, wenn sie aus dem aktuellen Formularkontext fachlich eindeutig ableitbar sind
 - normale Nutzer sehen kein MDX
 - normale Nutzer sehen kein Template-JSON
 - normale Nutzer sehen keine technischen Konfigurationsstrukturen
@@ -253,6 +271,12 @@ Im Form-Bereich dürfen Users nur die Felder bearbeiten, die:
 - im aktuellen Status editierbar sind
 - für ihre Rolle zulässig sind
 - nach Rechtemodell bearbeitbar sind
+
+Readonly-Felder bleiben sichtbar, sollen aber ohne unechte Edit-Affordanzen erscheinen.
+Hilfetexte bleiben knapp und werden nur gezeigt, wenn sie fuer die aktuelle Bedienung wirklich helfen.
+Save- und Submit-Teilupdates sollen den Nutzer im relevanten Formularkontext halten und keine unnoetigen Spruenge nach unten ausloesen.
+Ein lookup-vorbefuelltes Feld darf editierbar sein und bleibt nur dann Pflichtfeld, wenn das aktuelle Submit-Gate es wirklich verlangt.
+Readonly Werte aus einem anderen Formular duerfen nur angezeigt werden; sie werden im aktuellen Formular nicht direkt bearbeitet.
 
 ## 12.4 Nicht Ziel des Form-Bereichs
 
@@ -277,12 +301,16 @@ Mindestens sichtbar:
 - Liste vorhandener Attachments
 - Dateiname
 - optional Dateityp, Größe, Upload-Zeit
+- kompakte Summary mit letztem sichtbaren Attachment und Zähler
+- klare Verfügbarkeitsaussage, ob Upload im aktuellen Kontext erlaubt ist
 
 ## 13.3 Regeln
 
 - Attachments gehören zum Document
 - Attachments werden nicht als normale Formularfelder gespeichert
 - der Bereich ist arbeitsrelevant und Teil der Standard-UI
+- Upload ist nur mit aktiver Editor-Zuweisung, aktivierter Template-Freigabe und vor den Status `submitted`, `approved`, `rejected` und `archived` erlaubt
+- wenn Upload nicht erlaubt ist, zeigt der Bereich den Grund ruhig und direkt im Panel
 
 ## 13.4 Nicht Ziel des Attachments-Bereichs
 
@@ -304,15 +332,20 @@ Der Journal-Bereich zeigt und bearbeitet strukturierte wiederholbare Inhalte des
 Mindestens sichtbar:
 
 - Journal-Name
-- Journal-Spalten
-- vorhandene Zeilen
+- vorhandene Zeilen als Tabelle
+- Reihenfolge neuester Eintrag oben
+- Spalten fuer Zeitpunkt, Benutzer und Eintrag
 - Möglichkeit zum Hinzufügen, Bearbeiten oder Anzeigen, sofern zulässig
+- gekürzte Vorschau des Journaltexts in der Tabellenansicht
+- Journal nutzt die verfügbare Breite des Dokumentcontainers als vollbreiter Bereich
+- per Klick erreichbare Vollansicht eines Eintrags in einem ruhigen modalen Dialog
 
 ## 14.3 Regeln
 
 - Journal gehört zum normalen Arbeitskontext
 - Journal ist kein Admin-/Template-Konzept, sondern Document-Laufzeitinhalt
 - die Bearbeitbarkeit folgt Workflowstatus, Feldregel und Berechtigungsmodell
+- die Tabellenansicht bleibt kompakt; voller Text wird nur im modalen Dialog gezeigt
 
 ---
 
@@ -425,6 +458,19 @@ Form Actions sind fachliche Formularaktionen, die im Kontext des konkreten Docum
 - sie verwenden `operationRef`
 - sie dürfen nicht das Workflow-Modell ersetzen
 - sie dürfen Daten aus Formular und Kontext lesen und in definierte Zielbereiche schreiben
+
+## 18.4 SSR- und HTMX-Update-Regeln im Document Detail
+
+Die Document-Detail-Seite bleibt vollständig serverseitig renderbar.
+Wenn HTMX eingesetzt wird, gelten für konsistente Teilupdates diese Regeln:
+
+- Workflow Actions aktualisieren Formular-/Workflow-Bereich sowie Header und History
+- Save Next Form Values aktualisiert Formular-/Workflow-Bereich sowie Header und History
+- Form Lookups aktualisieren nur den Formular-/Workflow-Bereich
+- Journal aktualisiert sein eigenes Panel sowie Header und History, wenn ein Eintrag gespeichert wurde
+- Attachments aktualisieren ihr eigenes Panel sowie die History, wenn ein Upload gespeichert wurde
+
+Ziel ist, dass nach einer Aktion keine fachlich veralteten Nachbarbereiche sichtbar bleiben.
 
 ---
 

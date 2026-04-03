@@ -51,6 +51,16 @@ Für alle Flows gelten diese Grundregeln:
 5. Alle Schritte müssen später testbar und reproduzierbar sein.
 6. JSON, MDX und technische Details sind nicht Teil normaler Arbeitsflows.
 
+## 3.1 Regel fuer serverseitige Teilupdates
+
+Wenn im Document Detail HTMX genutzt wird, bleiben die Flows serverseitig gerendert.
+Teilupdates muessen alle fachlich betroffenen Bereiche gemeinsam aktualisieren:
+
+- Save und Workflow-Statuswechsel ziehen Header und History mit
+- Formular-Lookups bleiben auf den Formular-/Workflow-Bereich begrenzt
+- Journal- und Attachment-Aktionen aktualisieren ihr eigenes Panel und zusaetzlich nur die wirklich betroffenen Nachbarbereiche
+- Form-Saves, Submits und Lookups sollen den Nutzer im laufenden Formularbereich halten und keine unnoetigen Spruenge in tiefere Seitenbereiche ausloesen
+
 ---
 
 ## 4. Beteiligte Hauptrollen in den Flows
@@ -243,6 +253,7 @@ Ein neues Document wird aus einem publizierten Template erzeugt.
 ## 10.3 Ausgangslage
 
 - ein Form Template ist `published`
+- die zugeordnete Workflow-Version ist `published`
 - der User darf das Template sehen
 - der User befindet sich z. B. in `My Templates`
 
@@ -261,6 +272,7 @@ Ein neues Document wird aus einem publizierten Template erzeugt.
 - ein neues Document existiert
 - das Document ist an Template- und Workflow-Version gebunden
 - das Document erscheint in relevanten Listen
+- spaetere Aenderungen an neueren Template- oder Workflow-Versionen wirken nicht rueckwirkend auf dieses Document
 
 ---
 
@@ -362,6 +374,9 @@ Ein Editor bearbeitet das Formular und speichert Zwischenstände.
 - Attachments sind aktualisiert
 - Audit enthält `saved`
 - der Workflowstatus bleibt oder wechselt gemäß Workflowregel, z. B. nach `progressed`
+- sichtbare Pflichtmarkierungen und Readonly-Zustaende bleiben am aktuellen Schritt und Submit-Gate ausgerichtet
+- lookup-vorbefuellte Felder duerfen editierbar bleiben, ohne dadurch automatisch Pflichtfelder zu werden
+- readonly Referenzen auf andere Formulare duerfen im laufenden Document sichtbar werden, wenn sie sich fachlich aus den aktuellen Formularwerten ergeben
 
 ---
 
@@ -589,6 +604,7 @@ Ein Nutzer ergänzt einen Nachweis als Datei.
 - das Document ist sichtbar
 - der Attachment-Bereich ist sichtbar
 - Upload ist zulässig
+- der Bereich zeigt klar, ob Upload im aktuellen Kontext erlaubt ist und warum nicht, falls er gesperrt ist
 
 ## 20.4 Ablauf
 
@@ -597,6 +613,7 @@ Ein Nutzer ergänzt einen Nachweis als Datei.
 3. Nutzer lädt Datei hoch
 4. System speichert Datei und Metadaten
 5. die Datei erscheint in der Attachment-Liste
+6. Summary und Zähler im Attachment-Bereich sind aktualisiert
 
 ## 20.5 Ergebnis
 
@@ -619,17 +636,19 @@ Ein Nutzer ergänzt oder bearbeitet strukturierte wiederholbare Journaldaten.
 
 - das Journal-Feld ist sichtbar
 - das Journal ist im aktuellen Status editierbar
+- vorhandene Einträge werden als vollbreite Tabelle mit neuestem Eintrag oben dargestellt
 
 ## 21.4 Ablauf
 
 1. Nutzer öffnet `Document Detail`
-2. Nutzer ergänzt oder bearbeitet Journal-Zeilen
-3. Nutzer speichert das Document
+2. Nutzer ergänzt einen neuen Journal-Eintrag
+3. der neue Eintrag erscheint oben in der Tabelle
+4. bei Bedarf öffnet Nutzer die Vollansicht des Eintrags in einem modalen Dialog
 
 ## 21.5 Ergebnis
 
 - das Journal im `dataJson` ist aktualisiert
-- Audit enthält mindestens `saved`
+- Audit enthält mindestens `journal_added`
 
 ---
 

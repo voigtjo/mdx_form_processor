@@ -21,4 +21,10 @@ export const registerViewPlugins = async (app: FastifyInstance): Promise<void> =
     root: path.join(srcDir, "public"),
     prefix: "/public/",
   });
+
+  await app.register(fastifyStatic, {
+    root: path.join(projectRoot, "node_modules", "htmx.org", "dist"),
+    prefix: "/public/vendor/htmx/",
+    decorateReply: false,
+  });
 };

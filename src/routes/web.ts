@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyError } from "fastify";
+import ejs from "ejs";
 import type { Document, FormTemplate, User } from "../types/domain.js";
 import {
   createAdminGroupDetailViewModel,
@@ -26,6 +27,7 @@ import { createMembership } from "../modules/memberships/create.js";
 import { removeMembership } from "../modules/memberships/remove.js";
 import { approveDocumentForUser } from "../modules/documents/approve.js";
 import { archiveDocumentForUser } from "../modules/documents/archive.js";
+import { runDocumentNextFormActionForUser, saveDocumentNextFormValuesForUser } from "../modules/documents/next-form.js";
 import { rejectDocumentForUser } from "../modules/documents/reject.js";
 import { saveDocumentValuesForUser } from "../modules/documents/save.js";
 import { startDocumentForUser } from "../modules/documents/start.js";
@@ -34,10 +36,22 @@ import { addJournalEntryForUser } from "../modules/journal/add.js";
 import { getActiveUser } from "../services/app-context.js";
 import { createTemplateDraft } from "../modules/templates/create.js";
 import { createTemplateAssignment, removeTemplateAssignment } from "../modules/templates/assign.js";
+import {
+  archiveReferenceTemplateFamily,
+  publishReferenceTemplateVersion,
+  saveReferenceTemplateDraft,
+  unpublishReferenceTemplateVersion,
+} from "../modules/templates/lifecycle.js";
 import { createUser } from "../modules/users/create.js";
 import { listUsers } from "../modules/users/read.js";
 import { updateUser } from "../modules/users/update.js";
 import { createWorkflowDraft } from "../modules/workflows/create.js";
+import {
+  archiveWorkflowVersion,
+  publishWorkflowVersion,
+  unpublishWorkflowVersion,
+} from "../modules/workflows/lifecycle.js";
+import { saveWorkflowDraftSource } from "../modules/workflows/source.js";
 
 type UserQuery = {
   user?: string;
@@ -59,11 +73,15 @@ type UserQuery = {
   rejectStatus?: string;
   archiveError?: string;
   archiveStatus?: string;
+  nextFormError?: string;
+  nextFormStatus?: string;
   uploadError?: string;
   uploadStatus?: string;
   dialogType?: "error" | "info";
   dialogTitle?: string;
   dialogMessage?: string;
+  intent?: string;
+  actionName?: string;
 };
 
 const query = (request: FastifyRequest): UserQuery => request.query as UserQuery;
@@ -85,6 +103,8 @@ const rejectErrorValue = (request: FastifyRequest): string | undefined => query(
 const rejectStatusValue = (request: FastifyRequest): string | undefined => query(request).rejectStatus;
 const archiveErrorValue = (request: FastifyRequest): string | undefined => query(request).archiveError;
 const archiveStatusValue = (request: FastifyRequest): string | undefined => query(request).archiveStatus;
+const nextFormErrorValue = (request: FastifyRequest): string | undefined => query(request).nextFormError;
+const nextFormStatusValue = (request: FastifyRequest): string | undefined => query(request).nextFormStatus;
 const uploadErrorValue = (request: FastifyRequest): string | undefined => query(request).uploadError;
 const uploadStatusValue = (request: FastifyRequest): string | undefined => query(request).uploadStatus;
 const dialogTypeValue = (request: FastifyRequest): UserQuery["dialogType"] => query(request).dialogType;
@@ -101,6 +121,246 @@ const dialogState = (request: FastifyRequest) => {
   }
 
   return { type, title, message };
+};
+
+const viewsRoot = path.join(process.cwd(), "src", "views");
+
+const isHtmxRequest = (request: FastifyRequest): boolean => request.headers["hx-request"] === "true";
+
+type DocumentFeedbackState = {
+  saveError: string | undefined;
+  saveStatus: string | undefined;
+  journalError: string | undefined;
+  journalStatus: string | undefined;
+  submitError: string | undefined;
+  submitStatus: string | undefined;
+  approveError: string | undefined;
+  approveStatus: string | undefined;
+  rejectError: string | undefined;
+  rejectStatus: string | undefined;
+  archiveError: string | undefined;
+  archiveStatus: string | undefined;
+  nextFormError: string | undefined;
+  nextFormStatus: string | undefined;
+  uploadError: string | undefined;
+  uploadStatus: string | undefined;
+};
+
+type DocumentRenderModel = Awaited<ReturnType<typeof createDocumentDetailViewModel>>;
+
+const buildDocumentFeedbackStateFromRequest = (request: FastifyRequest): DocumentFeedbackState => ({
+  saveError: saveErrorValue(request),
+  saveStatus: saveStatusValue(request),
+  journalError: journalErrorValue(request),
+  journalStatus: journalStatusValue(request),
+  submitError: submitErrorValue(request),
+  submitStatus: submitStatusValue(request),
+  approveError: approveErrorValue(request),
+  approveStatus: approveStatusValue(request),
+  rejectError: rejectErrorValue(request),
+  rejectStatus: rejectStatusValue(request),
+  archiveError: archiveErrorValue(request),
+  archiveStatus: archiveStatusValue(request),
+  nextFormError: nextFormErrorValue(request),
+  nextFormStatus: nextFormStatusValue(request),
+  uploadError: uploadErrorValue(request),
+  uploadStatus: uploadStatusValue(request),
+});
+
+const renderEjsTemplate = async (templatePath: string, data: Record<string, unknown>): Promise<string> => {
+  return ejs.renderFile(path.join(viewsRoot, templatePath), data, { async: true }) as Promise<string>;
+};
+
+const buildDocumentFragmentLocals = (viewModel: NonNullable<DocumentRenderModel> & DocumentFeedbackState) => {
+  const assignmentSummary = viewModel.documentDetail.assignments
+    .slice(0, 2)
+    .map((assignment) => {
+      const user = viewModel.users.find((entry) => entry.id === assignment.userId);
+      return `${user?.displayName ?? assignment.userId} (${assignment.role})`;
+    })
+    .join(", ");
+  const activeAssignments = viewModel.documentDetail.assignments.filter((assignment) => assignment.active);
+  const activeApproverNames = viewModel.documentDetail.assignments
+    .filter((assignment) => assignment.active && assignment.role === "approver")
+    .map((assignment) => viewModel.users.find((entry) => entry.id === assignment.userId)?.displayName ?? assignment.userId);
+  const workflowStepsForHeader = ["created", "submitted", "approved"];
+  let nextStepLabel = "Kein weiterer direkter Schritt fuer den aktuellen User.";
+
+  if (viewModel.documentDetail.submitState.isAvailable) {
+    nextStepLabel = "Naechster Schritt: Submit";
+  }
+
+  if (viewModel.documentDetail.approveState.isAvailable || viewModel.documentDetail.rejectState.isAvailable) {
+    nextStepLabel = "Naechster Schritt: Approve oder Reject";
+  }
+
+  if (
+    !viewModel.documentDetail.approveState.isAvailable &&
+    !viewModel.documentDetail.rejectState.isAvailable &&
+    viewModel.documentDetail.document.status === "submitted" &&
+    activeApproverNames.length > 0
+  ) {
+    nextStepLabel = `Naechster Schritt: Approve oder Reject durch ${activeApproverNames.join(", ")}`;
+  }
+
+  return {
+    ...viewModel,
+    assignmentSummary,
+    activeAssignments,
+    activeApproverNames,
+    workflowStepsForHeader,
+    nextStepLabel,
+    latestAuditEvent: viewModel.documentDetail.auditEvents.at(-1),
+  };
+};
+
+const renderFragmentShell = (
+  tagName: "section" | "div",
+  fragmentId: string,
+  fragmentName: string,
+  html: string,
+  options?: { oob?: boolean },
+): string => {
+  const oobAttribute = options?.oob ? ` hx-swap-oob="outerHTML"` : "";
+  return `<${tagName} id="${fragmentId}" data-fragment="${fragmentName}"${oobAttribute}>${html}</${tagName}>`;
+};
+
+const renderDocumentHeaderFragment = async (
+  viewModel: NonNullable<DocumentRenderModel> & DocumentFeedbackState,
+  options?: { oob?: boolean },
+): Promise<string> => {
+  const locals = buildDocumentFragmentLocals(viewModel);
+  const headerHtml = await renderEjsTemplate("partials/document-detail/document-header.ejs", {
+    documentDetail: viewModel.documentDetail,
+    activeUser: viewModel.activeUser,
+    users: viewModel.users,
+    assignmentSummary: locals.assignmentSummary,
+    activeAssignments: locals.activeAssignments,
+    workflowStepsForHeader: locals.workflowStepsForHeader,
+    nextStepLabel: locals.nextStepLabel,
+  });
+
+  return renderFragmentShell("section", "document-header-fragment", "document-header", headerHtml, options);
+};
+
+const renderDocumentHistoryFragment = async (
+  viewModel: NonNullable<DocumentRenderModel> & DocumentFeedbackState,
+  options?: { oob?: boolean },
+): Promise<string> => {
+  const locals = buildDocumentFragmentLocals(viewModel);
+  const historyHtml = await renderEjsTemplate("partials/document-detail/history-panel.ejs", {
+    documentDetail: viewModel.documentDetail,
+    users: viewModel.users,
+    latestAuditEvent: locals.latestAuditEvent,
+  });
+
+  return renderFragmentShell("section", "document-history-fragment", "document-history", historyHtml, options);
+};
+
+const renderDocumentWorkflowZoneFragment = async (
+  viewModel: NonNullable<DocumentRenderModel> & DocumentFeedbackState,
+  options?: { oob?: boolean },
+): Promise<string> => {
+  const locals = buildDocumentFragmentLocals(viewModel);
+  const workflowZoneHtml = await renderEjsTemplate("partials/document-detail/next-form-workflow-zone.ejs", {
+    documentDetail: viewModel.documentDetail,
+    activeUser: viewModel.activeUser,
+    nextFormStatus: viewModel.nextFormStatus,
+    nextFormError: viewModel.nextFormError,
+    submitStatus: viewModel.submitStatus,
+    submitError: viewModel.submitError,
+    approveStatus: viewModel.approveStatus,
+    approveError: viewModel.approveError,
+    rejectStatus: viewModel.rejectStatus,
+    rejectError: viewModel.rejectError,
+    archiveStatus: viewModel.archiveStatus,
+    archiveError: viewModel.archiveError,
+    activeApproverNames: locals.activeApproverNames,
+  });
+
+  return renderFragmentShell("div", "document-workflow-zone-fragment", "document-workflow-zone", workflowZoneHtml, options);
+};
+
+const renderDocumentWorkspaceFragment = async (
+  viewModel: NonNullable<DocumentRenderModel> & DocumentFeedbackState,
+  options?: { includeHeaderOob?: boolean; includeHistoryOob?: boolean },
+): Promise<string> => {
+  const [workflowZoneHtml, formBodyHtml, headerFragment, historyFragment] = await Promise.all([
+    renderDocumentWorkflowZoneFragment(viewModel),
+    renderEjsTemplate("partials/document-detail/next-form-form-body.ejs", {
+      documentDetail: viewModel.documentDetail,
+      activeUser: viewModel.activeUser,
+    }),
+    options?.includeHeaderOob ? renderDocumentHeaderFragment(viewModel, { oob: true }) : Promise.resolve(""),
+    options?.includeHistoryOob ? renderDocumentHistoryFragment(viewModel, { oob: true }) : Promise.resolve(""),
+  ]);
+
+  const workspaceHtml = await renderEjsTemplate("partials/document-detail/next-form-workspace.ejs", {
+    documentDetail: viewModel.documentDetail,
+    activeUser: viewModel.activeUser,
+    users: viewModel.users,
+    nextFormStatus: viewModel.nextFormStatus,
+    nextFormError: viewModel.nextFormError,
+    submitStatus: viewModel.submitStatus,
+    submitError: viewModel.submitError,
+    approveStatus: viewModel.approveStatus,
+    approveError: viewModel.approveError,
+    rejectStatus: viewModel.rejectStatus,
+    rejectError: viewModel.rejectError,
+    archiveStatus: viewModel.archiveStatus,
+    archiveError: viewModel.archiveError,
+    workflowZoneHtml,
+    formBodyHtml,
+  });
+
+  return [
+    renderFragmentShell("section", "document-workspace-fragment", "document-workspace", workspaceHtml),
+    headerFragment,
+    historyFragment,
+  ].join("");
+};
+
+const renderDocumentJournalFragment = async (
+  viewModel: NonNullable<DocumentRenderModel> & DocumentFeedbackState,
+  options?: { includeHeaderOob?: boolean; includeHistoryOob?: boolean },
+): Promise<string> => {
+  const journalHtml = await renderEjsTemplate("partials/document-detail/journal-panel.ejs", {
+    documentDetail: viewModel.documentDetail,
+    activeUser: viewModel.activeUser,
+    journalStatus: viewModel.journalStatus,
+    journalError: viewModel.journalError,
+  });
+
+  const [headerFragment, historyFragment] = await Promise.all([
+    options?.includeHeaderOob ? renderDocumentHeaderFragment(viewModel, { oob: true }) : Promise.resolve(""),
+    options?.includeHistoryOob ? renderDocumentHistoryFragment(viewModel, { oob: true }) : Promise.resolve(""),
+  ]);
+
+  return [
+    renderFragmentShell("section", "document-journal-fragment", "document-journal", journalHtml),
+    headerFragment,
+    historyFragment,
+  ].join("");
+};
+
+const renderDocumentAttachmentsFragment = async (
+  viewModel: NonNullable<DocumentRenderModel> & DocumentFeedbackState,
+  options?: { includeHistoryOob?: boolean },
+): Promise<string> => {
+  const attachmentsHtml = await renderEjsTemplate("partials/document-detail/attachments-panel.ejs", {
+    documentDetail: viewModel.documentDetail,
+    activeUser: viewModel.activeUser,
+    users: viewModel.users,
+    uploadStatus: viewModel.uploadStatus,
+    uploadError: viewModel.uploadError,
+  });
+
+  const historyFragment = options?.includeHistoryOob ? await renderDocumentHistoryFragment(viewModel, { oob: true }) : "";
+
+  return [
+    renderFragmentShell("section", "document-attachments-fragment", "document-attachments", attachmentsHtml),
+    historyFragment,
+  ].join("");
 };
 
 const withDialog = async (request: FastifyRequest, input: Record<string, unknown>) => {
@@ -248,7 +508,25 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     );
   });
 
-  app.post<{ Body: { source?: string } }>("/next-form-preview/craftsman-order", async (request, reply) => {
+  app.post<{
+    Body: {
+      source?: string;
+      intent?: string;
+      actionName?: string;
+      order_number?: string;
+      customer?: string;
+      service_location?: string;
+      customer_master_id?: string;
+      customer_master_status?: string;
+      customer_order_status?: string;
+      customer_order_created_at?: string;
+      work_description?: string;
+      material?: string;
+      product_master_id?: string;
+      product_master_type?: string;
+      product_master_status?: string;
+    };
+  }>("/next-form-preview/craftsman-order", async (request, reply) => {
     return reply.view(
       "pages/next-form-preview.ejs",
       await withDialog(
@@ -256,6 +534,22 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         await createNextFormPreviewViewModel({
           userKey: queryValue(request),
           sourceText: request.body.source,
+          intent: request.body.intent,
+          actionName: request.body.actionName,
+          fieldValues: {
+            order_number: request.body.order_number,
+            customer: request.body.customer,
+            service_location: request.body.service_location,
+            customer_master_id: request.body.customer_master_id,
+            customer_master_status: request.body.customer_master_status,
+            customer_order_status: request.body.customer_order_status,
+            customer_order_created_at: request.body.customer_order_created_at,
+            work_description: request.body.work_description,
+            material: request.body.material,
+            product_master_id: request.body.product_master_id,
+            product_master_type: request.body.product_master_type,
+            product_master_status: request.body.product_master_status,
+          },
         }),
       ),
     );
@@ -319,6 +613,93 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     return reply.view("pages/template-detail.ejs", await withDialog(request, viewModel));
   });
 
+  app.post<{
+    Body: {
+      source?: string;
+      intent?: string;
+    };
+  }>("/templates/:id/source", async (request, reply) => {
+    const params = request.params as { id: string };
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const sourceText = request.body?.source ?? "";
+    const intent = request.body?.intent ?? "save_draft";
+
+    try {
+      const result = intent === "publish"
+        ? await publishReferenceTemplateVersion({
+            templateId: params.id,
+            sourceText,
+          })
+        : intent === "unpublish"
+          ? await unpublishReferenceTemplateVersion({
+              templateId: params.id,
+            })
+          : intent === "archive"
+            ? await archiveReferenceTemplateFamily({
+                templateId: params.id,
+              })
+            : await saveReferenceTemplateDraft({
+                templateId: params.id,
+                sourceText,
+              });
+
+      const dialogTitle =
+        intent === "publish"
+          ? "Template publiziert"
+          : intent === "unpublish"
+            ? "Template unveroeffentlicht"
+            : intent === "archive"
+              ? "Template archiviert"
+              : "Draft gespeichert";
+      const dialogMessage =
+        intent === "publish"
+          ? `Version v${result.version} wurde als publizierte Template-Version bereitgestellt.`
+          : intent === "unpublish"
+            ? `Version v${result.version} ist nicht mehr fuer neue Dokumentstarts freigegeben.`
+            : intent === "archive"
+              ? "Die Template-Version wurde aus den normalen Standarduebersichten herausgenommen."
+              : `Draft-Stand v${result.version} wurde gespeichert.`;
+
+      return reply.redirect(
+        buildDialogRedirect(`/templates/${result.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: dialogTitle,
+          message: dialogMessage,
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die Template-Quelle konnte nicht verarbeitet werden.";
+      const viewModel = await createTemplateDetailViewModel(queryValue(request), params.id, {
+        sourceText,
+      });
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/template-not-found.ejs", await withDialog(request, {
+          title: "Template Not Found",
+          ...(await createBaseViewModel("templates", queryValue(request))),
+        }));
+      }
+
+      return reply.code(400).view("pages/template-detail.ejs", {
+        ...viewModel,
+        appDialog: {
+          type: "error" as const,
+          title:
+            intent === "publish"
+              ? "Publish fehlgeschlagen"
+              : intent === "unpublish"
+                ? "Unpublish fehlgeschlagen"
+                : intent === "archive"
+                  ? "Archive fehlgeschlagen"
+                  : "Save Draft fehlgeschlagen",
+          message,
+        },
+      });
+    }
+  });
+
   app.get("/workflows", async (request, reply) => {
     return renderPage(request, reply, "workflows", "workflows", "Workflows");
   });
@@ -370,6 +751,90 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     return reply.view("pages/workflow-detail.ejs", await withDialog(request, viewModel));
+  });
+
+  app.post<{
+    Body: {
+      source?: string;
+      intent?: string;
+    };
+  }>("/workflows/:id/source", async (request, reply) => {
+    const params = request.params as { id: string };
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const sourceText = request.body?.source ?? "";
+    const intent = request.body?.intent ?? "save_draft";
+
+    try {
+      const result = intent === "publish"
+        ? await publishWorkflowVersion({
+            workflowId: params.id,
+            sourceText,
+          })
+        : intent === "unpublish"
+          ? await unpublishWorkflowVersion({
+              workflowId: params.id,
+            })
+          : intent === "archive"
+            ? await archiveWorkflowVersion({
+                workflowId: params.id,
+              })
+            : await saveWorkflowDraftSource({
+                workflowId: params.id,
+                sourceText,
+              });
+
+      return reply.redirect(
+        buildDialogRedirect(`/workflows/${result.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title:
+            intent === "publish"
+              ? "Workflow publiziert"
+              : intent === "unpublish"
+                ? "Workflow unveroeffentlicht"
+                : intent === "archive"
+                  ? "Workflow archiviert"
+                  : "Draft gespeichert",
+          message:
+            intent === "publish"
+              ? `Workflow-Version v${result.version} wurde publiziert.`
+              : intent === "unpublish"
+                ? `Workflow-Version v${result.version} ist nicht mehr fuer neue publizierte Nutzungen freigegeben.`
+                : intent === "archive"
+                  ? `Workflow-Version v${result.version} wurde aus den normalen Standarduebersichten herausgenommen.`
+                  : `Workflow-Draft v${result.version} wurde gespeichert.`,
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die Workflow-Quelle konnte nicht verarbeitet werden.";
+      const viewModel = await createWorkflowDetailViewModel(queryValue(request), params.id, {
+        sourceText,
+      });
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/workflow-not-found.ejs", await withDialog(request, {
+          title: "Workflow Not Found",
+          ...(await createBaseViewModel("workflows", queryValue(request))),
+        }));
+      }
+
+      return reply.code(400).view("pages/workflow-detail.ejs", {
+        ...viewModel,
+        appDialog: {
+          type: "error" as const,
+          title:
+            intent === "publish"
+              ? "Publish fehlgeschlagen"
+              : intent === "unpublish"
+                ? "Unpublish fehlgeschlagen"
+                : intent === "archive"
+                  ? "Archive fehlgeschlagen"
+                  : "Save Draft fehlgeschlagen",
+          message,
+        },
+      });
+    }
   });
 
   app.get("/documents", async (request, reply) => {
@@ -736,7 +1201,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
     if (!result.ok) {
       return reply.redirect(
-        `/documents?user=${encodeURIComponent(activeUser.key)}&startError=${encodeURIComponent("Template ist nicht sichtbar oder nicht startbar.")}`,
+        `/documents?user=${encodeURIComponent(activeUser.key)}&startError=${encodeURIComponent("Template ist nicht fuer neue Dokumentstarts freigegeben. Startbar sind nur publizierte, nicht archivierte Template-Staende mit publiziertem Workflow.")}`,
       );
     }
 
@@ -769,9 +1234,219 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       rejectStatus: rejectStatusValue(request),
       archiveError: archiveErrorValue(request),
       archiveStatus: archiveStatusValue(request),
+      nextFormError: nextFormErrorValue(request),
+      nextFormStatus: nextFormStatusValue(request),
       uploadError: uploadErrorValue(request),
       uploadStatus: uploadStatusValue(request),
     }));
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: {
+      intent?: string;
+      actionName?: string;
+      order_number?: string;
+      customer?: string;
+      service_location?: string;
+      customer_master_id?: string;
+      customer_master_status?: string;
+      customer_order_status?: string;
+      customer_order_created_at?: string;
+      work_description?: string;
+      material?: string;
+      product_master_id?: string;
+      product_master_type?: string;
+      product_master_status?: string;
+      labor_hours?: string;
+      travel_hours?: string;
+      break_minutes?: string;
+    };
+  }>("/documents/:id/next-form", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const nextFormIntent = request.body.intent ?? query(request).intent;
+    const nextFormActionName = request.body.actionName ?? query(request).actionName;
+    const nextFormFieldValues = {
+      order_number: request.body.order_number,
+      customer: request.body.customer,
+      service_location: request.body.service_location,
+      customer_master_id: request.body.customer_master_id,
+      customer_master_status: request.body.customer_master_status,
+      customer_order_status: request.body.customer_order_status,
+      customer_order_created_at: request.body.customer_order_created_at,
+      work_description: request.body.work_description,
+      material: request.body.material,
+      product_master_id: request.body.product_master_id,
+      product_master_type: request.body.product_master_type,
+      product_master_status: request.body.product_master_status,
+      labor_hours: request.body.labor_hours,
+      travel_hours: request.body.travel_hours,
+      break_minutes: request.body.break_minutes,
+    };
+
+    if (nextFormIntent === "run-action") {
+      const result = await runDocumentNextFormActionForUser({
+        documentId: request.params.id,
+        userId: activeUser.id,
+        actionName: nextFormActionName ?? "",
+        submittedValues: nextFormFieldValues,
+      });
+
+      if (!result.ok && result.reason === "document_not_visible") {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: request.params.id,
+        });
+      }
+
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id, {
+        nextFormFieldValues: result.ok ? result.fieldValues : nextFormFieldValues,
+      });
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: request.params.id,
+        });
+      }
+
+      const responseModel = {
+        ...viewModel,
+        saveError: saveErrorValue(request),
+        saveStatus: saveStatusValue(request),
+        journalError: journalErrorValue(request),
+        journalStatus: journalStatusValue(request),
+        submitError: submitErrorValue(request),
+        submitStatus: submitStatusValue(request),
+        approveError: approveErrorValue(request),
+        approveStatus: approveStatusValue(request),
+        rejectError: rejectErrorValue(request),
+        rejectStatus: rejectStatusValue(request),
+        archiveError: archiveErrorValue(request),
+        archiveStatus: archiveStatusValue(request),
+        nextFormStatus:
+          result.ok && result.actionState.type === "info"
+            ? `${result.actionState.title}: ${result.actionState.message}`
+            : undefined,
+        nextFormError: !result.ok || result.actionState.type === "error"
+          ? (result.ok ? `${result.actionState.title}: ${result.actionState.message}` : result.details)
+          : undefined,
+        uploadError: uploadErrorValue(request),
+        uploadStatus: uploadStatusValue(request),
+      };
+
+      if (isHtmxRequest(request)) {
+        return reply.type("text/html").send(await renderDocumentWorkspaceFragment(responseModel));
+      }
+
+      return reply.view("pages/document-detail.ejs", await withDialog(request, responseModel));
+    }
+
+    const saveResult = await saveDocumentNextFormValuesForUser({
+      documentId: request.params.id,
+      userId: activeUser.id,
+      submittedValues: nextFormFieldValues,
+    });
+
+    if (!saveResult.ok && saveResult.reason === "document_not_visible") {
+      return reply.code(404).view("pages/document-not-found.ejs", {
+        ...(await withDialog(request, {})),
+        title: "Document Not Found",
+        ...(await createBaseViewModel("documents", queryValue(request))),
+        missingDocumentId: request.params.id,
+      });
+    }
+
+    if (!saveResult.ok) {
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id, {
+          nextFormFieldValues,
+        });
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply
+          .code(400)
+          .type("text/html")
+          .send(await renderDocumentWorkspaceFragment({
+            ...viewModel,
+            saveError: saveErrorValue(request),
+            saveStatus: saveStatusValue(request),
+            journalError: journalErrorValue(request),
+            journalStatus: journalStatusValue(request),
+            submitError: submitErrorValue(request),
+            submitStatus: submitStatusValue(request),
+            approveError: approveErrorValue(request),
+            approveStatus: approveStatusValue(request),
+            rejectError: rejectErrorValue(request),
+            rejectStatus: rejectStatusValue(request),
+            archiveError: archiveErrorValue(request),
+            archiveStatus: archiveStatusValue(request),
+            nextFormError: saveResult.details,
+            nextFormStatus: nextFormStatusValue(request),
+            uploadError: uploadErrorValue(request),
+            uploadStatus: uploadStatusValue(request),
+          }));
+      }
+
+      return reply.redirect(
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&nextFormError=${encodeURIComponent(saveResult.details)}`,
+        303,
+      );
+    }
+
+    if (isHtmxRequest(request)) {
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), saveResult.documentId);
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: saveResult.documentId,
+        });
+      }
+
+      return reply.type("text/html").send(await renderDocumentWorkspaceFragment({
+        ...viewModel,
+        saveError: saveErrorValue(request),
+        saveStatus: saveStatusValue(request),
+        journalError: journalErrorValue(request),
+        journalStatus: journalStatusValue(request),
+        submitError: submitErrorValue(request),
+        submitStatus: submitStatusValue(request),
+        approveError: approveErrorValue(request),
+        approveStatus: approveStatusValue(request),
+        rejectError: rejectErrorValue(request),
+        rejectStatus: rejectStatusValue(request),
+        archiveError: archiveErrorValue(request),
+        archiveStatus: archiveStatusValue(request),
+        nextFormError: nextFormErrorValue(request),
+        nextFormStatus: "Werte gespeichert.",
+        uploadError: uploadErrorValue(request),
+        uploadStatus: uploadStatusValue(request),
+      }, {
+        includeHeaderOob: true,
+        includeHistoryOob: true,
+      }));
+    }
+
+    return reply.redirect(
+      `/documents/${encodeURIComponent(saveResult.documentId)}?user=${encodeURIComponent(activeUser.key)}&nextFormStatus=${encodeURIComponent("Werte gespeichert.")}`,
+      303,
+    );
   });
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/documents/:id/save", async (request, reply) => {
@@ -826,10 +1501,82 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (!result.ok) {
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply
+          .code(400)
+          .type("text/html")
+          .send(await renderDocumentJournalFragment({
+            ...viewModel,
+            saveError: saveErrorValue(request),
+            saveStatus: saveStatusValue(request),
+            journalError: result.details ?? "Journal-Eintrag konnte nicht hinzugefuegt werden.",
+            journalStatus: journalStatusValue(request),
+            submitError: submitErrorValue(request),
+            submitStatus: submitStatusValue(request),
+            approveError: approveErrorValue(request),
+            approveStatus: approveStatusValue(request),
+            rejectError: rejectErrorValue(request),
+            rejectStatus: rejectStatusValue(request),
+            archiveError: archiveErrorValue(request),
+            archiveStatus: archiveStatusValue(request),
+            nextFormError: nextFormErrorValue(request),
+            nextFormStatus: nextFormStatusValue(request),
+            uploadError: uploadErrorValue(request),
+            uploadStatus: uploadStatusValue(request),
+          }));
+      }
+
       return reply.redirect(
         `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&journalError=${encodeURIComponent(result.details ?? "Journal-Eintrag konnte nicht hinzugefuegt werden.")}`,
         303,
       );
+    }
+
+    if (isHtmxRequest(request)) {
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: result.documentId,
+        });
+      }
+
+      return reply.type("text/html").send(await renderDocumentJournalFragment({
+        ...viewModel,
+        saveError: saveErrorValue(request),
+        saveStatus: saveStatusValue(request),
+        journalError: journalErrorValue(request),
+        journalStatus: "Journal-Eintrag hinzugefuegt.",
+        submitError: submitErrorValue(request),
+        submitStatus: submitStatusValue(request),
+        approveError: approveErrorValue(request),
+        approveStatus: approveStatusValue(request),
+        rejectError: rejectErrorValue(request),
+        rejectStatus: rejectStatusValue(request),
+        archiveError: archiveErrorValue(request),
+        archiveStatus: archiveStatusValue(request),
+        nextFormError: nextFormErrorValue(request),
+        nextFormStatus: nextFormStatusValue(request),
+        uploadError: uploadErrorValue(request),
+        uploadStatus: uploadStatusValue(request),
+      }, {
+        includeHeaderOob: true,
+        includeHistoryOob: true,
+      }));
     }
 
     return reply.redirect(
@@ -861,9 +1608,56 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
           ? result.details ?? "Pflichtfelder fehlen fuer Submit."
           : result.details ?? "Submit ist im aktuellen Status nicht verfuegbar.";
 
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply.type("text/html").send(
+          await renderDocumentWorkspaceFragment({
+            ...viewModel,
+            ...buildDocumentFeedbackStateFromRequest(request),
+            submitError: message,
+            submitStatus: undefined,
+          }),
+        );
+      }
+
       return reply.redirect(
         `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&submitError=${encodeURIComponent(message)}`,
         303,
+      );
+    }
+
+    if (isHtmxRequest(request)) {
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: request.params.id,
+        });
+      }
+
+      return reply.type("text/html").send(
+        await renderDocumentWorkspaceFragment({
+          ...viewModel,
+          ...buildDocumentFeedbackStateFromRequest(request),
+          submitStatus: `Dokument wurde nach ${result.nextStatus} ueberfuehrt.`,
+          submitError: undefined,
+        }, {
+          includeHeaderOob: true,
+          includeHistoryOob: true,
+        }),
       );
     }
 
@@ -891,9 +1685,56 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (!result.ok) {
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply.type("text/html").send(
+          await renderDocumentWorkspaceFragment({
+            ...viewModel,
+            ...buildDocumentFeedbackStateFromRequest(request),
+            approveError: result.details ?? "Approve ist im aktuellen Status nicht verfuegbar.",
+            approveStatus: undefined,
+          }),
+        );
+      }
+
       return reply.redirect(
         `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&approveError=${encodeURIComponent(result.details ?? "Approve ist im aktuellen Status nicht verfuegbar.")}`,
         303,
+      );
+    }
+
+    if (isHtmxRequest(request)) {
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: request.params.id,
+        });
+      }
+
+      return reply.type("text/html").send(
+        await renderDocumentWorkspaceFragment({
+          ...viewModel,
+          ...buildDocumentFeedbackStateFromRequest(request),
+          approveStatus: `Dokument wurde nach ${result.nextStatus} ueberfuehrt.`,
+          approveError: undefined,
+        }, {
+          includeHeaderOob: true,
+          includeHistoryOob: true,
+        }),
       );
     }
 
@@ -921,9 +1762,56 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (!result.ok) {
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply.type("text/html").send(
+          await renderDocumentWorkspaceFragment({
+            ...viewModel,
+            ...buildDocumentFeedbackStateFromRequest(request),
+            rejectError: result.details ?? "Reject ist im aktuellen Status nicht verfuegbar.",
+            rejectStatus: undefined,
+          }),
+        );
+      }
+
       return reply.redirect(
         `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&rejectError=${encodeURIComponent(result.details ?? "Reject ist im aktuellen Status nicht verfuegbar.")}`,
         303,
+      );
+    }
+
+    if (isHtmxRequest(request)) {
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: request.params.id,
+        });
+      }
+
+      return reply.type("text/html").send(
+        await renderDocumentWorkspaceFragment({
+          ...viewModel,
+          ...buildDocumentFeedbackStateFromRequest(request),
+          rejectStatus: `Dokument wurde nach ${result.nextStatus} ueberfuehrt.`,
+          rejectError: undefined,
+        }, {
+          includeHeaderOob: true,
+          includeHistoryOob: true,
+        }),
       );
     }
 
@@ -968,6 +1856,42 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     const file = parseSingleAttachmentUpload(request.headers["content-type"], Buffer.isBuffer(request.body) ? request.body : undefined);
 
     if (!file) {
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply
+          .code(400)
+          .type("text/html")
+          .send(await renderDocumentAttachmentsFragment({
+            ...viewModel,
+            saveError: saveErrorValue(request),
+            saveStatus: saveStatusValue(request),
+            journalError: journalErrorValue(request),
+            journalStatus: journalStatusValue(request),
+            submitError: submitErrorValue(request),
+            submitStatus: submitStatusValue(request),
+            approveError: approveErrorValue(request),
+            approveStatus: approveStatusValue(request),
+            rejectError: rejectErrorValue(request),
+            rejectStatus: rejectStatusValue(request),
+            archiveError: archiveErrorValue(request),
+            archiveStatus: archiveStatusValue(request),
+            nextFormError: nextFormErrorValue(request),
+            nextFormStatus: nextFormStatusValue(request),
+            uploadError: "Bitte eine gueltige Datei auswaehlen.",
+            uploadStatus: uploadStatusValue(request),
+          }));
+      }
+
       return reply.redirect(
         buildDialogRedirect(`/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}`, {
           title: "Upload nicht moeglich",
@@ -993,6 +1917,42 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (!result.ok) {
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply
+          .code(400)
+          .type("text/html")
+          .send(await renderDocumentAttachmentsFragment({
+            ...viewModel,
+            saveError: saveErrorValue(request),
+            saveStatus: saveStatusValue(request),
+            journalError: journalErrorValue(request),
+            journalStatus: journalStatusValue(request),
+            submitError: submitErrorValue(request),
+            submitStatus: submitStatusValue(request),
+            approveError: approveErrorValue(request),
+            approveStatus: approveStatusValue(request),
+            rejectError: rejectErrorValue(request),
+            rejectStatus: rejectStatusValue(request),
+            archiveError: archiveErrorValue(request),
+            archiveStatus: archiveStatusValue(request),
+            nextFormError: nextFormErrorValue(request),
+            nextFormStatus: nextFormStatusValue(request),
+            uploadError: result.details ?? "Upload ist fuer dieses Dokument nicht moeglich.",
+            uploadStatus: uploadStatusValue(request),
+          }));
+      }
+
       return reply.redirect(
         buildDialogRedirect(`/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}`, {
           title: "Upload nicht moeglich",
@@ -1000,6 +1960,41 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         }),
         303,
       );
+    }
+
+    if (isHtmxRequest(request)) {
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: request.params.id,
+        });
+      }
+
+      return reply.type("text/html").send(await renderDocumentAttachmentsFragment({
+        ...viewModel,
+        saveError: saveErrorValue(request),
+        saveStatus: saveStatusValue(request),
+        journalError: journalErrorValue(request),
+        journalStatus: journalStatusValue(request),
+        submitError: submitErrorValue(request),
+        submitStatus: submitStatusValue(request),
+        approveError: approveErrorValue(request),
+        approveStatus: approveStatusValue(request),
+        rejectError: rejectErrorValue(request),
+        rejectStatus: rejectStatusValue(request),
+        archiveError: archiveErrorValue(request),
+        archiveStatus: archiveStatusValue(request),
+        nextFormError: nextFormErrorValue(request),
+        nextFormStatus: nextFormStatusValue(request),
+        uploadError: uploadErrorValue(request),
+        uploadStatus: "Attachment hochgeladen.",
+      }, {
+        includeHistoryOob: true,
+      }));
     }
 
     return reply.redirect(
