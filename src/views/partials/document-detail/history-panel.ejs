@@ -1,7 +1,7 @@
 <details class="panel panel-collapsible">
   <summary class="collapsible-summary">
     <div class="collapsible-summary-copy">
-      <strong>History</strong>
+      <strong>Verlauf</strong>
       <% if (latestAuditEvent) { %>
         <% const latestActor = users.find((entry) => entry.id === latestAuditEvent.actorUserId); %>
         <span><%= latestAuditEvent.eventType %> · <%= latestActor?.displayName ?? "System" %> · <%= latestAuditEvent.createdAt %></span>
@@ -10,7 +10,7 @@
       <% } %>
     </div>
     <div class="collapsible-summary-meta">
-      <span><%= documentDetail.auditEvents.length %> Eintraege</span>
+      <span><%= documentDetail.auditEvents.length %></span>
     </div>
   </summary>
   <div class="collapsible-body">

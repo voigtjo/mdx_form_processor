@@ -1,6 +1,6 @@
 import type { ReadOnlyJournalDefinition, ReadOnlyJournalEntry } from "../../types/domain.js";
 
-export const referenceNextFormJournalFieldName = "work_journal";
+export const referenceFormRuntimeJournalFieldName = "work_journal";
 
 const normalizeExistingJournalEntries = (value: unknown): ReadOnlyJournalEntry[] => {
   if (!Array.isArray(value)) {
@@ -18,12 +18,12 @@ const normalizeExistingJournalEntries = (value: unknown): ReadOnlyJournalEntry[]
     }));
 };
 
-export const buildReferenceNextFormJournalDefinition = (input: {
+export const buildReferenceFormRuntimeJournalDefinition = (input: {
   documentData: Record<string, unknown>;
   isEditable: boolean;
 }): ReadOnlyJournalDefinition => {
   return {
-    name: referenceNextFormJournalFieldName,
+    name: referenceFormRuntimeJournalFieldName,
     label: "Journal",
     helpText: "Separater Dokumentbereich ausserhalb des Formulars. Die Freigabe erfolgt ueber das Template.",
     columns: [
@@ -31,7 +31,7 @@ export const buildReferenceNextFormJournalDefinition = (input: {
       { key: "text", label: "Entry", type: "text" },
       { key: "by", label: "By", type: "text" },
     ],
-    entries: normalizeExistingJournalEntries(input.documentData[referenceNextFormJournalFieldName]),
+    entries: normalizeExistingJournalEntries(input.documentData[referenceFormRuntimeJournalFieldName]),
     isEditable: input.isEditable,
   };
 };

@@ -5,6 +5,7 @@ type TemplateRow = {
   id: string;
   key: string;
   name: string;
+  form_type: FormTemplate["formType"];
   description: string | null;
   version: number;
   status: FormTemplate["status"];
@@ -36,6 +37,7 @@ const templateQuery = `
     ft.id,
     ft.key,
     ft.name,
+    ft.form_type,
     ft.description,
     ft.version,
     ft.status,
@@ -52,6 +54,7 @@ const mapTemplate = (row: TemplateRow): FormTemplate => ({
   id: row.id,
   key: row.key,
   name: row.name,
+  formType: row.form_type,
   ...(row.description ? { description: row.description } : {}),
   version: row.version,
   status: row.status,
@@ -117,6 +120,7 @@ export const findVisiblePublishedFormTemplateById = async (
         ft.id,
         ft.key,
         ft.name,
+        ft.form_type,
         ft.description,
         ft.version,
         ft.status,
@@ -153,6 +157,7 @@ export const findFormTemplateById = async (templateId: string): Promise<FormTemp
         ft.id,
         ft.key,
         ft.name,
+        ft.form_type,
         ft.description,
         ft.version,
         ft.status,

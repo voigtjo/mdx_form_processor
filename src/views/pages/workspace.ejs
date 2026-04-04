@@ -1,8 +1,7 @@
 <section class="hero-card">
   <div>
-    <span class="eyebrow">Arbeits-UI</span>
     <h2>My Workspace</h2>
-    <p>Persoenliche Startseite fuer den aktuell ausgewaehlten User mit Gruppen, Aufgaben, nutzbaren Templates und relevanten Documents.</p>
+    <p>Persoenliche Startseite fuer Aufgaben, Templates und Documents.</p>
   </div>
   <div class="hero-metrics">
     <article>
@@ -29,7 +28,7 @@
     <% if (workspaceSummary.groups.length === 0) { %>
       <div class="empty-state">
         <strong>Keine Groups sichtbar.</strong>
-        <p>Der aktuelle User ist noch keiner sichtbaren Group zugeordnet.</p>
+        <p>Der aktuelle User ist keiner sichtbaren Group zugeordnet.</p>
       </div>
     <% } else { %>
       <ul class="stack-list">
@@ -51,7 +50,7 @@
     <% if (workspaceSummary.tasks.length === 0) { %>
       <div class="empty-state">
         <strong>Keine offenen Tasks.</strong>
-        <p>Im aktuellen Arbeitskontext gibt es gerade keine persoenlichen Aufgaben.</p>
+        <p>Im aktuellen Arbeitskontext gibt es keine persoenlichen Aufgaben.</p>
       </div>
     <% } else { %>
       <ul class="stack-list">
@@ -90,7 +89,7 @@
     <% if (workspaceSummary.templates.length === 0) { %>
       <div class="empty-state">
         <strong>Keine Templates sichtbar.</strong>
-        <p>Es gibt aktuell keine produktiv nutzbaren Templates im sichtbaren Arbeitskontext.</p>
+        <p>Es gibt aktuell keine produktiv nutzbaren Templates.</p>
       </div>
     <% } else { %>
       <% const sortedTemplates = [...workspaceSummary.templates].sort((left, right) => {
@@ -128,7 +127,7 @@
     <% if (workspaceSummary.documents.length === 0) { %>
       <div class="empty-state">
         <strong>Keine relevanten Documents.</strong>
-        <p>Im aktuellen Arbeitskontext gibt es keine sichtbaren, nicht archivierten Documents.</p>
+        <p>Es gibt keine sichtbaren, nicht archivierten Documents.</p>
       </div>
     <% } else { %>
       <ul class="stack-list compact">

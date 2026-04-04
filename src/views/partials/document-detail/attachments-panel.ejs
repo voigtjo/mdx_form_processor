@@ -1,41 +1,22 @@
 <section class="panel">
   <div class="panel-header">
     <h3>Attachments</h3>
-    <span class="chip"><%= documentDetail.attachments.length %></span>
+    <span><%= documentDetail.attachments.length %></span>
   </div>
-  <% const latestAttachment = documentDetail.attachments.at(-1); %>
-  <p class="field-help">
-    <% if (latestAttachment) { %>
-      Letztes Attachment: <strong><%= latestAttachment.filename %></strong> · <%= latestAttachment.createdAt %>
-    <% } else { %>
-      Keine Attachments.
-    <% } %>
-  </p>
   <% if (uploadStatus) { %>
     <div class="notice-card notice-success notice-inline">
-      <strong>Upload</strong>
-      <p><%= uploadStatus %></p>
+      <strong><%= uploadStatus %></strong>
     </div>
   <% } %>
   <% if (uploadError) { %>
     <div class="notice-card notice-error notice-inline">
-      <strong>Upload blockiert</strong>
-      <p><%= uploadError %></p>
+      <strong><%= uploadError %></strong>
     </div>
   <% } %>
-  <div class="notice-card notice-muted notice-inline">
-    <% if (documentDetail.attachmentUploadState.isAvailable) { %>
-      <strong>Upload erlaubt</strong>
-      <p>Aktive Editor-Zuweisung und offener Status.</p>
-    <% } else { %>
-      <strong>Upload gesperrt</strong>
-      <p><%= documentDetail.attachmentUploadState.reason ?? "Upload ist fuer dieses Dokument derzeit nicht freigeschaltet." %></p>
-    <% } %>
-  </div>
   <div class="subpanel">
     <div class="panel-header">
       <h4>Upload</h4>
-      <span class="chip"><%= documentDetail.attachmentUploadState.isAvailable ? "erlaubt" : "gesperrt" %></span>
+      <span><%= documentDetail.attachmentUploadState.isAvailable ? "offen" : "gesperrt" %></span>
     </div>
     <% if (documentDetail.attachmentUploadState.isAvailable) { %>
       <form
@@ -52,12 +33,13 @@
         <button class="button-secondary" type="submit">Datei hochladen</button>
       </form>
     <% } else { %>
-      <p class="field-help"><%= documentDetail.attachmentUploadState.reason %></p>
+      <div class="notice-card notice-muted notice-inline">
+        <strong><%= documentDetail.attachmentUploadState.reason %></strong>
+      </div>
     <% } %>
   </div>
-  <div class="panel-divider"></div>
   <% if (documentDetail.attachments.length === 0) { %>
-    <p>Keine Attachments.</p>
+    <p>Keine Dateien.</p>
   <% } else { %>
     <div class="table-wrap">
       <table>

@@ -65,28 +65,18 @@
 <section class="panel">
   <div class="panel-header">
     <h3>Journal</h3>
-    <span class="chip"><%= totalJournalEntries %></span>
+    <span><%= totalJournalEntries %><% if (latestJournalEntry) { %> · <%= latestJournalEntry.by %><% } %></span>
   </div>
-
-  <p class="field-help">
-    <% if (latestJournalEntry) { %>
-      Letzter Eintrag: <strong><%= latestJournalEntry.journal.label %></strong> · <%= truncateJournalText(latestJournalEntry.text, 72) %> · <%= latestJournalEntry.by %>
-    <% } else { %>
-      Keine Eintraege.
-    <% } %>
-  </p>
 
   <% if (journalStatus) { %>
     <div class="notice-card notice-success notice-inline">
-      <strong>Gespeichert</strong>
-      <p><%= journalStatus %></p>
+      <strong><%= journalStatus %></strong>
     </div>
   <% } %>
 
   <% if (journalError) { %>
     <div class="notice-card notice-error notice-inline">
-      <strong>Nicht moeglich</strong>
-      <p><%= journalError %></p>
+      <strong><%= journalError %></strong>
     </div>
   <% } %>
 
@@ -99,14 +89,13 @@
         <article class="subpanel">
           <div class="panel-header">
             <h4><%= journal.label %></h4>
-            <span class="chip"><%= journal.entries.length %> Eintraege</span>
+            <span><%= journal.entries.length %></span>
           </div>
 
           <% if (journal.isEditable) { %>
             <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/journal?user=<%= activeUser.key %>">
               <input type="hidden" name="journalFieldName" value="<%= journal.name %>" />
-              <label class="field-label" for="journal-entry-<%= journal.name %>">Eintrag</label>
-              <textarea id="journal-entry-<%= journal.name %>" name="entryText" rows="3" placeholder="Journal-Eintrag erfassen"></textarea>
+              <textarea id="journal-entry-<%= journal.name %>" name="entryText" rows="3" placeholder="Eintrag"></textarea>
               <button
                 class="button-secondary"
                 type="submit"
@@ -115,11 +104,7 @@
                 hx-swap="outerHTML"
               >Hinzufuegen</button>
             </form>
-          <% } else { %>
-            <p class="field-help"><%= documentDetail.editState.reason ?? "Read-only." %></p>
           <% } %>
-
-          <div class="panel-divider"></div>
 
           <div class="table-wrap">
             <table>
@@ -133,7 +118,7 @@
               <tbody>
                 <% if (journalRows.length === 0) { %>
                   <tr>
-                    <td colspan="3">Keine Journal-Eintraege vorhanden.</td>
+                    <td colspan="3">Noch keine Eintraege.</td>
                   </tr>
                 <% } else { %>
                   <% journalRows.forEach((row) => { %>

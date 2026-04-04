@@ -111,6 +111,7 @@ export const sampleTemplates: FormTemplate[] = [
     id: "tpl-customer-order",
     key: "customer_order_form",
     name: "Customer Order Form",
+    formType: "customer_order",
     version: 1,
     status: "published",
     description: "MDX-basiertes Template fuer die Auftragsfreigabe.",
@@ -124,6 +125,7 @@ export const sampleTemplates: FormTemplate[] = [
     id: "tpl-evidence",
     key: "evidence_record",
     name: "Evidence Record",
+    formType: "generic_form",
     version: 1,
     status: "draft",
     description: "Template fuer Nachweise mit Journal und Attachments.",
@@ -139,6 +141,7 @@ export const sampleDocuments: Document[] = [
   {
     id: "doc-1001",
     templateId: "tpl-customer-order",
+    formType: "customer_order",
     title: "Customer Order 4711",
     status: "submitted",
     updatedAt: "2026-03-23 20:15",
@@ -147,6 +150,7 @@ export const sampleDocuments: Document[] = [
   {
     id: "doc-1002",
     templateId: "tpl-customer-order",
+    formType: "customer_order",
     title: "Customer Order 4712",
     status: "assigned",
     updatedAt: "2026-03-23 18:30",
@@ -155,6 +159,7 @@ export const sampleDocuments: Document[] = [
   {
     id: "doc-2001",
     templateId: "tpl-evidence",
+    formType: "generic_form",
     title: "Evidence B-2026-0042",
     status: "in_progress",
     updatedAt: "2026-03-22 16:45",
@@ -226,12 +231,22 @@ export const sampleAttachments: Attachment[] = [
 
 export const sampleOperations: Operation[] = [
   {
+    id: "op-1",
+    key: "customerOrders.create",
+    title: "Create Customer Order",
+    status: "draft",
     operationRef: "customerOrders.create",
-    modulePath: "src/modules/operations/customer-orders.ts",
+    modulePath: "db:handler_ts_source",
+    authMode: "none",
     authStrategy: "none",
     connector: "reference",
     name: "Create Customer Order",
     description: "Platzhalter fuer spaetere TypeScript-Operationen im App-Kontext.",
+    requestSchemaJson: {},
+    responseSchemaJson: {},
+    handlerTsSource: "export default async function handler() { return { ok: true }; }",
+    createdAt: "2026-03-20T08:00:00.000Z",
+    updatedAt: "2026-03-20T08:00:00.000Z",
     tags: ["reference", "action"],
   },
 ];

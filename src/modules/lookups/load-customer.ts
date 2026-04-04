@@ -1,21 +1,12 @@
 import { findActiveReferenceEntityByDataField } from "../entities/read.js";
-import type { NextFormElement } from "./types.js";
-
-export type NextFormFieldValues = Record<string, string>;
-
-export type NextFormActionState = {
-  type: "info" | "error";
-  title: string;
-  message: string;
-  actionName: string;
-};
+import type { FormRuntimeActionState, FormRuntimeElement, FormRuntimeFieldValues } from "../forms/types.js";
 
 const normalizeText = (value: string | undefined): string => value?.trim() ?? "";
 
 export const executeLoadCustomerAction = async (input: {
-  action: NextFormElement;
-  fieldValues: NextFormFieldValues;
-}): Promise<{ fieldValues: NextFormFieldValues; actionState: NextFormActionState }> => {
+  action: FormRuntimeElement;
+  fieldValues: FormRuntimeFieldValues;
+}): Promise<{ fieldValues: FormRuntimeFieldValues; actionState: FormRuntimeActionState }> => {
   const orderNumberField = input.action.args?.[0] ?? "order_number";
   const orderNumber = normalizeText(input.fieldValues[orderNumberField]);
 
@@ -61,7 +52,7 @@ export const executeLoadCustomerAction = async (input: {
     };
   }
 
-  const nextFieldValues: NextFormFieldValues = { ...input.fieldValues };
+  const nextFieldValues: FormRuntimeFieldValues = { ...input.fieldValues };
 
   for (const bindTarget of input.action.bind ?? []) {
     if (bindTarget === "customer") {

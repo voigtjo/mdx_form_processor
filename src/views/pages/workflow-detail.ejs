@@ -164,13 +164,18 @@
                     <option value="AND" <%= row.modeLabel === "AND" ? "selected" : "" %>>AND</option>
                   </select>
                 </td>
-                <td><input class="text-input" type="text" name="actionApi__<%= index %>" value="<%= row.apiLabel === '—' ? '' : row.apiLabel %>" placeholder="customerOrders.setStatusFromContext" /></td>
+                <td><input class="text-input" type="text" name="actionApi__<%= index %>" value="<%= row.apiLabel === '—' ? '' : row.apiLabel %>" list="workflow-api-options" placeholder="customers.lookup" /></td>
                 <td><input class="text-input" type="text" name="actionCondition__<%= index %>" value="<%= row.conditionLabel === '—' ? '' : row.conditionLabel %>" placeholder='requiredFields: customer_id' /></td>
               </tr>
             <% }) %>
           </tbody>
         </table>
       </div>
+      <datalist id="workflow-api-options">
+        <% workflowDetail.availableOperations.forEach((operation) => { %>
+          <option value="<%= operation.key %>"><%= operation.title %></option>
+        <% }) %>
+      </datalist>
     </article>
   </form>
 </section>
@@ -183,7 +188,7 @@
     </div>
     <form method="post" action="/workflows/<%= workflowDetail.workflow.id %>/source?user=<%= activeUser.key %>" class="stack-list">
       <input type="hidden" name="sourceMode" value="json" />
-      <textarea name="source" rows="24" class="next-form-source-editor"><%= workflowDetail.workflowSourceText %></textarea>
+      <textarea name="source" rows="24" class="form-runtime-source-editor"><%= workflowDetail.workflowSourceText %></textarea>
       <div class="template-lifecycle-actions">
         <button class="button-secondary" type="submit" name="intent" value="save_draft">Save Draft v<%= workflowDetail.nextDraftVersion %></button>
         <button class="button-primary" type="submit" name="intent" value="publish">Publish v<%= workflowDetail.publishTargetVersion %></button>

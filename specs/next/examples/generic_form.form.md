@@ -1,0 +1,19 @@
+---
+title: Generisches Formular fuer interne Freigaben
+key: generic-form
+version: 1
+---
+
+## Formular
+
+- Titel: text(generic_form_title, required)
+- Beschreibung: textarea(generic_form_description)
+
+## Inhalt
+
+- Notiz: html-editor(generic_form_note, required)
+
+## Freigabe
+
+- Status / Freigabe: select(approval_status, options="offen,pruefung,freigegeben")
+- Signatur: signature(work_signature)

@@ -22,6 +22,7 @@ Workflow wird fachlich als Tabelle gepflegt über:
 - Hauptfläche ist die editierbare Transition-Tabelle
 - JSON bleibt Import-/Export-/Editierformat im Modal
 - JSON ist nicht die führende Hauptansicht
+- API-Auswahl in der Tabelle nutzt dieselbe zentrale API-Quelle wie Templates und `/apis`
 
 ## Führende Referenz-Workflows
 
@@ -34,3 +35,5 @@ Workflow wird fachlich als Tabelle gepflegt über:
 Workflow-Rollen werden im Dokumentpfad gegen echte Assignments ausgewertet.
 
 Im Qualifikationsnachweis wird `AND`/`OR` fachlich sichtbar an den Beteiligten dargestellt.
+
+Workflow-APIs bleiben dabei nicht separat gepflegt, sondern referenzieren dieselben DB-APIs wie Templates und `/apis`.

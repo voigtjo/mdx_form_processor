@@ -1,7 +1,7 @@
 import { withDbTransaction } from "../../db/pool.js";
 import { findDocumentAccessContextForUser, getDocumentEditStateForUser } from "../documents/access.js";
-import { buildReferenceNextFormJournalDefinition, referenceNextFormJournalFieldName } from "./reference.js";
-import { isNextFormReferenceTemplate } from "../next-form/document-bridge.js";
+import { buildReferenceFormRuntimeJournalDefinition, referenceFormRuntimeJournalFieldName } from "./reference.js";
+import { isFormRuntimeReferenceTemplate } from "../forms/document-bridge.js";
 import { readTemplateFeatureToggles } from "../templates/features.js";
 import { buildReadOnlyFormDefinition } from "../templates/form-read.js";
 
@@ -98,8 +98,8 @@ export const addJournalEntryForUser = async ({
 
   const journal = formDefinition.journals.find((entry) => entry.name === journalFieldName)
     ?? (
-      isNextFormReferenceTemplate(visibleDocument.templateKey) && journalFieldName === referenceNextFormJournalFieldName
-        ? buildReferenceNextFormJournalDefinition({
+      isFormRuntimeReferenceTemplate(visibleDocument.templateKey) && journalFieldName === referenceFormRuntimeJournalFieldName
+        ? buildReferenceFormRuntimeJournalDefinition({
           documentData: visibleDocument.dataJson,
           isEditable: editState.isAvailable,
         })

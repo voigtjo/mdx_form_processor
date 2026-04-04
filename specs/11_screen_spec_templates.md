@@ -5,6 +5,7 @@
 Template-Detail ist die ruhige Pflegeansicht für:
 
 - Template-Quelle
+- form_type
 - zugeordnete Workflow-Version
 - API-Operationen des Formulars
 - Lifecycle
@@ -14,6 +15,7 @@ Template-Detail ist die ruhige Pflegeansicht für:
 Der Template-Header bleibt eingeklappt und zeigt kompakt:
 
 - Template-Name und Version
+- Form Type
 - zugeordneten Workflow mit Version
 - Lifecycle-Status
 
@@ -22,7 +24,7 @@ Der Template-Header bleibt eingeklappt und zeigt kompakt:
 ### Template Source
 
 - editierbare `.form.md`-/MDX-Quelle
-- ruhige Preview ohne technische Badges wie `4 Sections`, `2 Zeilen`, `Lookup`
+- ruhige Form-Layout-Sicht ohne technische Badges wie `4 Sections`, `2 Zeilen`, `Lookup`
 
 ### Workflow-Zuordnung
 
@@ -34,11 +36,11 @@ Der Template-Header bleibt eingeklappt und zeigt kompakt:
 
 Das Template zeigt sichtbar:
 
-- welche zentral definierten `operationRef`s das Formular nutzt
+- welche zentral definierten API-Keys das Formular nutzt
 - welche Action-/Lookup-Bindings aktiv sind
 - welche zentrale Operation alternativ zugeordnet werden kann
 
-Die Definition der Operation bleibt zentral auf `/apis`, die Nutzung wird im Template gepflegt.
+Die Definition der API bleibt zentral auf `/apis`, die Nutzung wird im Template gepflegt.
 
 ## Führende Familien
 
@@ -47,3 +49,4 @@ Die führende Referenzwelt zeigt im Template-Pfad nur:
 - `Kundenauftrag`
 - `Produktionsdokumentation`
 - `Qualifikationsnachweis`
+- `Generisches Formular`

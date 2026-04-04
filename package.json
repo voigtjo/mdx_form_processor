@@ -12,12 +12,14 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "check": "tsc --noEmit -p tsconfig.json",
-    "smoke:next-form": "npm run build && node dist/modules/next-form/smoke.js",
+    "smoke:forms": "npm run build && node dist/modules/forms/smoke.js",
+    "smoke:next-form": "npm run smoke:forms",
     "db:check": "tsx src/db/check.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed:reference": "tsx src/db/seed-reference.ts",
     "db:rebuild:reference": "tsx src/db/rebuild-reference.ts",
-    "smoke:reference": "tsx src/db/smoke-reference.ts"
+    "smoke:reference": "tsx src/db/smoke-reference.ts",
+    "e2e:reference": "tsx src/db/e2e-reference.ts"
   },
   "dependencies": {
     "@fastify/formbody": "^8.0.2",

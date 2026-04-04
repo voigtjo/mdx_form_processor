@@ -28,6 +28,8 @@ Aktuell fuehrend sind:
 - `specs/next/10_template_grid_and_data_exchange_target_spec.md`
 - `specs/next/11_reference_and_related_records_target_spec.md`
 - `specs/next/12_test_strategy_target_spec.md`
+- `specs/next/13_form_types_and_entity_tables_target_spec.md`
+- `docs/meilenstein-handwerkerplattform.md`
 
 ## Produktiv nutzbarer Kern ist vorhanden
 
@@ -39,24 +41,24 @@ Fachlich bereits sinnvoll tragfaehig:
 - Dokumentdetail mit Formular, Workflow-Actions, Journal, Attachments und History
 - HTMX-Slices fuer den normalen Dokumentpfad
 - erste formularuebergreifende readonly Referenz im Produktpfad
+- APIs als DB-Objekte mit UI-Wartung und Runtime
+- form_type plus typed entity tables als erster echter Fach-Slice
+- Qualification Pages plus erste Auswertung
+- `generic_form` als vierter produktiver Formulartyp
+- Start-to-End-Tests fuer Kundenauftrag, Produktion, Qualifikation und generic_form
 
-## Noch nicht plattformfaehig genug fuer den Meilenstein
+## Fuer den Meilenstein noch teilweise oder offen
 
-Fuer den Meilenstein fehlen oder sind nur angerissen:
-
-- expliziter Controls-Katalog fuer weitere Business-Controls
-- Template-Datenblatt-/Grid-Modell
-- CSV-Import und CSV-Export
-- Formulare als API-Datenquelle
-- Signatur-, User-Select- und HTML-Editor-Control
-- Medienmodell fuer Journal und Attachments
-- klare Start-to-End-Teststrategie
+- typed entity tables sind jetzt als fachliche Leseschicht mit Familien-APIs und typed-basierter Dokumentsuche vorhanden, aber noch nicht die einzige Runtime-Quelle
+- Qualification Pages sind aktuell bewusst qualification-spezifisch, noch kein allgemeines Mehrseitenmodell
+- Medienfunktionen bleiben bewusst auf der kompakten Basis
 
 ## Bewusst als Hintergrund statt Fuehrung behandelt
 
 Nicht mehr als primaere Richtung behandeln:
 
-- Preview-Pfad als produktiver Hauptweg
+- Preview-/Dev-Form-Pfade als Produktbestandteil
+- historischer `next-form`-Begriff als fuehrender Architekturname
 - reine Transition-/Umbau-Sprache auf normalen Produktseiten
 - Alt-vs-Neu-Doppelbeschreibungen ohne direkten Produktnutzen
 - historische Uebergangsdokumente als implizite Hauptsteuerung
@@ -70,7 +72,7 @@ Nuetzlich, aber nicht fuehrend fuer die naechste Produktphase:
 - `specs/21_example_form_template.mdx`
 - `specs/22_example_workflow_template.json`
 - `specs/23_example_operation_customer_order.ts`
-- `specs/next/05_reference_example_craftsman_order_spec.md`
+- `specs/next/05_reference_example_customer_order_spec.md`
 - `specs/next/06_transition_migration_target_spec.md`
 - `docs/changes/*`
 - `docs/acceptance-checkpoint.md`

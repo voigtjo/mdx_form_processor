@@ -2,6 +2,7 @@ import { withDbTransaction } from "../../db/pool.js";
 import { findDocumentAccessContextForUser, getDocumentEditStateForUser } from "./access.js";
 import { buildReadOnlyFormDefinition } from "../templates/form-read.js";
 import type { ReadOnlyFormField } from "../../types/domain.js";
+import { syncTypedRecordForDocument } from "./typed-records.js";
 
 type SaveDocumentInput = {
   documentId: string;
@@ -133,6 +134,14 @@ export const saveDocumentValuesForUser = async ({
       `,
       [documentId, JSON.stringify(mergedDocumentData)],
     );
+
+    await syncTypedRecordForDocument(client, {
+      documentId,
+      formType: visibleDocument.formType,
+      templateName: visibleDocument.templateName,
+      status: visibleDocument.status,
+      dataJson: mergedDocumentData,
+    });
 
     await client.query(
       `

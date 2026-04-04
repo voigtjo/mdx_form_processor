@@ -1,0 +1,129 @@
+<% const operation = apiDetail.operation; %>
+<details class="panel panel-collapsible page-header-collapsible" open>
+  <summary class="collapsible-summary">
+    <div class="collapsible-summary-copy">
+      <strong><%= operation ? operation.title : "New API" %></strong>
+      <span><%= operation ? `${operation.key} · ${operation.status} · ${operation.connector}` : "Draft" %></span>
+    </div>
+    <div class="collapsible-summary-meta">
+      <span>API</span>
+    </div>
+  </summary>
+  <div class="collapsible-body">
+    <span class="eyebrow">TypeScript API</span>
+    <h2><%= operation ? operation.title : "New API" %></h2>
+    <div class="hero-actions">
+      <a class="button-secondary" href="/apis?user=<%= activeUser.key %>">Back to APIs</a>
+    </div>
+  </div>
+</details>
+
+<section class="panel">
+  <div class="panel-header">
+    <h3>API Detail</h3>
+    <span><%= operation ? operation.status : "draft" %></span>
+  </div>
+
+  <form method="post" action="<%= operation ? `/apis/${operation.id}?user=${activeUser.key}` : `/apis/new?user=${activeUser.key}` %>" class="stack-list">
+    <article class="subpanel">
+      <div class="panel-header">
+        <h4>Lifecycle</h4>
+      </div>
+      <div class="template-lifecycle-actions">
+        <button class="button-secondary" type="submit" name="intent" value="save_draft">Save Draft</button>
+        <button class="button-primary" type="submit" name="intent" value="publish">Publish</button>
+        <% if (operation) { %>
+          <button class="button-secondary" type="submit" name="intent" value="unpublish" <%= operation.status === "published" ? "" : "disabled" %>>Unpublish</button>
+          <button class="button-secondary" type="submit" name="intent" value="archive" <%= operation.status !== "archived" ? "" : "disabled" %>>Archive</button>
+        <% } %>
+      </div>
+    </article>
+
+    <article class="subpanel">
+      <div class="grid two-up detail-grid">
+        <div class="field-block">
+          <label class="field-label" for="api-key">Key</label>
+          <input id="api-key" name="key" class="text-input" value="<%= apiDetail.editor.key %>" />
+        </div>
+        <div class="field-block">
+          <label class="field-label" for="api-title">Title</label>
+          <input id="api-title" name="title" class="text-input" value="<%= apiDetail.editor.title %>" />
+        </div>
+        <div class="field-block">
+          <label class="field-label" for="api-connector">Connector</label>
+          <input id="api-connector" name="connector" class="text-input" value="<%= apiDetail.editor.connector %>" />
+        </div>
+        <div class="field-block">
+          <label class="field-label" for="api-auth-mode">Auth Mode</label>
+          <input id="api-auth-mode" name="authMode" class="text-input" value="<%= apiDetail.editor.authMode %>" />
+        </div>
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="api-tags">Tags</label>
+        <input id="api-tags" name="tagsText" class="text-input" value="<%= apiDetail.editor.tagsText %>" />
+      </div>
+
+      <div class="field-block">
+        <label class="field-label" for="api-description">Description</label>
+        <textarea id="api-description" name="description" rows="3" class="text-input api-description-input"><%= apiDetail.editor.description %></textarea>
+      </div>
+    </article>
+
+    <article class="subpanel">
+      <div class="panel-header">
+        <h4>Handler Source</h4>
+      </div>
+      <textarea id="api-handler-source" name="handlerTsSource" rows="20" class="form-runtime-source-editor"><%= apiDetail.editor.handlerTsSource %></textarea>
+    </article>
+
+    <article class="subpanel">
+      <div class="panel-header">
+        <h4>Request / Response</h4>
+      </div>
+      <div class="grid two-up">
+        <div class="field-block">
+          <label class="field-label" for="api-request-schema">Request Schema JSON</label>
+          <textarea id="api-request-schema" name="requestSchemaText" rows="14" class="form-runtime-source-editor"><%= apiDetail.editor.requestSchemaText %></textarea>
+        </div>
+        <div class="field-block">
+          <label class="field-label" for="api-response-schema">Response Schema JSON</label>
+          <textarea id="api-response-schema" name="responseSchemaText" rows="14" class="form-runtime-source-editor"><%= apiDetail.editor.responseSchemaText %></textarea>
+        </div>
+      </div>
+    </article>
+  </form>
+</section>
+
+<% if (apiDetail.usage) { %>
+  <section class="panel">
+    <div class="panel-header">
+      <h3>Usage</h3>
+      <span><%= apiDetail.usage.documentCount %> Documents</span>
+    </div>
+    <div class="grid two-up detail-grid">
+      <div>
+        <h4>Templates</h4>
+        <ul class="stack-list compact">
+          <% if (apiDetail.usage.templateUsages.length === 0) { %>
+            <li>Keine</li>
+          <% } %>
+          <% apiDetail.usage.templateUsages.forEach((usage) => { %>
+            <li><a class="text-link" href="/templates/<%= usage.id %>?user=<%= activeUser.key %>"><%= usage.name %> v<%= usage.version %></a></li>
+          <% }) %>
+        </ul>
+      </div>
+      <div>
+        <h4>Workflows</h4>
+        <ul class="stack-list compact">
+          <% if (apiDetail.usage.workflowUsages.length === 0) { %>
+            <li>Keine</li>
+          <% } %>
+          <% apiDetail.usage.workflowUsages.forEach((usage) => { %>
+            <li><a class="text-link" href="/workflows/<%= usage.id %>?user=<%= activeUser.key %>"><%= usage.name %> v<%= usage.version %></a></li>
+          <% }) %>
+        </ul>
+      </div>
+    </div>
+  </section>
+<% } %>

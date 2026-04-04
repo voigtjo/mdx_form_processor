@@ -1,7 +1,6 @@
 import { listReferenceEntities } from "../entities/read.js";
-import type { NextFormElement } from "./types.js";
-import type { NextFormActionState, NextFormFieldValues } from "./load-customer.js";
-import { richTextHtmlToPlainText } from "./rich-text.js";
+import type { FormRuntimeActionState, FormRuntimeElement, FormRuntimeFieldValues } from "../forms/types.js";
+import { richTextHtmlToPlainText } from "../forms/rich-text.js";
 
 const normalizeText = (value: string | undefined): string => value?.trim() ?? "";
 
@@ -45,9 +44,9 @@ const scoreProductMatch = (description: string, product: { displayName: string; 
 };
 
 export const executeSuggestMaterialAction = async (input: {
-  action: NextFormElement;
-  fieldValues: NextFormFieldValues;
-}): Promise<{ fieldValues: NextFormFieldValues; actionState: NextFormActionState }> => {
+  action: FormRuntimeElement;
+  fieldValues: FormRuntimeFieldValues;
+}): Promise<{ fieldValues: FormRuntimeFieldValues; actionState: FormRuntimeActionState }> => {
   const workDescriptionField = input.action.args?.[0] ?? "work_description";
   const workDescription = richTextHtmlToPlainText(input.fieldValues[workDescriptionField]);
 
@@ -97,7 +96,7 @@ export const executeSuggestMaterialAction = async (input: {
     };
   }
 
-  const nextFieldValues: NextFormFieldValues = { ...input.fieldValues };
+  const nextFieldValues: FormRuntimeFieldValues = { ...input.fieldValues };
 
   for (const bindTarget of input.action.bind ?? []) {
     if (bindTarget === "material") {

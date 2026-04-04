@@ -1,6 +1,6 @@
-import type { NextFormDefinition } from "./types.js";
+import type { FormRuntimeDefinition } from "./types.js";
 
-export type NextFormApiBinding = {
+export type FormRuntimeApiBinding = {
   actionName: string;
   label: string;
   controlType: "action" | "lookup";
@@ -9,7 +9,7 @@ export type NextFormApiBinding = {
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export const listNextFormApiBindings = (parsedForm: NextFormDefinition): NextFormApiBinding[] => {
+export const listFormRuntimeApiBindings = (parsedForm: FormRuntimeDefinition): FormRuntimeApiBinding[] => {
   return parsedForm.actions.map((action) => ({
     actionName: action.name,
     label: action.label ?? action.name,
@@ -51,7 +51,7 @@ const removeRefFromActionSource = (source: string, actionName: string): string =
   });
 };
 
-export const applyNextFormApiBindings = (input: {
+export const applyFormRuntimeApiBindings = (input: {
   sourceText: string;
   bindings: Record<string, string>;
 }): string => {

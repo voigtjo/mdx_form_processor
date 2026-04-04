@@ -6,6 +6,8 @@ import ejs from "ejs";
 import type { Document, FormTemplate, User } from "../types/domain.js";
 import {
   createApiCatalogViewModel,
+  createApiDetailViewModel,
+  createApiNewViewModel,
   createAdminGroupDetailViewModel,
   createAdminGroupEditViewModel,
   createAdminGroupNewViewModel,
@@ -14,7 +16,6 @@ import {
   createAdminUserNewViewModel,
   createBaseViewModel,
   createDocumentDetailViewModel,
-  createNextFormPreviewViewModel,
   createTemplateDetailViewModel,
   createTemplateNewViewModel,
   createWorkflowDetailViewModel,
@@ -28,11 +29,23 @@ import { createMembership } from "../modules/memberships/create.js";
 import { removeMembership } from "../modules/memberships/remove.js";
 import { approveDocumentForUser } from "../modules/documents/approve.js";
 import { archiveDocumentForUser } from "../modules/documents/archive.js";
-import { runDocumentNextFormActionForUser, saveDocumentNextFormValuesForUser } from "../modules/documents/next-form.js";
+import { runDocumentFormRuntimeActionForUser, saveDocumentFormRuntimeValuesForUser } from "../modules/documents/form-runtime.js";
 import { rejectDocumentForUser } from "../modules/documents/reject.js";
+import { findDocumentDetailVisibleToUser } from "../modules/documents/read.js";
 import { saveDocumentValuesForUser } from "../modules/documents/save.js";
 import { startDocumentForUser } from "../modules/documents/start.js";
 import { submitDocumentForUser } from "../modules/documents/submit.js";
+import {
+  findCustomerOrderRecord,
+  findGenericFormRecord,
+  findProductionRecord,
+  findQualificationRecord,
+  findTypedRecordSummary,
+  listCustomerOrderRecordsVisibleToUser,
+  listGenericFormRecordsVisibleToUser,
+  listProductionRecordsVisibleToUser,
+  listQualificationRecordsVisibleToUser,
+} from "../modules/documents/typed-records-read.js";
 import { addJournalEntryForUser } from "../modules/journal/add.js";
 import { getActiveUser } from "../services/app-context.js";
 import { serializeCsv } from "../modules/data-exchange/csv.js";
@@ -40,7 +53,8 @@ import { importReferenceEntitiesFromCsv } from "../modules/entities/import.js";
 import { findReferenceEntityByKey, listReferenceEntities } from "../modules/entities/read.js";
 import { findTemplateFormDataRecordVisibleToUser, listTemplateFormDataRecordsVisibleToUser } from "../modules/form-data/read.js";
 import { createTemplateDraft } from "../modules/templates/create.js";
-import { applyNextFormApiBindings } from "../modules/next-form/api-bindings.js";
+import { applyFormRuntimeApiBindings } from "../modules/forms/api-bindings.js";
+import { archiveOperation, saveOperationDraft, unpublishOperation } from "../modules/operations/write.js";
 import { createTemplateAssignment, removeTemplateAssignment } from "../modules/templates/assign.js";
 import {
   archiveReferenceTemplateFamily,
@@ -80,8 +94,8 @@ type UserQuery = {
   rejectStatus?: string;
   archiveError?: string;
   archiveStatus?: string;
-  nextFormError?: string;
-  nextFormStatus?: string;
+  formRuntimeError?: string;
+  formRuntimeStatus?: string;
   uploadError?: string;
   uploadStatus?: string;
   dialogType?: "error" | "info";
@@ -89,6 +103,7 @@ type UserQuery = {
   dialogMessage?: string;
   intent?: string;
   actionName?: string;
+  page?: string;
 };
 
 const query = (request: FastifyRequest): UserQuery => request.query as UserQuery;
@@ -110,8 +125,8 @@ const rejectErrorValue = (request: FastifyRequest): string | undefined => query(
 const rejectStatusValue = (request: FastifyRequest): string | undefined => query(request).rejectStatus;
 const archiveErrorValue = (request: FastifyRequest): string | undefined => query(request).archiveError;
 const archiveStatusValue = (request: FastifyRequest): string | undefined => query(request).archiveStatus;
-const nextFormErrorValue = (request: FastifyRequest): string | undefined => query(request).nextFormError;
-const nextFormStatusValue = (request: FastifyRequest): string | undefined => query(request).nextFormStatus;
+const formRuntimeErrorValue = (request: FastifyRequest): string | undefined => query(request).formRuntimeError;
+const formRuntimeStatusValue = (request: FastifyRequest): string | undefined => query(request).formRuntimeStatus;
 const uploadErrorValue = (request: FastifyRequest): string | undefined => query(request).uploadError;
 const uploadStatusValue = (request: FastifyRequest): string | undefined => query(request).uploadStatus;
 const dialogTypeValue = (request: FastifyRequest): UserQuery["dialogType"] => query(request).dialogType;
@@ -147,8 +162,8 @@ type DocumentFeedbackState = {
   rejectStatus: string | undefined;
   archiveError: string | undefined;
   archiveStatus: string | undefined;
-  nextFormError: string | undefined;
-  nextFormStatus: string | undefined;
+  formRuntimeError: string | undefined;
+  formRuntimeStatus: string | undefined;
   uploadError: string | undefined;
   uploadStatus: string | undefined;
 };
@@ -168,8 +183,8 @@ const buildDocumentFeedbackStateFromRequest = (request: FastifyRequest): Documen
   rejectStatus: rejectStatusValue(request),
   archiveError: archiveErrorValue(request),
   archiveStatus: archiveStatusValue(request),
-  nextFormError: nextFormErrorValue(request),
-  nextFormStatus: nextFormStatusValue(request),
+  formRuntimeError: formRuntimeErrorValue(request),
+  formRuntimeStatus: formRuntimeStatusValue(request),
   uploadError: uploadErrorValue(request),
   uploadStatus: uploadStatusValue(request),
 });
@@ -269,11 +284,11 @@ const renderDocumentWorkflowZoneFragment = async (
   options?: { oob?: boolean },
 ): Promise<string> => {
   const locals = buildDocumentFragmentLocals(viewModel);
-  const workflowZoneHtml = await renderEjsTemplate("partials/document-detail/next-form-workflow-zone.ejs", {
+  const workflowZoneHtml = await renderEjsTemplate("partials/document-detail/form-runtime-workflow-zone.ejs", {
     documentDetail: viewModel.documentDetail,
     activeUser: viewModel.activeUser,
-    nextFormStatus: viewModel.nextFormStatus,
-    nextFormError: viewModel.nextFormError,
+    formRuntimeStatus: viewModel.formRuntimeStatus,
+    formRuntimeError: viewModel.formRuntimeError,
     submitStatus: viewModel.submitStatus,
     submitError: viewModel.submitError,
     approveStatus: viewModel.approveStatus,
@@ -294,7 +309,7 @@ const renderDocumentWorkspaceFragment = async (
 ): Promise<string> => {
   const [workflowZoneHtml, formBodyHtml, headerFragment, historyFragment] = await Promise.all([
     renderDocumentWorkflowZoneFragment(viewModel),
-    renderEjsTemplate("partials/document-detail/next-form-form-body.ejs", {
+    renderEjsTemplate("partials/document-detail/form-runtime-form-body.ejs", {
       documentDetail: viewModel.documentDetail,
       activeUser: viewModel.activeUser,
     }),
@@ -302,12 +317,12 @@ const renderDocumentWorkspaceFragment = async (
     options?.includeHistoryOob ? renderDocumentHistoryFragment(viewModel, { oob: true }) : Promise.resolve(""),
   ]);
 
-  const workspaceHtml = await renderEjsTemplate("partials/document-detail/next-form-workspace.ejs", {
+  const workspaceHtml = await renderEjsTemplate("partials/document-detail/form-runtime-workspace.ejs", {
     documentDetail: viewModel.documentDetail,
     activeUser: viewModel.activeUser,
     users: viewModel.users,
-    nextFormStatus: viewModel.nextFormStatus,
-    nextFormError: viewModel.nextFormError,
+    formRuntimeStatus: viewModel.formRuntimeStatus,
+    formRuntimeError: viewModel.formRuntimeError,
     submitStatus: viewModel.submitStatus,
     submitError: viewModel.submitError,
     approveStatus: viewModel.approveStatus,
@@ -332,7 +347,7 @@ const renderDocumentFormBodyFragment = async (
   options?: { includeWorkflowZoneOob?: boolean; includeHeaderOob?: boolean; includeHistoryOob?: boolean },
 ): Promise<string> => {
   const [formBodyHtml, workflowZoneFragment, headerFragment, historyFragment] = await Promise.all([
-    renderEjsTemplate("partials/document-detail/next-form-form-body.ejs", {
+    renderEjsTemplate("partials/document-detail/form-runtime-form-body.ejs", {
       documentDetail: viewModel.documentDetail,
       activeUser: viewModel.activeUser,
     }),
@@ -510,6 +525,9 @@ const filterDocumentsViewModel = (input: {
       .join(" ");
     const haystack = [
       document.title,
+      document.typedLeadField ?? "",
+      document.typedLeadValue ?? "",
+      document.typedTableName ?? "",
       template?.name ?? "",
       template?.key ?? "",
       workflow?.name ?? "",
@@ -547,6 +565,13 @@ const buildDialogRedirect = (targetUrl: string, input: { type?: "error" | "info"
   nextUrl.searchParams.set("dialogMessage", input.message);
   return `${nextUrl.pathname}${nextUrl.search}`;
 };
+
+const typedRecordCsvHeaders = {
+  "customer-orders": ["documentId", "orderNumber", "customerName", "serviceLocation", "material", "workDescriptionHtml", "workSignatureAt", "approvalStatus", "status", "serviceDate", "technician"],
+  "production-records": ["documentId", "batchId", "serialNumber", "productName", "productionLine", "processStepsJson", "workSignatureAt", "approvalStatus", "status"],
+  "qualification-records": ["documentId", "qualificationRecordNumber", "qualificationTitle", "ownerUserId", "validUntil", "qualificationResult", "qualificationTopicsJson", "evaluationStatus", "scoreValue", "passed", "approvalStatus", "status", "evaluatedAt"],
+  "generic-form-records": ["documentId", "formTitle", "description", "note", "approvalStatus", "status", "payloadJson"],
+} satisfies Record<string, string[]>;
 
 const renderPage = async (
   request: FastifyRequest,
@@ -602,64 +627,6 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     ok: true,
   }));
 
-  app.get("/next-form-preview/craftsman-order", async (request, reply) => {
-    return reply.view(
-      "pages/next-form-preview.ejs",
-      await withDialog(request, await createNextFormPreviewViewModel({ userKey: queryValue(request) })),
-    );
-  });
-
-  app.post<{
-    Body: {
-      source?: string;
-      intent?: string;
-      actionName?: string;
-      order_number?: string;
-      customer?: string;
-      service_location?: string;
-      customer_master_id?: string;
-      customer_master_status?: string;
-      customer_order_status?: string;
-      customer_order_created_at?: string;
-      work_description?: string;
-      material?: string;
-      product_master_id?: string;
-      product_master_type?: string;
-      product_master_status?: string;
-      work_signature?: string;
-      work_signature_at?: string;
-    };
-  }>("/next-form-preview/craftsman-order", async (request, reply) => {
-    return reply.view(
-      "pages/next-form-preview.ejs",
-      await withDialog(
-        request,
-        await createNextFormPreviewViewModel({
-          userKey: queryValue(request),
-          sourceText: request.body.source,
-          intent: request.body.intent,
-          actionName: request.body.actionName,
-          fieldValues: {
-            order_number: request.body.order_number,
-            customer: request.body.customer,
-            service_location: request.body.service_location,
-            customer_master_id: request.body.customer_master_id,
-            customer_master_status: request.body.customer_master_status,
-            customer_order_status: request.body.customer_order_status,
-            customer_order_created_at: request.body.customer_order_created_at,
-            work_description: request.body.work_description,
-            material: request.body.material,
-            product_master_id: request.body.product_master_id,
-            product_master_type: request.body.product_master_type,
-            product_master_status: request.body.product_master_status,
-            work_signature: request.body.work_signature,
-            work_signature_at: request.body.work_signature_at,
-          },
-        }),
-      ),
-    );
-  });
-
   app.get("/workspace", async (request, reply) => {
     return renderPage(request, reply, "workspace", "workspace", "My Workspace");
   });
@@ -672,7 +639,15 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     return reply.view("pages/template-new.ejs", await withDialog(request, await createTemplateNewViewModel(queryValue(request))));
   });
 
-  app.post<{ Body: { name?: string; key?: string; description?: string; workflowTemplateId?: string } }>("/templates/new", async (request, reply) => {
+  app.post<{
+    Body: {
+      name?: string;
+      key?: string;
+      description?: string;
+      workflowTemplateId?: string;
+      formType?: "customer_order" | "production_record" | "qualification_record" | "generic_form";
+    };
+  }>("/templates/new", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
 
@@ -682,6 +657,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         key: request.body?.key ?? "",
         ...(request.body?.description ? { description: request.body.description } : {}),
         workflowTemplateId: request.body?.workflowTemplateId ?? "",
+        formType: request.body?.formType ?? "generic_form",
       });
 
       return reply.redirect(
@@ -738,7 +714,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       .filter(([key]) => key.startsWith("apiBinding."))
       .map(([key, value]) => [key.replace(/^apiBinding\./, ""), value ?? ""] as const);
     const sourceText = apiBindingEntries.length > 0
-      ? applyNextFormApiBindings({
+      ? applyFormRuntimeApiBindings({
           sourceText: requestedSourceText,
           bindings: Object.fromEntries(apiBindingEntries),
         })
@@ -978,6 +954,192 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     return reply.view("pages/apis.ejs", await withDialog(request, viewModel));
   });
 
+  app.get("/apis/new", async (request, reply) => {
+    const viewModel = await createApiNewViewModel(queryValue(request));
+    return reply.view("pages/api-detail.ejs", await withDialog(request, viewModel));
+  });
+
+  app.post<{
+    Body: {
+      key?: string;
+      title?: string;
+      description?: string;
+      connector?: string;
+      authMode?: string;
+      requestSchemaText?: string;
+      responseSchemaText?: string;
+      handlerTsSource?: string;
+      tagsText?: string;
+      intent?: string;
+    };
+  }>("/apis/new", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const intent = request.body?.intent === "publish" ? "publish" : "save_draft";
+
+    try {
+      const result = await saveOperationDraft({
+        key: request.body?.key ?? "",
+        title: request.body?.title ?? "",
+        description: request.body?.description ?? "",
+        connector: request.body?.connector ?? "typescript",
+        authMode: request.body?.authMode ?? "none",
+        requestSchemaText: request.body?.requestSchemaText ?? "",
+        responseSchemaText: request.body?.responseSchemaText ?? "",
+        handlerTsSource: request.body?.handlerTsSource ?? "",
+        tagsText: request.body?.tagsText ?? "",
+        intent,
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/apis/${result.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: intent === "publish" ? "API publiziert" : "API als Draft gespeichert",
+          message: `${result.key} wurde gespeichert.`,
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die API konnte nicht gespeichert werden.";
+      const viewModel = await createApiNewViewModel(queryValue(request), {
+        key: request.body?.key,
+        title: request.body?.title,
+        description: request.body?.description,
+        connector: request.body?.connector,
+        authMode: request.body?.authMode,
+        requestSchemaText: request.body?.requestSchemaText,
+        responseSchemaText: request.body?.responseSchemaText,
+        handlerTsSource: request.body?.handlerTsSource,
+        tagsText: request.body?.tagsText,
+      });
+      return reply.code(400).view("pages/api-detail.ejs", await withDialog(request, {
+        ...viewModel,
+        appDialog: {
+          type: "error" as const,
+          title: "API konnte nicht gespeichert werden",
+          message,
+        },
+      }));
+    }
+  });
+
+  app.get("/apis/:id", async (request, reply) => {
+    const params = request.params as { id: string };
+    const viewModel = await createApiDetailViewModel(queryValue(request), params.id);
+
+    if (!viewModel) {
+      return reply.code(404).view("pages/template-not-found.ejs", await withDialog(request, {
+        title: "API Not Found",
+        ...(await createBaseViewModel("apis", queryValue(request))),
+      }));
+    }
+
+    return reply.view("pages/api-detail.ejs", await withDialog(request, viewModel));
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body: {
+      key?: string;
+      title?: string;
+      description?: string;
+      connector?: string;
+      authMode?: string;
+      requestSchemaText?: string;
+      responseSchemaText?: string;
+      handlerTsSource?: string;
+      tagsText?: string;
+      intent?: string;
+    };
+  }>("/apis/:id", async (request, reply) => {
+    const params = request.params as { id: string };
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const intent = request.body?.intent ?? "save_draft";
+
+    try {
+      const result = intent === "publish"
+        ? await saveOperationDraft({
+            operationId: params.id,
+            key: request.body?.key ?? "",
+            title: request.body?.title ?? "",
+            description: request.body?.description ?? "",
+            connector: request.body?.connector ?? "typescript",
+            authMode: request.body?.authMode ?? "none",
+            requestSchemaText: request.body?.requestSchemaText ?? "",
+            responseSchemaText: request.body?.responseSchemaText ?? "",
+            handlerTsSource: request.body?.handlerTsSource ?? "",
+            tagsText: request.body?.tagsText ?? "",
+            intent: "publish",
+          })
+        : intent === "unpublish"
+          ? await unpublishOperation({ operationId: params.id })
+          : intent === "archive"
+            ? await archiveOperation({ operationId: params.id })
+            : await saveOperationDraft({
+                operationId: params.id,
+                key: request.body?.key ?? "",
+                title: request.body?.title ?? "",
+                description: request.body?.description ?? "",
+                connector: request.body?.connector ?? "typescript",
+                authMode: request.body?.authMode ?? "none",
+                requestSchemaText: request.body?.requestSchemaText ?? "",
+                responseSchemaText: request.body?.responseSchemaText ?? "",
+                handlerTsSource: request.body?.handlerTsSource ?? "",
+                tagsText: request.body?.tagsText ?? "",
+                intent: "save_draft",
+              });
+
+      return reply.redirect(
+        buildDialogRedirect(`/apis/${result.id}?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title:
+            intent === "publish"
+              ? "API publiziert"
+              : intent === "unpublish"
+                ? "API depubliziert"
+                : intent === "archive"
+                  ? "API archiviert"
+                  : "API gespeichert",
+          message: `${result.key} ist jetzt ${result.status}.`,
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die API konnte nicht verarbeitet werden.";
+      const viewModel = await createApiDetailViewModel(queryValue(request), params.id, {
+        key: request.body?.key,
+        title: request.body?.title,
+        description: request.body?.description,
+        connector: request.body?.connector,
+        authMode: request.body?.authMode,
+        requestSchemaText: request.body?.requestSchemaText,
+        responseSchemaText: request.body?.responseSchemaText,
+        handlerTsSource: request.body?.handlerTsSource,
+        tagsText: request.body?.tagsText,
+      });
+
+      if (!viewModel) {
+        return reply.redirect(
+          buildDialogRedirect(`/apis?user=${encodeURIComponent(activeUser.key)}`, {
+            title: "API nicht gefunden",
+            message,
+          }),
+          303,
+        );
+      }
+
+      return reply.code(400).view("pages/api-detail.ejs", await withDialog(request, {
+        ...viewModel,
+        appDialog: {
+          type: "error" as const,
+          title: "API-Aktion fehlgeschlagen",
+          message,
+        },
+      }));
+    }
+  });
+
   app.post<{ Params: { entityType: string }; Body: { csvText?: string } }>("/apis/import/:entityType", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
@@ -1139,6 +1301,213 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     return reply.type("application/json").send({
       entityType,
       item,
+    });
+  });
+
+  app.get("/api/typed-records/customer-orders", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const items = await listCustomerOrderRecordsVisibleToUser(activeUser.id);
+
+    return reply.type("application/json").send({
+      family: "customer-orders",
+      tableName: "customer_orders",
+      count: items.length,
+      items,
+    });
+  });
+
+  app.get("/api/typed-records/customer-orders/export.csv", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const items = await listCustomerOrderRecordsVisibleToUser(activeUser.id);
+
+    return reply
+      .type("text/csv; charset=utf-8")
+      .header("content-disposition", "attachment; filename=\"customer-orders.csv\"")
+      .send(serializeCsv(typedRecordCsvHeaders["customer-orders"], items as Array<Record<string, unknown>>));
+  });
+
+  app.get<{ Params: { documentId: string } }>("/api/typed-records/customer-orders/:documentId", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const document = await findDocumentDetailVisibleToUser(request.params.documentId, activeUser.id);
+
+    if (!document || document.formType !== "customer_order") {
+      return reply.code(404).send({ error: "not_found", message: "Typed record nicht gefunden." });
+    }
+
+    const item = await findCustomerOrderRecord(document.id);
+
+    if (!item) {
+      return reply.code(404).send({ error: "not_found", message: "Typed record nicht gefunden." });
+    }
+
+    return reply.type("application/json").send({
+      family: "customer-orders",
+      tableName: "customer_orders",
+      item,
+    });
+  });
+
+  app.get("/api/typed-records/production-records", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const items = await listProductionRecordsVisibleToUser(activeUser.id);
+
+    return reply.type("application/json").send({
+      family: "production-records",
+      tableName: "production_records",
+      count: items.length,
+      items,
+    });
+  });
+
+  app.get("/api/typed-records/production-records/export.csv", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const items = await listProductionRecordsVisibleToUser(activeUser.id);
+
+    return reply
+      .type("text/csv; charset=utf-8")
+      .header("content-disposition", "attachment; filename=\"production-records.csv\"")
+      .send(serializeCsv(typedRecordCsvHeaders["production-records"], items as Array<Record<string, unknown>>));
+  });
+
+  app.get<{ Params: { documentId: string } }>("/api/typed-records/production-records/:documentId", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const document = await findDocumentDetailVisibleToUser(request.params.documentId, activeUser.id);
+
+    if (!document || document.formType !== "production_record") {
+      return reply.code(404).send({ error: "not_found", message: "Typed record nicht gefunden." });
+    }
+
+    const item = await findProductionRecord(document.id);
+
+    if (!item) {
+      return reply.code(404).send({ error: "not_found", message: "Typed record nicht gefunden." });
+    }
+
+    return reply.type("application/json").send({
+      family: "production-records",
+      tableName: "production_records",
+      item,
+    });
+  });
+
+  app.get("/api/typed-records/qualification-records", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const items = await listQualificationRecordsVisibleToUser(activeUser.id);
+
+    return reply.type("application/json").send({
+      family: "qualification-records",
+      tableName: "qualification_records",
+      count: items.length,
+      items,
+    });
+  });
+
+  app.get("/api/typed-records/qualification-records/export.csv", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const items = await listQualificationRecordsVisibleToUser(activeUser.id);
+
+    return reply
+      .type("text/csv; charset=utf-8")
+      .header("content-disposition", "attachment; filename=\"qualification-records.csv\"")
+      .send(serializeCsv(typedRecordCsvHeaders["qualification-records"], items as Array<Record<string, unknown>>));
+  });
+
+  app.get<{ Params: { documentId: string } }>("/api/typed-records/qualification-records/:documentId", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const document = await findDocumentDetailVisibleToUser(request.params.documentId, activeUser.id);
+
+    if (!document || document.formType !== "qualification_record") {
+      return reply.code(404).send({ error: "not_found", message: "Typed record nicht gefunden." });
+    }
+
+    const item = await findQualificationRecord(document.id);
+
+    if (!item) {
+      return reply.code(404).send({ error: "not_found", message: "Typed record nicht gefunden." });
+    }
+
+    return reply.type("application/json").send({
+      family: "qualification-records",
+      tableName: "qualification_records",
+      item,
+    });
+  });
+
+  app.get("/api/typed-records/generic-form-records", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const items = await listGenericFormRecordsVisibleToUser(activeUser.id);
+
+    return reply.type("application/json").send({
+      family: "generic-form-records",
+      tableName: "generic_form_records",
+      count: items.length,
+      items,
+    });
+  });
+
+  app.get("/api/typed-records/generic-form-records/export.csv", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const items = await listGenericFormRecordsVisibleToUser(activeUser.id);
+
+    return reply
+      .type("text/csv; charset=utf-8")
+      .header("content-disposition", "attachment; filename=\"generic-form-records.csv\"")
+      .send(serializeCsv(typedRecordCsvHeaders["generic-form-records"], items as Array<Record<string, unknown>>));
+  });
+
+  app.get<{ Params: { documentId: string } }>("/api/typed-records/generic-form-records/:documentId", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const document = await findDocumentDetailVisibleToUser(request.params.documentId, activeUser.id);
+
+    if (!document || document.formType !== "generic_form") {
+      return reply.code(404).send({ error: "not_found", message: "Typed record nicht gefunden." });
+    }
+
+    const item = await findGenericFormRecord(document.id);
+
+    if (!item) {
+      return reply.code(404).send({ error: "not_found", message: "Typed record nicht gefunden." });
+    }
+
+    return reply.type("application/json").send({
+      family: "generic-form-records",
+      tableName: "generic_form_records",
+      item,
+    });
+  });
+
+  app.get<{ Params: { documentId: string } }>("/api/typed-records/:documentId", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const document = await findDocumentDetailVisibleToUser(request.params.documentId, activeUser.id);
+
+    if (!document) {
+      return reply.code(404).send({
+        error: "not_found",
+        message: "Dokument nicht gefunden.",
+      });
+    }
+
+    const summary = await findTypedRecordSummary(document.id, document.formType);
+
+    return reply.type("application/json").send({
+      documentId: document.id,
+      formType: document.formType,
+      tableName: summary.tableName,
+      isPresent: summary.isPresent,
+      record: summary.record,
     });
   });
 
@@ -1539,8 +1908,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       rejectStatus: rejectStatusValue(request),
       archiveError: archiveErrorValue(request),
       archiveStatus: archiveStatusValue(request),
-      nextFormError: nextFormErrorValue(request),
-      nextFormStatus: nextFormStatusValue(request),
+      formRuntimeError: formRuntimeErrorValue(request),
+      formRuntimeStatus: formRuntimeStatusValue(request),
       uploadError: uploadErrorValue(request),
       uploadStatus: uploadStatusValue(request),
     }));
@@ -1552,6 +1921,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       intent?: string;
       actionName?: string;
       order_number?: string;
+      service_date?: string;
+      technician?: string;
       customer?: string;
       service_location?: string;
       customer_master_id?: string;
@@ -1573,6 +1944,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       valid_until?: string;
       qualification_result?: string;
       qualification_topics?: string;
+      qualification_current_page?: string;
       batch_id?: string;
       serial_number?: string;
       product_name?: string;
@@ -1582,14 +1954,20 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       labor_hours?: string;
       travel_hours?: string;
       break_minutes?: string;
+      generic_form_title?: string;
+      generic_form_description?: string;
+      generic_form_note?: string;
+      page?: string;
     };
-  }>("/documents/:id/next-form", async (request, reply) => {
+  }>("/documents/:id/form", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
-    const nextFormIntent = request.body.intent ?? query(request).intent;
-    const nextFormActionName = request.body.actionName ?? query(request).actionName;
-    const nextFormFieldValues = {
+    const formRuntimeIntent = request.body.intent ?? query(request).intent;
+    const formRuntimeActionName = request.body.actionName ?? query(request).actionName;
+    const formRuntimeFieldValues = {
       order_number: request.body.order_number,
+      service_date: request.body.service_date,
+      technician: request.body.technician,
       customer: request.body.customer,
       service_location: request.body.service_location,
       customer_master_id: request.body.customer_master_id,
@@ -1611,6 +1989,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       valid_until: request.body.valid_until,
       qualification_result: request.body.qualification_result,
       qualification_topics: request.body.qualification_topics,
+      qualification_current_page: request.body.qualification_current_page,
       batch_id: request.body.batch_id,
       serial_number: request.body.serial_number,
       product_name: request.body.product_name,
@@ -1620,14 +1999,18 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       labor_hours: request.body.labor_hours,
       travel_hours: request.body.travel_hours,
       break_minutes: request.body.break_minutes,
+      generic_form_title: request.body.generic_form_title,
+      generic_form_description: request.body.generic_form_description,
+      generic_form_note: request.body.generic_form_note,
     };
+    const requestedQualificationPage = request.body.page ?? query(request).page ?? request.body.qualification_current_page;
 
-    if (nextFormIntent === "run-action") {
-      const result = await runDocumentNextFormActionForUser({
+    if (formRuntimeIntent === "run-action") {
+      const result = await runDocumentFormRuntimeActionForUser({
         documentId: request.params.id,
         userId: activeUser.id,
-        actionName: nextFormActionName ?? "",
-        submittedValues: nextFormFieldValues,
+        actionName: formRuntimeActionName ?? "",
+        submittedValues: formRuntimeFieldValues,
       });
 
       if (!result.ok && result.reason === "document_not_visible") {
@@ -1640,7 +2023,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       }
 
       const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id, {
-        nextFormFieldValues: result.ok ? result.fieldValues : nextFormFieldValues,
+        formRuntimeFieldValues: result.ok ? result.fieldValues : formRuntimeFieldValues,
       });
 
       if (!viewModel) {
@@ -1666,11 +2049,11 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         rejectStatus: rejectStatusValue(request),
         archiveError: archiveErrorValue(request),
         archiveStatus: archiveStatusValue(request),
-        nextFormStatus:
+        formRuntimeStatus:
           result.ok && result.actionState.type === "info"
             ? `${result.actionState.title}: ${result.actionState.message}`
             : undefined,
-        nextFormError: !result.ok || result.actionState.type === "error"
+        formRuntimeError: !result.ok || result.actionState.type === "error"
           ? (result.ok ? `${result.actionState.title}: ${result.actionState.message}` : result.details)
           : undefined,
         uploadError: uploadErrorValue(request),
@@ -1686,11 +2069,83 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.view("pages/document-detail.ejs", await withDialog(request, responseModel));
     }
 
-    const saveResult = await saveDocumentNextFormValuesForUser({
+    if (formRuntimeIntent === "navigate-page") {
+      const nextPage = Number.parseInt(String(requestedQualificationPage ?? "1"), 10);
+      const navigationResult = await saveDocumentFormRuntimeValuesForUser({
+        documentId: request.params.id,
+        userId: activeUser.id,
+        activeUserDisplayName: activeUser.displayName,
+        submittedValues: formRuntimeFieldValues,
+        navigationPage: nextPage,
+      });
+
+      if (!navigationResult.ok && navigationResult.reason === "document_not_visible") {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: request.params.id,
+        });
+      }
+
+      if (!navigationResult.ok) {
+        return reply.redirect(
+          `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&formRuntimeError=${encodeURIComponent(navigationResult.details ?? "Seitenwechsel nicht moeglich.")}`,
+          303,
+        );
+      }
+
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), navigationResult.documentId);
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: navigationResult.documentId,
+        });
+      }
+
+      const pageLabel = Number.isFinite(nextPage) ? nextPage : 1;
+      const statusText = `Seite ${pageLabel} gespeichert.`;
+
+      if (isHtmxRequest(request)) {
+        return reply.type("text/html").send(await renderDocumentFormBodyFragment({
+          ...viewModel,
+          saveError: saveErrorValue(request),
+          saveStatus: saveStatusValue(request),
+          journalError: journalErrorValue(request),
+          journalStatus: journalStatusValue(request),
+          submitError: submitErrorValue(request),
+          submitStatus: submitStatusValue(request),
+          approveError: approveErrorValue(request),
+          approveStatus: approveStatusValue(request),
+          rejectError: rejectErrorValue(request),
+          rejectStatus: rejectStatusValue(request),
+          archiveError: archiveErrorValue(request),
+          archiveStatus: archiveStatusValue(request),
+          formRuntimeError: formRuntimeErrorValue(request),
+          formRuntimeStatus: statusText,
+          uploadError: uploadErrorValue(request),
+          uploadStatus: uploadStatusValue(request),
+        }, {
+          includeWorkflowZoneOob: true,
+          includeHeaderOob: true,
+        }));
+      }
+
+      return reply.redirect(
+        `/documents/${encodeURIComponent(navigationResult.documentId)}?user=${encodeURIComponent(activeUser.key)}&formRuntimeStatus=${encodeURIComponent(statusText)}`,
+        303,
+      );
+    }
+
+    const saveResult = await saveDocumentFormRuntimeValuesForUser({
       documentId: request.params.id,
       userId: activeUser.id,
       activeUserDisplayName: activeUser.displayName,
-      submittedValues: nextFormFieldValues,
+      submittedValues: formRuntimeFieldValues,
+      ...(requestedQualificationPage ? { navigationPage: Number.parseInt(String(requestedQualificationPage), 10) } : {}),
     });
 
     if (!saveResult.ok && saveResult.reason === "document_not_visible") {
@@ -1705,7 +2160,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     if (!saveResult.ok) {
       if (isHtmxRequest(request)) {
         const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id, {
-          nextFormFieldValues,
+          formRuntimeFieldValues,
         });
 
         if (!viewModel) {
@@ -1734,8 +2189,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             rejectStatus: rejectStatusValue(request),
             archiveError: archiveErrorValue(request),
             archiveStatus: archiveStatusValue(request),
-            nextFormError: saveResult.details,
-            nextFormStatus: nextFormStatusValue(request),
+            formRuntimeError: saveResult.details,
+            formRuntimeStatus: formRuntimeStatusValue(request),
             uploadError: uploadErrorValue(request),
             uploadStatus: uploadStatusValue(request),
           }, {
@@ -1744,7 +2199,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       }
 
       return reply.redirect(
-        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&nextFormError=${encodeURIComponent(saveResult.details)}`,
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&formRuntimeError=${encodeURIComponent(saveResult.details)}`,
         303,
       );
     }
@@ -1775,8 +2230,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         rejectStatus: rejectStatusValue(request),
         archiveError: archiveErrorValue(request),
         archiveStatus: archiveStatusValue(request),
-        nextFormError: nextFormErrorValue(request),
-        nextFormStatus: saveResult.signatureApplied ? "Werte gespeichert. Signatur gesetzt." : "Werte gespeichert.",
+        formRuntimeError: formRuntimeErrorValue(request),
+        formRuntimeStatus: saveResult.signatureApplied ? "Werte gespeichert. Signatur gesetzt." : "Werte gespeichert.",
         uploadError: uploadErrorValue(request),
         uploadStatus: uploadStatusValue(request),
       }, {
@@ -1787,7 +2242,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     return reply.redirect(
-      `/documents/${encodeURIComponent(saveResult.documentId)}?user=${encodeURIComponent(activeUser.key)}&nextFormStatus=${encodeURIComponent(saveResult.signatureApplied ? "Werte gespeichert. Signatur gesetzt." : "Werte gespeichert.")}`,
+      `/documents/${encodeURIComponent(saveResult.documentId)}?user=${encodeURIComponent(activeUser.key)}&formRuntimeStatus=${encodeURIComponent(saveResult.signatureApplied ? "Werte gespeichert. Signatur gesetzt." : "Werte gespeichert.")}`,
       303,
     );
   });
@@ -1873,8 +2328,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             rejectStatus: rejectStatusValue(request),
             archiveError: archiveErrorValue(request),
             archiveStatus: archiveStatusValue(request),
-            nextFormError: nextFormErrorValue(request),
-            nextFormStatus: nextFormStatusValue(request),
+            formRuntimeError: formRuntimeErrorValue(request),
+            formRuntimeStatus: formRuntimeStatusValue(request),
             uploadError: uploadErrorValue(request),
             uploadStatus: uploadStatusValue(request),
           }));
@@ -1912,8 +2367,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         rejectStatus: rejectStatusValue(request),
         archiveError: archiveErrorValue(request),
         archiveStatus: archiveStatusValue(request),
-        nextFormError: nextFormErrorValue(request),
-        nextFormStatus: nextFormStatusValue(request),
+        formRuntimeError: formRuntimeErrorValue(request),
+        formRuntimeStatus: formRuntimeStatusValue(request),
         uploadError: uploadErrorValue(request),
         uploadStatus: uploadStatusValue(request),
       }, {
@@ -2237,8 +2692,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             rejectStatus: rejectStatusValue(request),
             archiveError: archiveErrorValue(request),
             archiveStatus: archiveStatusValue(request),
-            nextFormError: nextFormErrorValue(request),
-            nextFormStatus: nextFormStatusValue(request),
+            formRuntimeError: formRuntimeErrorValue(request),
+            formRuntimeStatus: formRuntimeStatusValue(request),
             uploadError: "Bitte eine gueltige Datei auswaehlen.",
             uploadStatus: uploadStatusValue(request),
           }));
@@ -2298,8 +2753,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             rejectStatus: rejectStatusValue(request),
             archiveError: archiveErrorValue(request),
             archiveStatus: archiveStatusValue(request),
-            nextFormError: nextFormErrorValue(request),
-            nextFormStatus: nextFormStatusValue(request),
+            formRuntimeError: formRuntimeErrorValue(request),
+            formRuntimeStatus: formRuntimeStatusValue(request),
             uploadError: result.details ?? "Upload ist fuer dieses Dokument nicht moeglich.",
             uploadStatus: uploadStatusValue(request),
           }));
@@ -2340,8 +2795,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         rejectStatus: rejectStatusValue(request),
         archiveError: archiveErrorValue(request),
         archiveStatus: archiveStatusValue(request),
-        nextFormError: nextFormErrorValue(request),
-        nextFormStatus: nextFormStatusValue(request),
+        formRuntimeError: formRuntimeErrorValue(request),
+        formRuntimeStatus: formRuntimeStatusValue(request),
         uploadError: uploadErrorValue(request),
         uploadStatus: "Attachment hochgeladen.",
       }, {

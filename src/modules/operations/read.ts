@@ -2,49 +2,166 @@ import { withDb } from "../../db/pool.js";
 import type { Operation } from "../../types/domain.js";
 
 type OperationRow = {
-  operation_ref: string;
-  name: string | null;
-  connector: string | null;
-  module_path: string;
-  auth_strategy: string;
+  id: string;
+  key: string;
+  title: string;
+  status: Operation["status"];
   description: string | null;
-  input_schema: Operation["inputSchema"] | null;
-  output_schema: Operation["outputSchema"] | null;
-  tags: string[] | null;
+  connector: string;
+  auth_mode: string;
+  request_schema_json: Record<string, unknown> | null;
+  response_schema_json: Record<string, unknown> | null;
+  handler_ts_source: string;
+  tags_json: string[] | null;
+  created_at: Date;
+  updated_at: Date;
+  published_at: Date | null;
+  archived_at: Date | null;
+};
+
+const readSchemaFields = (value: Record<string, unknown> | null): Array<{
+  name: string;
+  type: string;
+  required?: boolean;
+  description?: string;
+}> => {
+  const fields = Array.isArray(value?.fields) ? value.fields : [];
+
+  return fields.flatMap((field) => {
+    if (!field || typeof field !== "object" || Array.isArray(field)) {
+      return [];
+    }
+
+    const record = field as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name : "";
+    const type = typeof record.type === "string" ? record.type : "";
+
+    if (!name || !type) {
+      return [];
+    }
+
+    return [{
+      name,
+      type,
+      ...(typeof record.required === "boolean" ? { required: record.required } : {}),
+      ...(typeof record.description === "string" ? { description: record.description } : {}),
+    }];
+  });
 };
 
 const mapOperation = (row: OperationRow): Operation => ({
-  operationRef: row.operation_ref,
-  modulePath: row.module_path,
-  authStrategy: row.auth_strategy,
-  ...(row.connector ? { connector: row.connector } : {}),
-  name: row.name ?? row.operation_ref,
+  id: row.id,
+  key: row.key,
+  title: row.title,
+  status: row.status,
+  connector: row.connector,
+  authMode: row.auth_mode,
+  requestSchemaJson: row.request_schema_json ?? {},
+  responseSchemaJson: row.response_schema_json ?? {},
+  handlerTsSource: row.handler_ts_source,
+  createdAt: row.created_at.toISOString(),
+  updatedAt: row.updated_at.toISOString(),
+  ...(row.published_at ? { publishedAt: row.published_at.toISOString() } : {}),
+  ...(row.archived_at ? { archivedAt: row.archived_at.toISOString() } : {}),
+  operationRef: row.key,
+  modulePath: "db:handler_ts_source",
+  authStrategy: row.auth_mode,
+  name: row.title,
   ...(row.description ? { description: row.description } : {}),
-  tags: row.tags ?? [],
-  ...(row.input_schema ? { inputSchema: row.input_schema } : {}),
-  ...(row.output_schema ? { outputSchema: row.output_schema } : {}),
+  tags: row.tags_json ?? [],
+  ...(row.request_schema_json ? { inputSchema: { fields: readSchemaFields(row.request_schema_json) } } : {}),
+  ...(row.response_schema_json ? { outputSchema: { fields: readSchemaFields(row.response_schema_json) } } : {}),
 });
 
-export const listOperations = async (): Promise<Operation[]> => {
+const baseSelect = `
+  select
+    id,
+    key,
+    title,
+    status,
+    description,
+    connector,
+    auth_mode,
+    request_schema_json,
+    response_schema_json,
+    handler_ts_source,
+    tags_json,
+    created_at,
+    updated_at,
+    published_at,
+    archived_at
+  from operations
+`;
+
+export const listOperations = async (input?: {
+  includeArchived?: boolean;
+  statuses?: Operation["status"][];
+}): Promise<Operation[]> => {
   return withDb(async (client) => {
+    const whereParts: string[] = [];
+    const values: unknown[] = [];
+
+    if (!input?.includeArchived) {
+      whereParts.push(`status <> 'archived'`);
+    }
+
+    if (input?.statuses && input.statuses.length > 0) {
+      values.push(input.statuses);
+      whereParts.push(`status = any($${values.length}::text[])`);
+    }
+
     const result = await client.query<OperationRow>(
-      `select operation_ref, name, connector, module_path, auth_strategy, description, input_schema, output_schema, tags
-       from operations
-       order by operation_ref asc`,
+      `${baseSelect}
+       ${whereParts.length > 0 ? `where ${whereParts.join(" and ")}` : ""}
+       order by title asc, key asc`,
+      values,
     );
 
     return result.rows.map(mapOperation);
   });
 };
 
-export const findOperationByRef = async (operationRef: string): Promise<Operation | null> => {
+export const findOperationById = async (id: string): Promise<Operation | null> => {
   return withDb(async (client) => {
     const result = await client.query<OperationRow>(
-      `select operation_ref, name, connector, module_path, auth_strategy, description, input_schema, output_schema, tags
-       from operations
-       where operation_ref = $1
+      `${baseSelect}
+       where id = $1
        limit 1`,
-      [operationRef],
+      [id],
+    );
+
+    const row = result.rows[0];
+    return row ? mapOperation(row) : null;
+  });
+};
+
+export const findOperationByKey = async (key: string, input?: {
+  publishedOnly?: boolean;
+  includeArchived?: boolean;
+}): Promise<Operation | null> => {
+  return withDb(async (client) => {
+    const whereParts = ["key = $1"];
+    const values: unknown[] = [key];
+
+    if (input?.publishedOnly) {
+      whereParts.push(`status = 'published'`);
+    } else if (!input?.includeArchived) {
+      whereParts.push(`status <> 'archived'`);
+    }
+
+    const result = await client.query<OperationRow>(
+      `${baseSelect}
+       where ${whereParts.join(" and ")}
+       order by
+         case
+           when status = 'published' then 0
+           when status = 'draft' then 1
+           when status = 'inactive' then 2
+           else 3
+         end,
+         updated_at desc
+       limit 1`,
+      values,
     );
 
     const row = result.rows[0];

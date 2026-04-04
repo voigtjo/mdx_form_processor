@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { withDbTransaction } from "../../db/pool.js";
-import { parseNextFormSource } from "../next-form/read.js";
-import { isNextFormReferenceTemplate } from "../next-form/document-bridge.js";
+import { parseFormRuntimeSource } from "../forms/read.js";
+import { isFormRuntimeReferenceTemplate } from "../forms/document-bridge.js";
+import { findOperationByKey } from "../operations/read.js";
 import { publishWorkflowVersion } from "../workflows/lifecycle.js";
 import { setTemplateSourceFrontmatterValue } from "./source.js";
 
@@ -15,6 +16,7 @@ type TemplateBaseRow = {
   id: string;
   key: string;
   name: string;
+  form_type: "customer_order" | "production_record" | "qualification_record" | "generic_form";
   description: string | null;
   version: number;
   status: "draft" | "published" | "inactive" | "archived";
@@ -44,6 +46,7 @@ const loadTemplateBase = async (client: Parameters<Parameters<typeof withDbTrans
        id,
        key,
        name,
+       form_type,
        description,
        version,
        status,
@@ -111,7 +114,7 @@ const ensureReferenceTemplate = (template: TemplateBaseRow | null): TemplateBase
     throw new Error("Das angeforderte Template wurde nicht gefunden.");
   }
 
-  if (!isNextFormReferenceTemplate(template.key)) {
+  if (!isFormRuntimeReferenceTemplate(template.key)) {
     throw new Error("Dieser Lifecycle-Schnitt ist in diesem Schritt nur fuer das Referenztemplate aktiv.");
   }
 
@@ -119,8 +122,27 @@ const ensureReferenceTemplate = (template: TemplateBaseRow | null): TemplateBase
 };
 
 const normalizeReferenceSource = (sourceText: string, version: number): string => {
-  parseNextFormSource(sourceText);
+  parseFormRuntimeSource(sourceText);
   return setTemplateSourceFrontmatterValue(sourceText, "version", String(version));
+};
+
+const validateReferencedOperations = async (sourceText: string, input: { requirePublished: boolean }) => {
+  const parsedForm = parseFormRuntimeSource(sourceText);
+  const operationRefs = Array.from(new Set(parsedForm.actions.flatMap((action) => (action.ref ? [action.ref] : []))));
+
+  for (const operationRef of operationRefs) {
+    const operation = await findOperationByKey(operationRef, {
+      ...(input.requirePublished ? { publishedOnly: true } : {}),
+    });
+
+    if (!operation) {
+      throw new Error(
+        input.requirePublished
+          ? `Die referenzierte API ${operationRef} ist nicht publiziert.`
+          : `Die referenzierte API ${operationRef} wurde nicht gefunden.`,
+      );
+    }
+  }
 };
 
 const resolveTemplateWorkflowVersion = async (
@@ -158,6 +180,8 @@ export const saveReferenceTemplateDraft = async (input: {
   sourceText: string;
   workflowTemplateId: string;
 }): Promise<TemplateLifecycleResult> => {
+  await validateReferencedOperations(input.sourceText, { requirePublished: false });
+
   return withDbTransaction(async (client) => {
     const template = ensureReferenceTemplate(await loadTemplateBase(client, input.templateId));
     const workflow = await loadWorkflowBase(client, input.workflowTemplateId);
@@ -227,16 +251,17 @@ export const saveReferenceTemplateDraft = async (input: {
 
     await client.query(
       `insert into form_templates (
-         id, key, name, description, version, status, workflow_template_id, mdx_body,
+         id, key, name, description, version, form_type, status, workflow_template_id, mdx_body,
          template_keys, document_keys, table_fields, visibility_rules
        )
-       values ($1, $2, $3, $4, $5, 'draft', $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, '{}'::jsonb)`,
+       values ($1, $2, $3, $4, $5, $6, 'draft', $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, '{}'::jsonb)`,
       [
         draftId,
         template.key,
         template.name,
         template.description,
         nextVersion,
+        template.form_type,
         input.workflowTemplateId,
         normalizedSource,
         JSON.stringify(template.template_keys ?? []),
@@ -261,6 +286,8 @@ export const publishReferenceTemplateVersion = async (input: {
   workflowTemplateId: string;
   cascadePublishWorkflow: boolean;
 }): Promise<TemplateLifecycleResult> => {
+  await validateReferencedOperations(input.sourceText, { requirePublished: true });
+
   return withDbTransaction(async (client) => {
     const template = ensureReferenceTemplate(await loadTemplateBase(client, input.templateId));
 
@@ -325,14 +352,15 @@ export const publishReferenceTemplateVersion = async (input: {
 
     await client.query(
       `insert into form_templates (
-         id, key, name, description, version, status, workflow_template_id, mdx_body,
+         id, key, name, form_type, description, version, status, workflow_template_id, mdx_body,
          template_keys, document_keys, table_fields, visibility_rules, published_at
        )
-       values ($1, $2, $3, $4, $5, 'published', $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, '{}'::jsonb, now())`,
+       values ($1, $2, $3, $4, $5, $6, 'published', $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, '{}'::jsonb, now())`,
       [
         publishedId,
         template.key,
         template.name,
+        template.form_type,
         template.description,
         nextVersion,
         targetWorkflowTemplateId,

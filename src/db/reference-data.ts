@@ -7,6 +7,176 @@ const loadSpecFile = async (fileName: string): Promise<string> => {
   return readFile(path.join(specsDirectory, fileName), "utf8");
 };
 
+const customerLookupHandlerSource = [
+  "export default async function handler(input, runtime) {",
+  "  const orderNumberField = input.action.args?.[0] ?? 'order_number';",
+  "  const orderNumber = String(input.fieldValues[orderNumberField] ?? '').trim();",
+  "",
+  "  if (!orderNumber) {",
+  "    return {",
+  "      fieldValues: input.fieldValues,",
+  "      actionState: runtime.createErrorActionState({",
+  "        title: 'Auftragsnummer fehlt',",
+  "        message: 'Bitte zuerst eine Auftragsnummer eingeben, bevor Kundendaten geladen werden.',",
+  "        actionName: input.action.name,",
+  "      }),",
+  "    };",
+  "  }",
+  "",
+  "  const matchedCustomer = await runtime.findActiveReferenceEntityByDataField({",
+  "    entityType: 'customer',",
+  "    field: 'order_number',",
+  "    value: orderNumber,",
+  "  });",
+  "",
+  "  if (!matchedCustomer) {",
+  "    return {",
+  "      fieldValues: input.fieldValues,",
+  "      actionState: runtime.createInfoActionState({",
+  "        title: 'Kein Kundentreffer',",
+  "        message: 'In den internen Stammdaten wurde kein Kundenauftrag mit dieser Nummer gefunden.',",
+  "        actionName: input.action.name,",
+  "      }),",
+  "    };",
+  "  }",
+  "",
+  "  const nextFieldValues = { ...input.fieldValues };",
+  "",
+  "  for (const bindTarget of input.action.bind ?? []) {",
+  "    if (bindTarget === 'customer') {",
+  "      nextFieldValues.customer = matchedCustomer.displayName;",
+  "    }",
+  "",
+  "    if (bindTarget === 'service_location') {",
+  "      nextFieldValues.service_location = typeof matchedCustomer.dataJson.service_location === 'string'",
+  "        ? matchedCustomer.dataJson.service_location",
+  "        : '';",
+  "    }",
+  "  }",
+  "",
+  "  nextFieldValues.customer_master_id = matchedCustomer.entityKey;",
+  "  nextFieldValues.customer_master_status = matchedCustomer.status === 'active' ? 'Aktiv' : 'Inaktiv';",
+  "  nextFieldValues.customer_order_status = typeof matchedCustomer.dataJson.order_status === 'string'",
+  "    ? matchedCustomer.dataJson.order_status",
+  "    : 'offen';",
+  "  nextFieldValues.customer_order_created_at = typeof matchedCustomer.dataJson.order_created_at === 'string'",
+  "    ? matchedCustomer.dataJson.order_created_at",
+  "    : '';",
+  "",
+  "  return {",
+  "    fieldValues: nextFieldValues,",
+  "    actionState: runtime.createInfoActionState({",
+  "      title: 'Kundendaten geladen',",
+  "      message: 'Kundendaten wurden aus den internen Stammdaten geladen.',",
+  "      actionName: input.action.name,",
+  "    }),",
+  "  };",
+  "}",
+].join("\n");
+
+const productSuggestHandlerSource = [
+  "const tokenize = (value) => String(value ?? '')",
+  "  .trim()",
+  "  .toLowerCase()",
+  "  .split(/[^a-z0-9]+/i)",
+  "  .map((token) => token.trim())",
+  "  .filter((token) => token.length > 1);",
+  "",
+  "const scoreProductMatch = (description, product) => {",
+  "  const descriptionTokens = new Set(tokenize(description));",
+  "  const keywordTokens = tokenize([",
+  "    product.displayName,",
+  "    typeof product.dataJson.product_type === 'string' ? product.dataJson.product_type : '',",
+  "    typeof product.dataJson.match_terms === 'string' ? product.dataJson.match_terms : '',",
+  "  ].join(' '));",
+  "  let score = 0;",
+  "",
+  "  for (const token of keywordTokens) {",
+  "    if (descriptionTokens.has(token)) {",
+  "      score += 2;",
+  "    }",
+  "  }",
+  "",
+  "  if (descriptionTokens.has('wartung') && keywordTokens.includes('wartung')) score += 3;",
+  "  if (descriptionTokens.has('pruefung') && keywordTokens.includes('pruefung')) score += 3;",
+  "  if (descriptionTokens.has('montage') && keywordTokens.includes('montage')) score += 3;",
+  "",
+  "  return score;",
+  "};",
+  "",
+  "export default async function handler(input, runtime) {",
+  "  const workDescriptionField = input.action.args?.[0] ?? 'work_description';",
+  "  const workDescription = runtime.richTextHtmlToPlainText(input.fieldValues[workDescriptionField]);",
+  "",
+  "  if (!workDescription) {",
+  "    return {",
+  "      fieldValues: input.fieldValues,",
+  "      actionState: runtime.createErrorActionState({",
+  "        title: 'Taetigkeitsbeschreibung fehlt',",
+  "        message: 'Bitte zuerst eine Taetigkeitsbeschreibung eingeben, bevor ein Produktvorschlag geholt wird.',",
+  "        actionName: input.action.name,",
+  "      }),",
+  "    };",
+  "  }",
+  "",
+  "  const activeProducts = (await runtime.listReferenceEntities('product')).filter((product) => product.status === 'active');",
+  "  const matchedProduct = activeProducts",
+  "    .map((product) => ({ product, score: scoreProductMatch(workDescription, product) }))",
+  "    .sort((left, right) => right.score - left.score || left.product.displayName.localeCompare(right.product.displayName))",
+  "    .find((entry) => entry.score > 0)?.product;",
+  "",
+  "  if (!matchedProduct) {",
+  "    return {",
+  "      fieldValues: input.fieldValues,",
+  "      actionState: runtime.createInfoActionState({",
+  "        title: 'Kein Produktvorschlag',",
+  "        message: 'In den internen Produktstammdaten wurde kein passendes Produkt gefunden.',",
+  "        actionName: input.action.name,",
+  "      }),",
+  "    };",
+  "  }",
+  "",
+  "  const nextFieldValues = { ...input.fieldValues };",
+  "",
+  "  for (const bindTarget of input.action.bind ?? []) {",
+  "    if (bindTarget === 'material') {",
+  "      nextFieldValues.material = matchedProduct.displayName;",
+  "    }",
+  "  }",
+  "",
+  "  nextFieldValues.product_master_id = matchedProduct.entityKey;",
+  "  nextFieldValues.product_master_type = typeof matchedProduct.dataJson.product_type === 'string'",
+  "    ? matchedProduct.dataJson.product_type",
+  "    : '';",
+  "  nextFieldValues.product_master_status = matchedProduct.status === 'active' ? 'Aktiv' : 'Inaktiv';",
+  "",
+  "  return {",
+  "    fieldValues: nextFieldValues,",
+  "    actionState: runtime.createInfoActionState({",
+  "      title: 'Produktvorschlag geladen',",
+  "      message: 'Produktvorschlag wurde aus den internen Produktstammdaten geladen.',",
+  "      actionName: input.action.name,",
+  "    }),",
+  "  };",
+  "}",
+].join("\n");
+
+const customerListHandlerSource = [
+  "export default async function handler(input, runtime) {",
+  "  return {",
+  "    items: await runtime.listReferenceEntities('customer'),",
+  "  };",
+  "}",
+].join("\n");
+
+const productListHandlerSource = [
+  "export default async function handler(input, runtime) {",
+  "  return {",
+  "    items: await runtime.listReferenceEntities('product'),",
+  "  };",
+  "}",
+].join("\n");
+
 type SeedUser = {
   id: string;
   key: string;
@@ -32,29 +202,31 @@ type SeedMembership = {
 };
 
 type SeedOperation = {
-  operationRef: string;
-  name: string;
+  id: string;
+  key: string;
+  title: string;
+  status: "draft" | "published" | "inactive" | "archived";
   connector: string;
-  modulePath: string;
-  authStrategy: string;
+  authMode: string;
   description: string;
+  requestSchemaJson?: {
+    fields: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+      description?: string;
+    }>;
+  };
+  responseSchemaJson?: {
+    fields: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+      description?: string;
+    }>;
+  };
+  handlerTsSource: string;
   tags: string[];
-  inputSchema?: {
-    fields: Array<{
-      name: string;
-      type: string;
-      required?: boolean;
-      description?: string;
-    }>;
-  };
-  outputSchema?: {
-    fields: Array<{
-      name: string;
-      type: string;
-      required?: boolean;
-      description?: string;
-    }>;
-  };
 };
 
 type SeedWorkflow = {
@@ -71,6 +243,7 @@ type SeedTemplate = {
   id: string;
   key: string;
   name: string;
+  formType: "customer_order" | "production_record" | "qualification_record" | "generic_form";
   description: string;
   version: number;
   status: "published";
@@ -394,10 +567,69 @@ const qualificationWorkflowJson = {
   hooks: [],
 };
 
+const genericFormWorkflowJson = {
+  initialStatus: "created",
+  statuses: ["created", "assigned", "submitted", "approved", "rejected", "archived"],
+  actions: {
+    assign: {
+      from: ["created"],
+      to: "assigned",
+      allowedRoles: ["editor"],
+      completionMode: "single",
+    },
+    submit: {
+      from: ["assigned"],
+      to: "submitted",
+      allowedRoles: ["editor"],
+      completionMode: "single",
+    },
+    approve: {
+      from: ["submitted"],
+      to: "approved",
+      allowedRoles: ["approver"],
+      completionMode: "single",
+    },
+    reject: {
+      from: ["submitted"],
+      to: "rejected",
+      allowedRoles: ["approver"],
+      completionMode: "single",
+    },
+    archive: {
+      from: ["approved", "rejected"],
+      to: "archived",
+      allowedRoles: ["approver"],
+      completionMode: "single",
+    },
+  },
+  fieldRules: {
+    submitted: {
+      editable: [],
+      readonly: ["generic_form_title", "generic_form_description", "generic_form_note", "work_signature"],
+    },
+    approved: {
+      editable: [],
+      readonly: ["generic_form_title", "generic_form_description", "generic_form_note", "work_signature"],
+    },
+    archived: {
+      editable: [],
+      readonly: ["generic_form_title", "generic_form_description", "generic_form_note", "work_signature"],
+    },
+  },
+  approval: {
+    editors: "single",
+    approvers: "single",
+    submitMode: "single",
+    approvalMode: "single",
+  },
+  hooks: [],
+};
+
 export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
   const customerOrderMdx = await loadSpecFile("21_example_form_template.mdx");
   const productionBatchMdx = await loadSpecFile("24_example_production_batch_form_template.mdx");
   const qualificationRecordMdx = await loadSpecFile("23_example_qualification_form_template.mdx");
+  const genericFormMdx = await loadSpecFile("26_example_generic_form_template.mdx");
   const customersCsv = await loadSpecFile("next/examples/customers_import.csv");
   const productsCsv = await loadSpecFile("next/examples/products_import.csv");
 
@@ -496,14 +728,15 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
     ],
     operations: [
       {
-        operationRef: "customers.lookup",
-        name: "Customer Lookup",
-        connector: "internal-reference",
-        modulePath: "src/modules/next-form/load-customer.ts",
-        authStrategy: "none",
+        id: "12121212-1212-1212-1212-121212121211",
+        key: "customers.lookup",
+        title: "Customer Lookup",
+        status: "published",
+        connector: "typescript",
+        authMode: "none",
         description: "Liest Kundenauftrag und Einsatzort aus den internen Customer-Stammdaten.",
         tags: ["typescript-api", "lookup", "forms", "customers"],
-        inputSchema: {
+        requestSchemaJson: {
           fields: [
             {
               name: "order_number",
@@ -513,7 +746,7 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
             },
           ],
         },
-        outputSchema: {
+        responseSchemaJson: {
           fields: [
             { name: "customer", type: "string", description: "Angezeigter Kundenname." },
             { name: "service_location", type: "string", description: "Einsatzort fuer den Serviceeinsatz." },
@@ -523,16 +756,18 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
             { name: "customer_order_created_at", type: "string", description: "Anlagezeitpunkt des Auftrags." },
           ],
         },
+        handlerTsSource: customerLookupHandlerSource,
       },
       {
-        operationRef: "products.suggest",
-        name: "Product Suggest",
-        connector: "internal-reference",
-        modulePath: "src/modules/next-form/suggest-material.ts",
-        authStrategy: "none",
+        id: "12121212-1212-1212-1212-121212121212",
+        key: "products.suggest",
+        title: "Product Suggest",
+        status: "published",
+        connector: "typescript",
+        authMode: "none",
         description: "Schlaegt ein internes Produkt oder Wartungsset aus den Product-Stammdaten vor.",
         tags: ["typescript-api", "lookup", "forms", "products"],
-        inputSchema: {
+        requestSchemaJson: {
           fields: [
             {
               name: "work_description",
@@ -542,7 +777,7 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
             },
           ],
         },
-        outputSchema: {
+        responseSchemaJson: {
           fields: [
             { name: "material", type: "string", description: "Vorgeschlagenes Produkt oder Material." },
             { name: "product_master_id", type: "string", description: "Technischer Stammdatenschluessel." },
@@ -550,24 +785,29 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
             { name: "product_master_status", type: "string", description: "Stammdatenstatus." },
           ],
         },
+        handlerTsSource: productSuggestHandlerSource,
       },
       {
-        operationRef: "customers.list",
-        name: "Customers List",
-        connector: "internal-reference",
-        modulePath: "src/modules/entities/read.ts",
-        authStrategy: "none",
+        id: "12121212-1212-1212-1212-121212121213",
+        key: "customers.list",
+        title: "Customers List",
+        status: "published",
+        connector: "typescript",
+        authMode: "none",
         description: "Liefert interne Customer-Stammdaten fuer API und CSV-basierte Referenzwelt.",
         tags: ["typescript-api", "read", "customers"],
+        handlerTsSource: customerListHandlerSource,
       },
       {
-        operationRef: "products.list",
-        name: "Products List",
-        connector: "internal-reference",
-        modulePath: "src/modules/entities/read.ts",
-        authStrategy: "none",
+        id: "12121212-1212-1212-1212-121212121214",
+        key: "products.list",
+        title: "Products List",
+        status: "published",
+        connector: "typescript",
+        authMode: "none",
         description: "Liefert interne Product-Stammdaten fuer API und CSV-basierte Referenzwelt.",
         tags: ["typescript-api", "read", "products"],
+        handlerTsSource: productListHandlerSource,
       },
     ],
     workflows: [
@@ -598,12 +838,22 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
         status: "published",
         workflowJson: qualificationWorkflowJson,
       },
+      {
+        id: "88888888-8888-8888-8888-888888888884",
+        key: "generic.form.review.v1",
+        name: "Generisches Formular Freigabe",
+        description: "Kleiner Standardworkflow fuer einfache generische Formulare.",
+        version: 1,
+        status: "published",
+        workflowJson: genericFormWorkflowJson,
+      },
     ],
     templates: [
       {
         id: "99999999-9999-9999-9999-999999999991",
         key: "customer-order-test",
         name: "Kundenauftrag",
+        formType: "customer_order",
         description: "Serviceauftrag mit internem Customer- und Product-Lookup.",
         version: 1,
         status: "published",
@@ -617,6 +867,7 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
         id: "99999999-9999-9999-9999-999999999992",
         key: "production-batch",
         name: "Produktionsdokumentation",
+        formType: "production_record",
         description: "Batch- und serienbezogene Produktionsdokumentation mit Grid fuer Schritte.",
         version: 1,
         status: "published",
@@ -630,6 +881,7 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
         id: "99999999-9999-9999-9999-999999999993",
         key: "qualification-record",
         name: "Qualifikationsnachweis",
+        formType: "qualification_record",
         description: "Mehrbenutzer-Nachweis fuer Service und Produktion mit Fragen und per-User Submit.",
         version: 1,
         status: "published",
@@ -638,6 +890,20 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
         templateKeys: [],
         documentKeys: ["qualification_record_number"],
         tableFields: ["qualification_record_number", "qualification_title", "owner_user_id", "valid_until"],
+      },
+      {
+        id: "99999999-9999-9999-9999-999999999994",
+        key: "generic-form",
+        name: "Generisches Formular",
+        formType: "generic_form",
+        description: "Einfaches generisches Formular fuer interne Freigaben.",
+        version: 1,
+        status: "published",
+        workflowTemplateId: "88888888-8888-8888-8888-888888888884",
+        mdxBody: genericFormMdx,
+        templateKeys: [],
+        documentKeys: ["generic_form_title"],
+        tableFields: ["generic_form_title", "approval_status"],
       },
     ],
     templateAssignments: [
@@ -665,6 +931,20 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
       {
         id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4",
         templateId: "99999999-9999-9999-9999-999999999993",
+        groupId: "66666666-6666-6666-6666-666666666662",
+        status: "active",
+        assignedAt: "2026-04-03T08:00:00.000Z",
+      },
+      {
+        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5",
+        templateId: "99999999-9999-9999-9999-999999999994",
+        groupId: "66666666-6666-6666-6666-666666666661",
+        status: "active",
+        assignedAt: "2026-04-03T08:00:00.000Z",
+      },
+      {
+        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6",
+        templateId: "99999999-9999-9999-9999-999999999994",
         groupId: "66666666-6666-6666-6666-666666666662",
         status: "active",
         assignedAt: "2026-04-03T08:00:00.000Z",
@@ -784,6 +1064,26 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
         createdAt: "2026-04-03T09:00:00.000Z",
         updatedAt: "2026-04-03T09:10:00.000Z",
       },
+      {
+        id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee4",
+        templateId: "99999999-9999-9999-9999-999999999994",
+        templateVersion: 1,
+        workflowTemplateId: "88888888-8888-8888-8888-888888888884",
+        workflowTemplateVersion: 1,
+        status: "assigned",
+        dataJson: {
+          generic_form_title: "Generisches Formular GF-2026-001",
+          generic_form_description: "Interner Referenzfall fuer einen bewusst einfachen vierten Formulartyp.",
+          generic_form_note: "<p>Kurzer Nachweis fuer einen generischen Freigabefall.</p>",
+          approval_status: "offen",
+        },
+        externalJson: {},
+        snapshotJson: {},
+        integrationContextJson: {},
+        createdBy: "11111111-1111-1111-1111-111111111111",
+        createdAt: "2026-04-03T09:20:00.000Z",
+        updatedAt: "2026-04-03T09:20:00.000Z",
+      },
     ],
     documentAssignments: [
       {
@@ -849,6 +1149,24 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
         assignedAt: "2026-04-03T09:00:00.000Z",
         active: true,
       },
+      {
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb8",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee4",
+        userId: "33333333-3333-3333-3333-333333333333",
+        role: "editor",
+        assignedBy: "11111111-1111-1111-1111-111111111111",
+        assignedAt: "2026-04-03T09:20:00.000Z",
+        active: true,
+      },
+      {
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb9",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee4",
+        userId: "11111111-1111-1111-1111-111111111111",
+        role: "approver",
+        assignedBy: "11111111-1111-1111-1111-111111111111",
+        assignedAt: "2026-04-03T09:20:00.000Z",
+        active: true,
+      },
     ],
     tasks: [
       {
@@ -894,6 +1212,17 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
         role: "editor",
         createdAt: "2026-04-03T09:10:00.000Z",
         updatedAt: "2026-04-03T09:10:00.000Z",
+      },
+      {
+        id: "cccccccc-cccc-cccc-cccc-ccccccccccc5",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee4",
+        userId: "33333333-3333-3333-3333-333333333333",
+        title: "Generisches Formular GF-2026-001 weiterbearbeiten",
+        action: "save",
+        status: "open",
+        role: "editor",
+        createdAt: "2026-04-03T09:20:00.000Z",
+        updatedAt: "2026-04-03T09:20:00.000Z",
       },
     ],
     attachments: [
@@ -972,6 +1301,15 @@ export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
         message: "Teilnehmerstand fuer QN-2026-001 gespeichert.",
         payloadJson: {},
         createdAt: "2026-04-03T09:10:00.000Z",
+      },
+      {
+        id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee7",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee4",
+        eventType: "created",
+        actorUserId: "11111111-1111-1111-1111-111111111111",
+        message: "Generisches Formular GF-2026-001 angelegt.",
+        payloadJson: {},
+        createdAt: "2026-04-03T09:20:00.000Z",
       },
     ],
     entityImports: [

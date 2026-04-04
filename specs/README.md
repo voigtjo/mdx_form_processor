@@ -33,9 +33,11 @@ Die erste App liefert die produktive Zielschärfe.
 ### Plattform-Kern
 
 - versionierte Formulare
+- `form_type` pro Template als fachlicher Familienanker
 - versionierte Workflows
-- TypeScript-APIs fuer Lookup, Actions, Hooks, Import und Export
+- TypeScript-APIs als zentrale DB-Objekte mit UI-Wartung und Runtime fuer Lookup, Actions, Hooks, Import und Export
 - Dokumentstart aus publizierten Template-/Workflow-Staenden
+- `documents` als Prozesscontainer plus typed entity tables als fachliche Zielstruktur
 - laufende Dokumente auf fester Version
 - Journal, Attachments, History
 - einfache Rechte- und Zuweisungslogik
@@ -48,7 +50,8 @@ Die erste App liefert die produktive Zielschärfe.
 ### Spaetere, aber vorbereitete Testwelten
 
 - Produktionsdokumentation mit Batch oder Seriennummer
-- Qualifikations- und Nachweisformulare mit Mehrfachzuweisung, Fragen und Signatur
+- Qualifikations- und Nachweisformulare mit Mehrfachzuweisung, Pages, Fragen, Auswertung und Signatur
+- generisches Formular als kleinster vierter Formulartyp
 
 ## Fuehrende Dokumentgruppen
 
@@ -88,6 +91,8 @@ Fuehrend fuer die naechste Plattformphase sind:
 - `10_template_grid_and_data_exchange_target_spec.md`
 - `11_reference_and_related_records_target_spec.md`
 - `12_test_strategy_target_spec.md`
+- `13_form_types_and_entity_tables_target_spec.md`
+- `14_qualification_pages_and_evaluation_target_spec.md`
 
 ### Hintergrund- und Uebergangsdokumente
 
@@ -98,7 +103,7 @@ Die folgenden Dokumente bleiben nuetzlich, sind aber nicht mehr der fuehrende Pr
 - `21_example_form_template.mdx`
 - `22_example_workflow_template.json`
 - `23_example_operation_customer_order.ts`
-- `specs/next/05_reference_example_craftsman_order_spec.md`
+- `specs/next/05_reference_example_customer_order_spec.md`
 - `specs/next/06_transition_migration_target_spec.md`
 
 Sie dienen als Kontext, Beispiel oder Historie, nicht als primaere Steuerung des naechsten Plattformschritts.
@@ -109,8 +114,9 @@ Neue Specs sollen:
 
 - produktnah bleiben
 - klare Modellgrenzen ziehen
+- `forms`, `workflows`, `apis`, `entities` und `lookups` fachlich sauber trennen
 - keine doppelte Alt-/Neu-Erzaehlung mitfuehren
-- Preview- oder Umbaupfade nicht als Hauptproduktweg behandeln
+- keine Preview- oder Dev-Nebenwelt fuer Formulare aufbauen
 - direkte Ableitung fuer kleine Implementierungsschritte ermoeglichen
 
 ## Nicht das Ziel dieses Pakets

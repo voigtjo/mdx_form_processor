@@ -1,9 +1,11 @@
 import { withDb, withDbTransaction } from "../../db/pool.js";
+import { syncTypedRecordForDocument, type FormType } from "./typed-records.js";
 
 type StartableTemplateRow = {
   template_id: string;
   template_key: string;
   template_name: string;
+  template_form_type: FormType;
   template_version: number;
   workflow_template_id: string;
   workflow_template_version: number;
@@ -38,6 +40,7 @@ const findStartableTemplate = async (
         ft.id as template_id,
         ft.key as template_key,
         ft.name as template_name,
+        ft.form_type as template_form_type,
         ft.version as template_version,
         wt.id as workflow_template_id,
         wt.version as workflow_template_version,
@@ -136,6 +139,14 @@ export const startDocumentForUser = async ({ templateId, userId }: StartDocument
         }),
       ],
     );
+
+    await syncTypedRecordForDocument(client, {
+      documentId,
+      formType: template.template_form_type,
+      templateName: template.template_name,
+      status: initialStatus,
+      dataJson: {},
+    });
 
     return {
       ok: true,

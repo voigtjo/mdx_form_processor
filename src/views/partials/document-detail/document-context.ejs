@@ -1,4 +1,4 @@
-<% if (documentDetail.nextFormReference) { %>
+<% if (documentDetail.formRuntimeReference) { %>
   <details class="panel panel-collapsible">
     <summary class="collapsible-summary">
       <div class="collapsible-summary-copy">
@@ -11,6 +11,13 @@
       </div>
     </summary>
     <div class="collapsible-body">
+      <% if (documentDetail.typedRecordSummary) { %>
+        <div class="compact-meta-block compact-meta-block-inline">
+          <strong>Typed Record</strong>
+          <p><%= documentDetail.document.formType %> · <%= documentDetail.typedRecordSummary.tableName %> · <%= documentDetail.typedRecordSummary.isPresent ? "vorhanden" : "offen" %></p>
+          <p><a class="text-link" href="/api/typed-records/<%= documentDetail.document.id %>?user=<%= activeUser.key %>">Typed Record API</a></p>
+        </div>
+      <% } %>
       <div class="grid two-up detail-grid">
         <div>
           <h4>Assignments</h4>

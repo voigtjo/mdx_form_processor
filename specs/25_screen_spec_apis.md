@@ -2,60 +2,104 @@
 
 ## Ziel
 
-Die API-Seite macht den dritten Plattform-Baustein sichtbar:
+`/apis` ist die produktive Pflegeoberflaeche fuer den dritten Plattform-Baustein:
 
-- zentrale TypeScript-Operationen
-- Form-Data-APIs
+- zentrale TypeScript APIs
+- Form-Data-JSON/CSV-Schnitte
 - interne Stammdaten-APIs
-- CSV-Import für Customers und Products
-- CSV-Export für Formulardaten
+- CSV-Import fuer Customers und Products
 
-## Struktur
+## Hauptbereiche
 
-Die Seite bleibt kompakt:
+1. kompakter API-Header
+2. API-Liste
+3. API-Detail / Edit
+4. Form-Data-APIs
+5. Stammdaten-APIs
+6. Typed Record APIs
+7. CSV-Import
 
-1. Header
-2. TypeScript Operations
-3. Form Data APIs
-4. Stammdaten APIs
-5. CSV Import Customers / Products
+## API-Liste
 
-## Operations
+Je API sichtbar:
 
-Mindestens sichtbar:
+- `key`
+- `title`
+- `status`
+- `connector`
+- `auth_mode`
+- Request-/Response-Felder
+- Nutzung in Templates, Workflows und Documents
 
-- `customers.lookup`
-- `products.suggest`
-- `customers.list`
-- `products.list`
+## API-Detail
 
-Je Operation sichtbar:
+Pflegbar ueber UI:
 
-- `operationRef`
-- Request / Response
-- Nutzung in Formularen
-- Nutzung in Workflows
+- Key
+- Title
+- Description
+- Connector
+- Auth Mode
+- Request Schema JSON
+- Response Schema JSON
+- Handler Source
+- Tags
 
-## Stammdaten APIs
+Layoutregel:
 
-Es gibt lesende interne APIs für:
+- `Description` ist normales Eingabefeld, kein Codeblock
+- `Handler Source` steht oberhalb von `Request / Response`
+- Detail bleibt eine wartbare Plattformmaske statt Technik-Review-Fläche
+
+Lifecycle im selben Detail:
+
+- Save Draft
+- Publish
+- Unpublish
+- Archive
+
+## Stammdaten- und Form-Data-Schnitte
+
+Es gibt lesende interne APIs fuer:
 
 - `/api/entities/customers`
 - `/api/entities/customers/:entityKey`
 - `/api/entities/products`
 - `/api/entities/products/:entityKey`
 
-Diese APIs sind die führende Referenzbasis für interne Customer- und Product-Stammdaten.
+und fuer Formulardaten:
 
-## Form Data APIs
+- `/api/form-data/templates/:templateKey`
+- `/api/form-data/templates/:templateKey/:documentId`
+- `/api/form-data/templates/:templateKey/export.csv`
 
-Pro Template sichtbar:
+Ergaenzend gibt es fuer den typed-entity-Slice:
 
-- JSON Liste
-- JSON Einzelrecord
-- CSV Export
+- `/api/typed-records/:documentId`
+- `/api/typed-records/customer-orders`
+- `/api/typed-records/customer-orders/:documentId`
+- `/api/typed-records/production-records`
+- `/api/typed-records/production-records/:documentId`
+- `/api/typed-records/qualification-records`
+- `/api/typed-records/qualification-records/:documentId`
+- `/api/typed-records/generic-form-records`
+- `/api/typed-records/generic-form-records/:documentId`
 
-## Pflege-Regel
+Optional und klein gehalten:
 
-- zentrale API-Definition auf `/apis`
-- konkrete Formularnutzung im Template-Detail
+- `/api/typed-records/customer-orders/export.csv`
+- `/api/typed-records/production-records/export.csv`
+- `/api/typed-records/qualification-records/export.csv`
+- `/api/typed-records/generic-form-records/export.csv`
+
+Auf `/apis` gibt es dafuer einen eigenen kompakten Bereich `Typed Record APIs` mit JSON- und CSV-Links je Familie.
+
+## Produktregel
+
+`/apis` ist kein reiner Lesekatalog mehr.
+Die Seite ist die fuehrende Wartungsoberflaeche fuer APIs, waehrend Templates und Workflows nur deren Nutzung referenzieren.
+
+Start-to-End-relevant sind im Referenzstand besonders:
+
+- `customers.lookup`
+- `products.suggest`

@@ -36,3 +36,8 @@ Formulardaten können zusätzlich als JSON bereitgestellt werden:
 - Liste pro Template
 - Einzelrecord
 - optionale Feldselektion
+
+## Typed Entity Richtung
+
+Grid, CSV und JSON laufen im aktuellen Stand noch ueber `documents` und `data_json`.
+Parallel dazu werden typed entity tables pro `form_type` als fachliche Zielstruktur befuellt.

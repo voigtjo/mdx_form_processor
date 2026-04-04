@@ -1,15 +1,15 @@
 import { readFile } from "node:fs/promises";
 import type {
-  NextFormElement,
-  NextFormControlType,
-  NextFormDefinition,
-  NextFormMeta,
-  NextFormPropertyMap,
-  NextFormRow,
-  NextFormSection,
-  NextFormSlot,
+  FormRuntimeElement,
+  FormRuntimeControlType,
+  FormRuntimeDefinition,
+  FormRuntimeMeta,
+  FormRuntimePropertyMap,
+  FormRuntimeRow,
+  FormRuntimeSection,
+  FormRuntimeSlot,
 } from "./types.js";
-import { nextFormControlTypes } from "./types.js";
+import { formRuntimeControlTypes } from "./types.js";
 
 const metaKeys = ["title", "key", "version"] as const;
 
@@ -106,7 +106,7 @@ const splitCommaSeparatedValue = (value: string | undefined): string[] | undefin
   return parts.length > 0 ? parts : undefined;
 };
 
-const parsePropertyToken = (token: string, properties: NextFormPropertyMap): void => {
+const parsePropertyToken = (token: string, properties: FormRuntimePropertyMap): void => {
   const separatorIndex = token.indexOf("=");
 
   if (separatorIndex < 0) {
@@ -121,10 +121,10 @@ const parsePropertyToken = (token: string, properties: NextFormPropertyMap): voi
   properties[key] = value;
 };
 
-const isNextFormControlType = (value: string): value is NextFormControlType =>
-  (nextFormControlTypes as readonly string[]).includes(value);
+const isFormRuntimeControlType = (value: string): value is FormRuntimeControlType =>
+  (formRuntimeControlTypes as readonly string[]).includes(value);
 
-const parseControlSlot = (source: string): NextFormSlot => {
+const parseControlSlot = (source: string): FormRuntimeSlot => {
   const match = source.match(/^(.+?):\s*([a-zA-Z][a-zA-Z0-9_-]*)\((.*)\)$/);
 
   if (!match) {
@@ -139,7 +139,7 @@ const parseControlSlot = (source: string): NextFormSlot => {
     throw new Error(`Control-Slot unvollstaendig: "${source}"`);
   }
 
-  if (!isNextFormControlType(controlType)) {
+  if (!isFormRuntimeControlType(controlType)) {
     throw new Error(`Control-Typ ${controlType} wird im vereinfachten Formularmodell aktuell nicht unterstuetzt.`);
   }
 
@@ -150,7 +150,7 @@ const parseControlSlot = (source: string): NextFormSlot => {
     throw new Error(`Control-Name fehlt: "${source}"`);
   }
 
-  const properties: NextFormPropertyMap = {};
+  const properties: FormRuntimePropertyMap = {};
 
   for (const token of propertyTokens) {
     parsePropertyToken(token, properties);
@@ -159,7 +159,7 @@ const parseControlSlot = (source: string): NextFormSlot => {
   const kind = controlType === "action" ? "action" : controlType === "lookup" ? "lookup" : "field";
   const args = splitCommaSeparatedValue(typeof properties.args === "string" ? properties.args : undefined);
   const bind = splitCommaSeparatedValue(typeof properties.bind === "string" ? properties.bind : undefined);
-  const control: NextFormElement = {
+  const control: FormRuntimeElement = {
     kind,
     controlType,
     name,
@@ -176,7 +176,7 @@ const parseControlSlot = (source: string): NextFormSlot => {
   };
 };
 
-const parseMetaLine = (line: string, meta: Partial<NextFormMeta>): boolean => {
+const parseMetaLine = (line: string, meta: Partial<FormRuntimeMeta>): boolean => {
   const separatorIndex = line.indexOf(":");
 
   if (separatorIndex < 0) {
@@ -217,7 +217,7 @@ const extractFrontmatter = (source: string): { metaLines: string[]; body: string
   };
 };
 
-const finalizeMeta = (meta: Partial<NextFormMeta>): NextFormMeta => {
+const finalizeMeta = (meta: Partial<FormRuntimeMeta>): FormRuntimeMeta => {
   if (!meta.title || !meta.key || !meta.version) {
     throw new Error("Das vereinfachte Formular braucht title, key und version.");
   }
@@ -229,14 +229,14 @@ const finalizeMeta = (meta: Partial<NextFormMeta>): NextFormMeta => {
   };
 };
 
-export const parseNextFormSource = (source: string): NextFormDefinition => {
+export const parseFormRuntimeSource = (source: string): FormRuntimeDefinition => {
   const { metaLines, body } = extractFrontmatter(source);
-  const meta: Partial<NextFormMeta> = {};
-  const sections: NextFormSection[] = [];
-  const controls: NextFormElement[] = [];
-  const actions: NextFormElement[] = [];
+  const meta: Partial<FormRuntimeMeta> = {};
+  const sections: FormRuntimeSection[] = [];
+  const controls: FormRuntimeElement[] = [];
+  const actions: FormRuntimeElement[] = [];
   const lines = body.split(/\r?\n/);
-  let currentSection: NextFormSection | null = null;
+  let currentSection: FormRuntimeSection | null = null;
 
   for (const line of metaLines) {
     const trimmed = line.trim();
@@ -272,7 +272,7 @@ export const parseNextFormSource = (source: string): NextFormDefinition => {
 
     const rowSource = trimmed.replace(/^-+\s*/, "");
     const slots = splitRowIntoSlots(rowSource).map(parseControlSlot);
-    const row: NextFormRow = {
+    const row: FormRuntimeRow = {
       source: rowSource,
       slots,
     };
@@ -296,20 +296,20 @@ export const parseNextFormSource = (source: string): NextFormDefinition => {
   };
 };
 
-export const referenceCraftsmanOrderFormPath = new URL(
-  "../../../specs/next/examples/craftsman_order.form.md",
+export const referenceCustomerOrderFormPath = new URL(
+  "../../../specs/next/examples/customer_order.form.md",
   import.meta.url,
 );
 
-export const readNextFormSourceText = async (fileUrl: URL): Promise<string> => {
+export const readFormRuntimeSourceText = async (fileUrl: URL): Promise<string> => {
   return readFile(fileUrl, "utf8");
 };
 
-export const readNextFormFile = async (fileUrl: URL): Promise<NextFormDefinition> => {
-  const source = await readNextFormSourceText(fileUrl);
-  return parseNextFormSource(source);
+export const readFormRuntimeFile = async (fileUrl: URL): Promise<FormRuntimeDefinition> => {
+  const source = await readFormRuntimeSourceText(fileUrl);
+  return parseFormRuntimeSource(source);
 };
 
-export const readReferenceCraftsmanOrderForm = async (): Promise<NextFormDefinition> => {
-  return readNextFormFile(referenceCraftsmanOrderFormPath);
+export const readReferenceCustomerOrderForm = async (): Promise<FormRuntimeDefinition> => {
+  return readFormRuntimeFile(referenceCustomerOrderFormPath);
 };

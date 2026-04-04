@@ -1,32 +1,32 @@
 import type { User } from "../../types/domain.js";
-import type { NextFormControlType, NextFormFieldControlType } from "./types.js";
+import type { FormRuntimeControlType, FormRuntimeFieldControlType } from "./types.js";
 
-export type ReferenceNextFormFieldRuntimeRole =
+export type ReferenceFormRuntimeFieldRuntimeRole =
   | "lookup_input"
   | "lookup_prefill"
   | "manual_input"
   | "derived_readonly"
   | "workflow_readonly";
 
-export type ReferenceNextFormLookupRole = "none" | "input" | "result" | "masterdata";
+export type ReferenceFormRuntimeLookupRole = "none" | "input" | "result" | "masterdata";
 
-export type ReferenceNextFormOptionItem = {
+export type ReferenceFormRuntimeOptionItem = {
   value: string;
   label: string;
 };
 
-export type ReferenceNextFormFieldSemantic = {
-  controlType: NextFormFieldControlType;
-  runtimeRole: ReferenceNextFormFieldRuntimeRole;
-  lookupRole: ReferenceNextFormLookupRole;
+export type ReferenceFormRuntimeFieldSemantic = {
+  controlType: FormRuntimeFieldControlType;
+  runtimeRole: ReferenceFormRuntimeFieldRuntimeRole;
+  lookupRole: ReferenceFormRuntimeLookupRole;
   isSubmitRequired: boolean;
   isEditableWhenOpen: boolean;
   emptyValueLabel?: string;
   helpText?: string;
 };
 
-export type ReferenceNextFormActionSemantic = {
-  controlType: Extract<NextFormControlType, "action" | "lookup">;
+export type ReferenceFormRuntimeActionSemantic = {
+  controlType: Extract<FormRuntimeControlType, "action" | "lookup">;
   runtimeRole: "lookup_trigger";
   lookupRole: "trigger";
   args: string[];
@@ -34,14 +34,14 @@ export type ReferenceNextFormActionSemantic = {
   hint?: string;
 };
 
-type ReferenceNextFormTemplateConfig = {
-  fieldSemantics: Record<string, ReferenceNextFormFieldSemantic>;
-  actionSemantics: Record<string, ReferenceNextFormActionSemantic>;
+type ReferenceFormRuntimeTemplateConfig = {
+  fieldSemantics: Record<string, ReferenceFormRuntimeFieldSemantic>;
+  actionSemantics: Record<string, ReferenceFormRuntimeActionSemantic>;
   hiddenFieldNames: string[];
-  buildMasterDataSections?: (fieldValues: Record<string, string>) => ReferenceNextFormMasterDataSection[];
+  buildMasterDataSections?: (fieldValues: Record<string, string>) => ReferenceFormRuntimeMasterDataSection[];
 };
 
-const buildUserOptionItems = (users: User[]): ReferenceNextFormOptionItem[] => {
+const buildUserOptionItems = (users: User[]): ReferenceFormRuntimeOptionItem[] => {
   return users
     .filter((user) => user.status === "active")
     .map((user) => ({
@@ -52,12 +52,12 @@ const buildUserOptionItems = (users: User[]): ReferenceNextFormOptionItem[] => {
 
 const resolveSingleUserDisplayValue = (
   value: string,
-  optionItems: ReferenceNextFormOptionItem[],
+  optionItems: ReferenceFormRuntimeOptionItem[],
 ): string => optionItems.find((item) => item.value === value)?.label ?? value;
 
 const resolveMultiUserDisplayValue = (
   value: string,
-  optionItems: ReferenceNextFormOptionItem[],
+  optionItems: ReferenceFormRuntimeOptionItem[],
 ): string => value
   .split(",")
   .map((entry) => entry.trim())
@@ -156,7 +156,7 @@ const customerOrderFieldSemantics = {
     emptyValueLabel: "Noch nicht signiert",
     helpText: "Setzt Nutzer und Zeitstempel fuer den Arbeitsbericht.",
   },
-} as const satisfies Record<string, ReferenceNextFormFieldSemantic>;
+} as const satisfies Record<string, ReferenceFormRuntimeFieldSemantic>;
 
 const qualificationFieldSemantics = {
   qualification_record_number: {
@@ -228,7 +228,7 @@ const qualificationFieldSemantics = {
     emptyValueLabel: "Noch nicht signiert",
     helpText: "Bestaetigt den Nachweis mit aktuellem Nutzer und Zeitstempel.",
   },
-} as const satisfies Record<string, ReferenceNextFormFieldSemantic>;
+} as const satisfies Record<string, ReferenceFormRuntimeFieldSemantic>;
 
 const productionBatchFieldSemantics = {
   batch_id: {
@@ -282,9 +282,48 @@ const productionBatchFieldSemantics = {
     isEditableWhenOpen: true,
     emptyValueLabel: "Noch nicht signiert",
   },
-} as const satisfies Record<string, ReferenceNextFormFieldSemantic>;
+} as const satisfies Record<string, ReferenceFormRuntimeFieldSemantic>;
 
-export const referenceNextFormActionSemantics = {
+const genericFormFieldSemantics = {
+  generic_form_title: {
+    controlType: "text",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: true,
+    isEditableWhenOpen: true,
+  },
+  generic_form_description: {
+    controlType: "textarea",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+  },
+  generic_form_note: {
+    controlType: "html-editor",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: true,
+    isEditableWhenOpen: true,
+  },
+  approval_status: {
+    controlType: "select",
+    runtimeRole: "workflow_readonly",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: false,
+  },
+  work_signature: {
+    controlType: "signature",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Noch nicht signiert",
+  },
+} as const satisfies Record<string, ReferenceFormRuntimeFieldSemantic>;
+
+export const referenceFormRuntimeActionSemantics = {
   load_customer: {
     controlType: "action",
     runtimeRole: "lookup_trigger",
@@ -301,12 +340,12 @@ export const referenceNextFormActionSemantics = {
     bind: ["material"],
     hint: "Fuellt Material aus dem Produktvorschlag.",
   },
-} as const satisfies Record<string, ReferenceNextFormActionSemantic>;
+} as const satisfies Record<string, ReferenceFormRuntimeActionSemantic>;
 
-const nextFormTemplateConfigs = {
+const formRuntimeTemplateConfigs = {
   "customer-order-test": {
     fieldSemantics: customerOrderFieldSemantics,
-    actionSemantics: referenceNextFormActionSemantics,
+    actionSemantics: referenceFormRuntimeActionSemantics,
     hiddenFieldNames: [
       "customer_master_id",
       "customer_master_status",
@@ -383,10 +422,15 @@ const nextFormTemplateConfigs = {
     actionSemantics: {},
     hiddenFieldNames: [],
   },
-} as const satisfies Record<string, ReferenceNextFormTemplateConfig>;
+  "generic-form": {
+    fieldSemantics: genericFormFieldSemantics,
+    actionSemantics: {},
+    hiddenFieldNames: [],
+  },
+} as const satisfies Record<string, ReferenceFormRuntimeTemplateConfig>;
 
-export const referenceNextFormSubmitRequiredFieldNames = Object.fromEntries(
-  Object.entries(nextFormTemplateConfigs).map(([templateKey, config]) => [
+export const referenceFormRuntimeSubmitRequiredFieldNames = Object.fromEntries(
+  Object.entries(formRuntimeTemplateConfigs).map(([templateKey, config]) => [
     templateKey,
     Object.entries(config.fieldSemantics)
       .filter(([, definition]) => definition.isSubmitRequired)
@@ -394,29 +438,29 @@ export const referenceNextFormSubmitRequiredFieldNames = Object.fromEntries(
   ]),
 ) as Record<string, string[]>;
 
-const nextFormLockedStatuses = new Set(["submitted", "approved", "rejected", "archived"]);
+const formRuntimeLockedStatuses = new Set(["submitted", "approved", "rejected", "archived"]);
 
-export type ReferenceNextFormEditState = {
+export type ReferenceFormRuntimeEditState = {
   isAvailable: boolean;
   reason?: string;
 };
 
-type ReferenceNextFormFieldUi = {
-  controlType: NextFormFieldControlType;
-  runtimeRole: ReferenceNextFormFieldRuntimeRole;
-  lookupRole: ReferenceNextFormLookupRole;
+type ReferenceFormRuntimeFieldUi = {
+  controlType: FormRuntimeFieldControlType;
+  runtimeRole: ReferenceFormRuntimeFieldRuntimeRole;
+  lookupRole: ReferenceFormRuntimeLookupRole;
   isSubmitRequired: boolean;
   isEditable: boolean;
   isReadOnly: boolean;
   state: "editable" | "readonly";
   emptyValueLabel?: string;
   helpText?: string;
-  optionItems?: ReferenceNextFormOptionItem[];
+  optionItems?: ReferenceFormRuntimeOptionItem[];
   displayValue?: string;
 };
 
-type ReferenceNextFormActionUi = {
-  controlType: Extract<NextFormControlType, "action" | "lookup">;
+type ReferenceFormRuntimeActionUi = {
+  controlType: Extract<FormRuntimeControlType, "action" | "lookup">;
   runtimeRole: "lookup_trigger";
   lookupRole: "trigger";
   args: string[];
@@ -425,46 +469,46 @@ type ReferenceNextFormActionUi = {
   hint?: string;
 };
 
-export type ReferenceNextFormMasterDataEntry = {
+export type ReferenceFormRuntimeMasterDataEntry = {
   label: string;
   value: string;
   emptyValueLabel: string;
 };
 
-export type ReferenceNextFormMasterDataSection = {
+export type ReferenceFormRuntimeMasterDataSection = {
   key: "customer" | "product";
   title: string;
   summary: string;
-  entries: ReferenceNextFormMasterDataEntry[];
+  entries: ReferenceFormRuntimeMasterDataEntry[];
 };
 
-const getTemplateConfig = (templateKey: string): ReferenceNextFormTemplateConfig | null => {
-  return nextFormTemplateConfigs[templateKey as keyof typeof nextFormTemplateConfigs] ?? null;
+const getTemplateConfig = (templateKey: string): ReferenceFormRuntimeTemplateConfig | null => {
+  return formRuntimeTemplateConfigs[templateKey as keyof typeof formRuntimeTemplateConfigs] ?? null;
 };
 
-export const getReferenceNextFormHiddenFieldNames = (templateKey: string): string[] => {
+export const getReferenceFormRuntimeHiddenFieldNames = (templateKey: string): string[] => {
   const config = getTemplateConfig(templateKey);
   return config ? [...config.hiddenFieldNames] : [];
 };
 
-export const getReferenceNextFormSubmitRequiredFieldNames = (templateKey: string): string[] => {
-  return [...(referenceNextFormSubmitRequiredFieldNames[templateKey] ?? [])];
+export const getReferenceFormRuntimeSubmitRequiredFieldNames = (templateKey: string): string[] => {
+  return [...(referenceFormRuntimeSubmitRequiredFieldNames[templateKey] ?? [])];
 };
 
-export const getReferenceNextFormEditState = (input: {
+export const getReferenceFormRuntimeEditState = (input: {
   documentStatus: string;
   baseEditState: {
     isAvailable: boolean;
     reason?: string;
   };
-}): ReferenceNextFormEditState => {
+}): ReferenceFormRuntimeEditState => {
   const { documentStatus, baseEditState } = input;
 
   if (!baseEditState.isAvailable) {
     return baseEditState;
   }
 
-  if (!nextFormLockedStatuses.has(documentStatus)) {
+  if (!formRuntimeLockedStatuses.has(documentStatus)) {
     return {
       isAvailable: true,
     };
@@ -483,12 +527,12 @@ export const getReferenceNextFormEditState = (input: {
   };
 };
 
-export const buildReferenceNextFormFieldUi = (input: {
+export const buildReferenceFormRuntimeFieldUi = (input: {
   templateKey: string;
   canEdit: boolean;
   fieldValues: Record<string, string>;
   availableUsers: User[];
-}): Record<string, ReferenceNextFormFieldUi> => {
+}): Record<string, ReferenceFormRuntimeFieldUi> => {
   const { templateKey, canEdit, fieldValues, availableUsers } = input;
   const config = getTemplateConfig(templateKey);
 
@@ -539,10 +583,10 @@ export const buildReferenceNextFormFieldUi = (input: {
   );
 };
 
-export const buildReferenceNextFormActionUi = (input: {
+export const buildReferenceFormRuntimeActionUi = (input: {
   templateKey: string;
   canEdit: boolean;
-}): Record<string, ReferenceNextFormActionUi> => {
+}): Record<string, ReferenceFormRuntimeActionUi> => {
   const { templateKey, canEdit } = input;
   const config = getTemplateConfig(templateKey);
 
@@ -566,10 +610,10 @@ export const buildReferenceNextFormActionUi = (input: {
   );
 };
 
-export const buildReferenceNextFormMasterDataSections = (input: {
+export const buildReferenceFormRuntimeMasterDataSections = (input: {
   templateKey: string;
   fieldValues: Record<string, string>;
-}): ReferenceNextFormMasterDataSection[] => {
+}): ReferenceFormRuntimeMasterDataSection[] => {
   const config = getTemplateConfig(input.templateKey);
 
   if (!config?.buildMasterDataSections) {

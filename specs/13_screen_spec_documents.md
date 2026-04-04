@@ -2,11 +2,12 @@
 
 ## Ziel
 
-Die Document-UI ist formularzentriert und bildet im normalen Produktpfad drei Familien ab:
+Die Document-UI ist formularzentriert und bildet im normalen Produktpfad vier Familien ab:
 
 - Kundenauftrag
 - Produktionsdokumentation
 - Qualifikationsnachweis
+- Generisches Formular
 
 ## Grundstruktur
 
@@ -22,6 +23,7 @@ Die Seite besteht kompakt aus:
 Der Header zeigt nur einmal klar:
 
 - Formular / Template mit Version
+- Form Type
 - Workflow mit Version
 - aktuellen Status
 - nächsten Schritt für den aktuellen User
@@ -29,6 +31,18 @@ Der Header zeigt nur einmal klar:
 ## Formularbereich
 
 Der Formularbereich ist der führende Arbeitsraum.
+Der Formular-POST-Pfad ist `/documents/:id/form`.
+
+`documents` bleibt dabei der Prozesscontainer.
+Zusätzlich werden Kernfelder in typed entity tables pro `form_type` synchronisiert und dort fachlich lesbar gehalten.
+Der Dokumentkontext zeigt dezent:
+
+- `form_type`
+- typed table
+- typed Record vorhanden / nicht vorhanden
+- Link zur typed-record API des aktuellen Dokuments
+
+Lookup- und Action-Aufrufe laufen gegen publizierte zentrale APIs aus der Datenbank, nicht gegen eine separate Preview- oder Dev-Form-UI.
 
 Teilaktionen wie:
 
@@ -50,6 +64,8 @@ Kundenauftrag zeigt im normalen Pfad:
 - internen Product-Vorschlag
 - readonly Customer-/Product-Stammdaten
 
+Die Dokumentliste und Suche duerfen dabei `order_number` als fachliche Leitkennung nutzen, statt nur auf Titelstrings zu vertrauen.
+
 Keine ERP-SIM-Abhängigkeit ist Teil der führenden Produkt-UI.
 
 ## Produktionsdokumentation
@@ -63,6 +79,7 @@ Produktionsdokumentation zeigt:
 - `grid` für Produktions- und Prüfschritte
 
 Der Grid ist im offenen Zustand editierbar und im readonly Zustand als kompakte Tabelle lesbar.
+Die Dokumentliste und Suche duerfen `batch_id` als Leitkennung nutzen.
 
 ## Qualifikationsnachweis
 
@@ -71,8 +88,26 @@ Qualifikationsnachweis zeigt:
 - Owner per `user-select`
 - Teilnehmende per `user-multiselect`
 - Fragen per `radio-group` und `checkbox-group`
+- 3 Pages mit Vor / Zurueck
 - per-User Save/Submit/Signatur
 - kompakte Beteiligten-/Fortschrittssicht
+- sichtbare Auswertung mit Status, Score, Pass und Zeitpunkt
+
+Nur die aktuelle Qualifikations-Seite ist gleichzeitig sichtbar.
+Die Dokumentliste und Suche duerfen `qualification_record_number` als Leitkennung nutzen.
+
+## Generisches Formular
+
+Generisches Formular zeigt als kleinster vierter Typ:
+
+- Titel
+- Beschreibung
+- Notiz
+- Freigabestatus
+- Signatur
+
+Der Typ laeuft ohne Sonder-UI im normalen Dokumentpfad und befuellt `generic_form_records`.
+Die Dokumentliste und Suche duerfen `form_title` als Leitkennung nutzen.
 
 ## Readonly / Pflicht
 

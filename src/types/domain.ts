@@ -1,5 +1,7 @@
 export type EntityStatus = "active" | "inactive" | "draft" | "published" | "archived";
 
+export type FormType = "customer_order" | "production_record" | "qualification_record" | "generic_form";
+
 export type MembershipRights = {
   read: boolean;
   write: boolean;
@@ -94,6 +96,7 @@ export type FormTemplate = {
   id: string;
   key: string;
   name: string;
+  formType: FormType;
   version: number;
   status: EntityStatus;
   description?: string;
@@ -170,7 +173,12 @@ export type ReadOnlyFormDefinition = {
 export type Document = {
   id: string;
   templateId: string;
+  formType: FormType;
   title: string;
+  typedTableName?: string;
+  typedLeadField?: string;
+  typedLeadValue?: string;
+  typedRecordPresent?: boolean;
   status: string;
   updatedAt: string;
   assignedUserIds: string[];
@@ -179,6 +187,7 @@ export type Document = {
 export type DocumentDetail = {
   id: string;
   templateId: string;
+  formType: FormType;
   templateKey: string;
   templateName: string;
   templateVersion: number;
@@ -233,10 +242,22 @@ export type AttachmentAsset = {
 };
 
 export type Operation = {
+  id: string;
+  key: string;
+  title: string;
+  status: EntityStatus;
+  connector: string;
+  authMode: string;
+  requestSchemaJson: Record<string, unknown>;
+  responseSchemaJson: Record<string, unknown>;
+  handlerTsSource: string;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  archivedAt?: string;
   operationRef: string;
   modulePath: string;
   authStrategy: string;
-  connector?: string;
   name: string;
   description?: string;
   tags: string[];

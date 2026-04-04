@@ -74,7 +74,7 @@ const initializeRichTextControl = (control) => {
 
   const editor = control.querySelector("[data-rich-text-editor]");
   const input = control.querySelector("[data-rich-text-input]");
-  const toolbar = control.querySelector("[data-rich-text-control] .next-form-richtext-toolbar, .next-form-richtext-toolbar");
+  const toolbar = control.querySelector("[data-rich-text-control] .form-runtime-richtext-toolbar, .form-runtime-richtext-toolbar");
 
   if (!(editor instanceof HTMLElement) || !(input instanceof HTMLTextAreaElement)) {
     return;
@@ -193,7 +193,7 @@ const syncCheckboxGroupControl = (input) => {
     return;
   }
 
-  const container = input.closest(".next-form-choice-group");
+  const container = input.closest(".form-runtime-choice-group");
 
   if (!(container instanceof HTMLElement)) {
     return;

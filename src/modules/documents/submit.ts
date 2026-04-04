@@ -1,9 +1,9 @@
 import { withDbTransaction } from "../../db/pool.js";
 import { findDocumentAccessContextForUser, type DocumentAccessContext, type WorkflowJson } from "./access.js";
 import { buildReadOnlyFormDefinition } from "../templates/form-read.js";
-import { isNextFormReferenceTemplate, mapDocumentDataToNextFormValues } from "../next-form/document-bridge.js";
-import { getReferenceNextFormSubmitRequiredFieldNames } from "../next-form/document-ui.js";
-import { hasVisibleRichTextContent } from "../next-form/rich-text.js";
+import { isFormRuntimeReferenceTemplate, mapDocumentDataToFormRuntimeValues } from "../forms/document-bridge.js";
+import { getReferenceFormRuntimeSubmitRequiredFieldNames } from "../forms/document-ui.js";
+import { hasVisibleRichTextContent } from "../forms/rich-text.js";
 import {
   getQualificationCurrentUserState,
   getQualificationRequiredEditorUserIds,
@@ -12,6 +12,8 @@ import {
   synchronizeQualificationAssignments,
   writeQualificationParticipantState,
 } from "../qualification/progress.js";
+import { applyQualificationEvaluationToData } from "../qualification/evaluation.js";
+import { syncTypedRecordForDocument } from "./typed-records.js";
 
 type SubmitDocumentInput = {
   documentId: string;
@@ -60,10 +62,10 @@ const getAllowedSubmitFromStatuses = (
 ): string[] => {
   const allowedStatuses = [...submitTransition.from];
 
-  // The reference next-form slice deliberately works as a compact primary work area.
+  // The reference form runtime works as a compact primary work area.
   // For this slice we allow the first submit directly from "created" once the
-  // required next-form values have been filled and saved into the document.
-  if (isNextFormReferenceTemplate(document.templateKey) && document.status === "created" && !allowedStatuses.includes("created")) {
+  // required form values have been filled and saved into the document.
+  if (isFormRuntimeReferenceTemplate(document.templateKey) && document.status === "created" && !allowedStatuses.includes("created")) {
     allowedStatuses.push("created");
   }
 
@@ -82,8 +84,8 @@ const isMissingRequiredValue = (value: unknown): boolean => {
   return value === null || value === undefined;
 };
 
-const getReferenceNextFormMissingFieldLabels = (document: DocumentAccessContext, userId?: string): string[] => {
-  const nextFormValues = mapDocumentDataToNextFormValues(document.templateKey, document.dataJson, {
+const getReferenceFormRuntimeMissingFieldLabels = (document: DocumentAccessContext, userId?: string): string[] => {
+  const formRuntimeValues = mapDocumentDataToFormRuntimeValues(document.templateKey, document.dataJson, {
     ...(userId ? { currentUserId: userId } : {}),
   });
   const fieldLabels: Record<string, string> = {
@@ -99,8 +101,10 @@ const getReferenceNextFormMissingFieldLabels = (document: DocumentAccessContext,
     qualification_topics: "Bestaetigte Themen",
     batch_id: "Batch-ID",
     product_name: "Produkt",
+    generic_form_title: "Titel",
+    generic_form_note: "Notiz",
   };
-  const requiredFields = getReferenceNextFormSubmitRequiredFieldNames(document.templateKey).map((name) => ({
+  const requiredFields = getReferenceFormRuntimeSubmitRequiredFieldNames(document.templateKey).map((name) => ({
     name,
     label: fieldLabels[name] ?? name,
   }));
@@ -108,17 +112,17 @@ const getReferenceNextFormMissingFieldLabels = (document: DocumentAccessContext,
   return requiredFields
     .filter((field) => {
       if (field.name === "work_description") {
-        return !hasVisibleRichTextContent(nextFormValues[field.name]);
+        return !hasVisibleRichTextContent(formRuntimeValues[field.name]);
       }
 
-      return isMissingRequiredValue(nextFormValues[field.name]);
+      return isMissingRequiredValue(formRuntimeValues[field.name]);
     })
     .map((field) => field.label);
 };
 
 const getMissingRequiredFieldLabels = (document: DocumentAccessContext): string[] => {
-  if (isNextFormReferenceTemplate(document.templateKey)) {
-    return getReferenceNextFormMissingFieldLabels(document);
+  if (isFormRuntimeReferenceTemplate(document.templateKey)) {
+    return getReferenceFormRuntimeMissingFieldLabels(document);
   }
 
   const formDefinition = buildReadOnlyFormDefinition({
@@ -175,7 +179,7 @@ export const getDocumentSubmitStateForUser = async (documentId: string, userId: 
   }
 
   const missingFieldLabels = isQualificationRecord(document)
-    ? getReferenceNextFormMissingFieldLabels(document, userId)
+    ? getReferenceFormRuntimeMissingFieldLabels(document, userId)
     : getMissingRequiredFieldLabels(document);
 
   if (missingFieldLabels.length > 0) {
@@ -255,7 +259,7 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
   }
 
   const missingFieldLabels = isQualificationRecord(document)
-    ? getReferenceNextFormMissingFieldLabels(document, userId)
+    ? getReferenceFormRuntimeMissingFieldLabels(document, userId)
     : getMissingRequiredFieldLabels(document);
 
   if (missingFieldLabels.length > 0) {
@@ -300,12 +304,12 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
           ? requiredEditorUserIds.length > 0 && submittedEditorUserIds.length >= requiredEditorUserIds.length
           : submittedEditorUserIds.length > 0;
       const nextStatus = isComplete ? submitTransition.to : document.status;
-      const nextDocumentData = {
+      const nextDocumentData = applyQualificationEvaluationToData({
         ...nextDocumentDataBase,
         approval_status: isComplete ? "pruefung" : (typeof nextDocumentDataBase.approval_status === "string" && nextDocumentDataBase.approval_status.length > 0
           ? nextDocumentDataBase.approval_status
           : "offen"),
-      };
+      });
 
       await client.query(
         `
@@ -325,6 +329,14 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
         documentTitle: document.title,
         documentStatus: nextStatus,
         data: nextDocumentData,
+      });
+
+      await syncTypedRecordForDocument(client, {
+        documentId,
+        formType: document.formType,
+        templateName: document.templateName,
+        status: nextStatus,
+        dataJson: nextDocumentData,
       });
 
       await client.query(
@@ -369,6 +381,14 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
       [documentId, submitTransition.to],
     );
 
+    await syncTypedRecordForDocument(client, {
+      documentId,
+      formType: document.formType,
+      templateName: document.templateName,
+      status: submitTransition.to,
+      dataJson: document.dataJson,
+    });
+
     await client.query(
       `
       update tasks
@@ -381,7 +401,7 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
       [documentId],
     );
 
-    if (isNextFormReferenceTemplate(document.templateKey)) {
+    if (isFormRuntimeReferenceTemplate(document.templateKey)) {
       const approverUsers = await client.query<{ user_id: string }>(
         `
         select distinct m.user_id

@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { closePool, withDbTransaction } from "./pool.js";
 import { getReferenceSeedData } from "./reference-data.js";
 import { importReferenceEntitiesFromCsv } from "../modules/entities/import.js";
+import { syncTypedRecordForDocument } from "../modules/documents/typed-records.js";
 
 const upsertUser = async (client: PoolClient, row: Awaited<ReturnType<typeof getReferenceSeedData>>["users"][number]): Promise<void> => {
   await client.query(
@@ -54,27 +55,66 @@ const upsertOperation = async (
   row: Awaited<ReturnType<typeof getReferenceSeedData>>["operations"][number],
 ): Promise<void> => {
   await client.query(
-    `insert into operations (operation_ref, name, connector, module_path, auth_strategy, description, input_schema, output_schema, tags)
-     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb)
-     on conflict (operation_ref) do update
-       set name = excluded.name,
-           connector = excluded.connector,
-           module_path = excluded.module_path,
-           auth_strategy = excluded.auth_strategy,
+    `insert into operations (
+       id,
+       operation_ref,
+       key,
+       title,
+       name,
+       status,
+       description,
+       connector,
+       auth_mode,
+       auth_strategy,
+       request_schema_json,
+       input_schema,
+       response_schema_json,
+       output_schema,
+       handler_ts_source,
+       tags_json,
+       tags,
+       module_path,
+       published_at,
+       archived_at
+     )
+     values (
+       $1, $2, $2, $3, $3, $4, $5, $6, $7, $7,
+       $8::jsonb, $8::jsonb, $9::jsonb, $9::jsonb, $10, $11::jsonb, $11::jsonb,
+       'db:handler_ts_source',
+       case when $4 = 'published' then now() else null end,
+       case when $4 = 'archived' then now() else null end
+     )
+     on conflict (key) do update
+       set operation_ref = excluded.operation_ref,
+           title = excluded.title,
+           name = excluded.name,
+           status = excluded.status,
            description = excluded.description,
+           connector = excluded.connector,
+           auth_mode = excluded.auth_mode,
+           auth_strategy = excluded.auth_strategy,
+           request_schema_json = excluded.request_schema_json,
            input_schema = excluded.input_schema,
+           response_schema_json = excluded.response_schema_json,
            output_schema = excluded.output_schema,
+           handler_ts_source = excluded.handler_ts_source,
+           tags_json = excluded.tags_json,
            tags = excluded.tags,
+           module_path = excluded.module_path,
+           published_at = excluded.published_at,
+           archived_at = excluded.archived_at,
            updated_at = now()`,
     [
-      row.operationRef,
-      row.name,
-      row.connector,
-      row.modulePath,
-      row.authStrategy,
+      row.id,
+      row.key,
+      row.title,
+      row.status,
       row.description,
-      JSON.stringify(row.inputSchema ?? null),
-      JSON.stringify(row.outputSchema ?? null),
+      row.connector,
+      row.authMode,
+      JSON.stringify(row.requestSchemaJson ?? {}),
+      JSON.stringify(row.responseSchemaJson ?? {}),
+      row.handlerTsSource,
       JSON.stringify(row.tags),
     ],
   );
@@ -107,12 +147,14 @@ const upsertTemplate = async (
   await client.query(
     `insert into form_templates (
        id, key, name, description, version, status, workflow_template_id, mdx_body,
+       form_type,
        template_keys, document_keys, table_fields, visibility_rules, published_at
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, '{}'::jsonb, now())
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12::jsonb, '{}'::jsonb, now())
      on conflict (id) do update
        set key = excluded.key,
            name = excluded.name,
+           form_type = excluded.form_type,
            description = excluded.description,
            version = excluded.version,
            status = excluded.status,
@@ -133,6 +175,7 @@ const upsertTemplate = async (
       row.status,
       row.workflowTemplateId,
       row.mdxBody,
+      row.formType,
       JSON.stringify(row.templateKeys),
       JSON.stringify(row.documentKeys),
       JSON.stringify(row.tableFields),
@@ -273,6 +316,8 @@ export const seedReferenceData = async (): Promise<void> => {
   const data = await getReferenceSeedData();
 
   await withDbTransaction(async (client) => {
+    const templateRowsById = new Map(data.templates.map((template) => [template.id, template]));
+
     for (const row of data.users) await upsertUser(client, row);
     for (const row of data.groups) await upsertGroup(client, row);
     for (const row of data.memberships) await upsertMembership(client, row);
@@ -280,7 +325,20 @@ export const seedReferenceData = async (): Promise<void> => {
     for (const row of data.workflows) await upsertWorkflow(client, row);
     for (const row of data.templates) await upsertTemplate(client, row);
     for (const row of data.templateAssignments) await upsertTemplateAssignment(client, row);
-    for (const row of data.documents) await upsertDocument(client, row);
+    for (const row of data.documents) {
+      await upsertDocument(client, row);
+      const template = templateRowsById.get(row.templateId);
+
+      if (template) {
+        await syncTypedRecordForDocument(client, {
+          documentId: row.id,
+          formType: template.formType,
+          templateName: template.name,
+          status: row.status,
+          dataJson: row.dataJson,
+        });
+      }
+    }
     for (const row of data.documentAssignments) await upsertDocumentAssignment(client, row);
     for (const row of data.tasks) await upsertTask(client, row);
     for (const row of data.attachments) await upsertAttachment(client, row);

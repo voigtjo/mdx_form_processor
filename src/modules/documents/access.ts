@@ -1,5 +1,5 @@
 import { withDb } from "../../db/pool.js";
-import type { EntityStatus, WorkflowFieldRules } from "../../types/domain.js";
+import type { EntityStatus, FormType, WorkflowFieldRules } from "../../types/domain.js";
 
 export type WorkflowJson = {
   approval?: {
@@ -25,6 +25,7 @@ export type DocumentAccessContext = {
   templateId: string;
   templateKey: string;
   templateName: string;
+  formType: FormType;
   templateDescription?: string;
   templateStatus: EntityStatus;
   templateVersion: number;
@@ -45,6 +46,7 @@ type DocumentAccessRow = {
   template_id: string;
   template_key: string;
   template_name: string;
+  template_form_type: FormType;
   template_description: string | null;
   template_status: EntityStatus;
   template_version: number;
@@ -82,6 +84,13 @@ const formatDocumentTitle = (templateKey: string, dataJson: Record<string, unkno
       : templateName;
   }
 
+  if (templateKey === "generic-form") {
+    const genericTitle = dataJson.generic_form_title;
+    return typeof genericTitle === "string" && genericTitle.trim().length > 0
+      ? genericTitle
+      : templateName;
+  }
+
   return templateName;
 };
 
@@ -93,6 +102,7 @@ const mapDocumentAccess = (row: DocumentAccessRow): DocumentAccessContext => ({
   templateId: row.template_id,
   templateKey: row.template_key,
   templateName: row.template_name,
+  formType: row.template_form_type,
   ...(row.template_description ? { templateDescription: row.template_description } : {}),
   templateStatus: row.template_status,
   templateVersion: row.template_version,
@@ -120,6 +130,7 @@ export const findDocumentAccessContextForUser = async (
         d.template_id,
         ft.key as template_key,
         ft.name as template_name,
+        ft.form_type as template_form_type,
         ft.description as template_description,
         ft.status as template_status,
         d.template_version,

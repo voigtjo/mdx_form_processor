@@ -1,9 +1,9 @@
-<% if (documentDetail.nextFormReference) { %>
+<% if (documentDetail.formRuntimeReference) { %>
   <details class="panel panel-collapsible page-header-collapsible">
     <summary class="collapsible-summary">
       <div class="collapsible-summary-copy">
         <strong><%= documentDetail.document.title %></strong>
-        <span><%= documentDetail.document.templateName %> v<%= documentDetail.document.templateVersion %> · <%= documentDetail.document.workflowTemplateName %> v<%= documentDetail.document.workflowTemplateVersion %> · <%= documentDetail.document.status %></span>
+        <span><%= documentDetail.document.templateName %> v<%= documentDetail.document.templateVersion %> · <%= documentDetail.document.formType %> · <%= documentDetail.document.status %></span>
       </div>
       <div class="collapsible-summary-meta">
         <span>Document</span>
@@ -13,8 +13,8 @@
     <div class="collapsible-body">
       <span class="eyebrow">Document</span>
       <h2><%= documentDetail.document.title %></h2>
-      <p class="hero-inline-meta"><strong>Formular:</strong> <%= documentDetail.document.templateName %> v<%= documentDetail.document.templateVersion %> · <strong>Workflow:</strong> <%= documentDetail.document.workflowTemplateName %> v<%= documentDetail.document.workflowTemplateVersion %></p>
-      <p class="hero-inline-meta"><strong>Status:</strong> <%= documentDetail.document.status %> · <strong><%= nextStepLabel %></strong><% if (activeAssignments.length > 0) { %> · <strong>Assignments:</strong> <%= activeAssignments.length %> aktiv<%= assignmentSummary ? " · " + assignmentSummary : "" %><% } %> · Updated <%= documentDetail.document.updatedAt %></p>
+      <p class="hero-inline-meta"><strong>Formular:</strong> <%= documentDetail.document.templateName %> v<%= documentDetail.document.templateVersion %> · <strong>Typ:</strong> <%= documentDetail.document.formType %> · <strong>Workflow:</strong> <%= documentDetail.document.workflowTemplateName %> v<%= documentDetail.document.workflowTemplateVersion %></p>
+      <p class="hero-inline-meta"><strong>Status:</strong> <%= documentDetail.document.status %> · <strong><%= nextStepLabel %></strong><% if (activeAssignments.length > 0) { %> · <strong>Assignments:</strong> <%= activeAssignments.length %> aktiv<%= assignmentSummary ? " · " + assignmentSummary : "" %><% } %> · <%= documentDetail.document.updatedAt %></p>
       <div class="workflow-track workflow-track-header">
         <% workflowStepsForHeader.forEach((step) => { %>
           <span class="workflow-step <%= documentDetail.document.status === step ? "is-active" : "" %>"><%= step %></span>
@@ -31,9 +31,8 @@
 <% } else { %>
   <section class="hero-card">
     <div>
-      <span class="eyebrow">Arbeits-UI</span>
       <h2><%= documentDetail.document.title %></h2>
-      <p>Detailsicht fuer ein einzelnes Dokument mit erstem Save-Schnitt fuer einfache Formwerte.</p>
+      <p><%= documentDetail.document.templateName %> · <%= documentDetail.document.formType %></p>
     </div>
     <div class="hero-metrics">
       <article>

@@ -36,14 +36,14 @@
   }) %>
 </section>
 
-<% if (documentDetail.nextFormReference) { %>
+<% if (documentDetail.formRuntimeReference) { %>
   <section id="document-workspace-fragment" data-fragment="document-workspace">
-    <%- include("../partials/document-detail/next-form-workspace", {
+    <%- include("../partials/document-detail/form-runtime-workspace", {
       documentDetail,
       activeUser,
       users,
-      nextFormStatus,
-      nextFormError,
+      formRuntimeStatus,
+      formRuntimeError,
       submitStatus,
       submitError,
       approveStatus,
@@ -68,7 +68,7 @@
   </section>
 <% } %>
 
-<% if (!documentDetail.nextFormReference) { %>
+<% if (!documentDetail.formRuntimeReference) { %>
   <section id="document-legacy-model-fragment" data-fragment="document-legacy-model">
     <%- include("../partials/document-detail/legacy-panel", {
       documentDetail,

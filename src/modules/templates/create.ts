@@ -32,6 +32,7 @@ export const createTemplateDraft = async (input: {
   key: string;
   description?: string;
   workflowTemplateId: string;
+  formType: "customer_order" | "production_record" | "qualification_record" | "generic_form";
 }): Promise<{ id: string }> => {
   const name = input.name.trim();
   const key = input.key.trim();
@@ -71,11 +72,11 @@ export const createTemplateDraft = async (input: {
 
     await client.query(
       `insert into form_templates (
-         id, key, name, description, version, status, workflow_template_id, mdx_body,
+         id, key, name, form_type, description, version, status, workflow_template_id, mdx_body,
          template_keys, document_keys, table_fields, visibility_rules
        )
-       values ($1, $2, $3, $4, 1, 'draft', $5, $6, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb)`,
-      [id, key, name, input.description?.trim() || null, workflow.id, mdxBody],
+       values ($1, $2, $3, $4, $5, 1, 'draft', $6, $7, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb)`,
+      [id, key, name, input.formType, input.description?.trim() || null, workflow.id, mdxBody],
     );
 
     return { id };

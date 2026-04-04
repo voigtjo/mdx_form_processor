@@ -1,5 +1,6 @@
 import { withDbTransaction } from "../../db/pool.js";
 import { findDocumentAccessContextForUser, type WorkflowJson } from "./access.js";
+import { syncTypedRecordForDocument } from "./typed-records.js";
 
 type ArchiveDocumentInput = {
   documentId: string;
@@ -115,15 +116,29 @@ export const archiveDocumentForUser = async ({ documentId, userId }: ArchiveDocu
   }
 
   return withDbTransaction(async (client) => {
+    const nextDocumentData = {
+      ...document.dataJson,
+      approval_status: document.status === "approved" ? "freigegeben" : document.dataJson.approval_status,
+    };
+
     await client.query(
       `
       update documents
       set status = $2,
+          data_json = $3::jsonb,
           updated_at = now()
       where id = $1
       `,
-      [documentId, archiveTransition.to],
+      [documentId, archiveTransition.to, JSON.stringify(nextDocumentData)],
     );
+
+    await syncTypedRecordForDocument(client, {
+      documentId,
+      formType: document.formType,
+      templateName: document.templateName,
+      status: archiveTransition.to,
+      dataJson: nextDocumentData,
+    });
 
     await client.query(
       `

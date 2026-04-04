@@ -2,7 +2,6 @@
   <div>
     <span class="eyebrow">Template Edit</span>
     <h2>New Template</h2>
-    <p>Kleiner erster Neuanlage-Schnitt fuer ein Template-Draft. Bearbeitung und Publizieren folgen in spaeteren Schritten.</p>
   </div>
   <div class="hero-actions">
     <a class="button-secondary" href="/templates?user=<%= activeUser.key %>">Back to Templates</a>
@@ -12,7 +11,6 @@
 <section class="panel">
   <div class="panel-header">
     <h3>Create Draft</h3>
-    <p class="panel-copy">Der erste Schritt legt ein Draft mit Basis-Metadaten und leerem MDX-Grundgeruest an.</p>
   </div>
   <form method="post" action="/templates/new?user=<%= activeUser.key %>" class="form-stack">
     <div class="field-block">
@@ -26,6 +24,14 @@
     <div class="field-block">
       <label class="field-label" for="template-description">Beschreibung</label>
       <textarea id="template-description" name="description" rows="4"></textarea>
+    </div>
+    <div class="field-block">
+      <label class="field-label" for="template-form-type">Form Type</label>
+      <select id="template-form-type" name="formType" required>
+        <% availableFormTypes.forEach((formType) => { %>
+          <option value="<%= formType.value %>"><%= formType.label %></option>
+        <% }) %>
+      </select>
     </div>
     <div class="field-block">
       <label class="field-label" for="template-workflow">Workflow Template</label>

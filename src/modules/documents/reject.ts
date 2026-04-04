@@ -1,6 +1,8 @@
 import { withDbTransaction } from "../../db/pool.js";
 import { findDocumentAccessContextForUser, type WorkflowJson } from "./access.js";
 import { synchronizeQualificationAssignments } from "../qualification/progress.js";
+import { applyQualificationEvaluationToData } from "../qualification/evaluation.js";
+import { syncTypedRecordForDocument } from "./typed-records.js";
 
 type RejectDocumentInput = {
   documentId: string;
@@ -117,10 +119,10 @@ export const rejectDocumentForUser = async ({ documentId, userId }: RejectDocume
 
   return withDbTransaction(async (client) => {
     const nextDocumentData = document.templateKey === "qualification-record"
-      ? {
+      ? applyQualificationEvaluationToData({
           ...document.dataJson,
           approval_status: "offen",
-        }
+        })
       : document.dataJson;
 
     await client.query(
@@ -156,6 +158,14 @@ export const rejectDocumentForUser = async ({ documentId, userId }: RejectDocume
         data: nextDocumentData,
       });
     }
+
+    await syncTypedRecordForDocument(client, {
+      documentId,
+      formType: document.formType,
+      templateName: document.templateName,
+      status: rejectTransition.to,
+      dataJson: nextDocumentData,
+    });
 
     await client.query(
       `

@@ -188,7 +188,7 @@ Diese Spec korrigiert vor allem:
 - `docs/changes/01_form_mdx_change.md`
 - die heute sichtbare Komplexitaet in `src/modules/templates/form-read.ts`
 
-Der Preview-Pfad `/next-form-preview/craftsman-order` kann als Dev-/Debug-Referenz bestehen bleiben, ist aber nicht mehr der fuehrende Produktweg fuer neue Form-Funktionen.
+Es gibt keine separate Preview-/Dev-Form-UI als Teil des Zielbilds. Fuehrend getestet und weiterentwickelt werden nur die normalen Template-, Workflow-, Dokument- und API-Pfade.
 
 ## In dieser Spec bewusst noch nicht festgelegt
 

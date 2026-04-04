@@ -1,10 +1,10 @@
-export type NextFormGridColumn = {
+export type FormRuntimeGridColumn = {
   name: string;
   label: string;
   inputMode: "text" | "number";
 };
 
-export type NextFormGridRow = Record<string, string>;
+export type FormRuntimeGridRow = Record<string, string>;
 
 const normalizeText = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 
@@ -20,10 +20,10 @@ const splitCommaSeparated = (value: string | undefined): string[] =>
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 
-export const parseNextFormGridColumns = (input: {
+export const parseFormRuntimeGridColumns = (input: {
   columnsText?: string | undefined;
   numberColumnsText?: string | undefined;
-}): NextFormGridColumn[] => {
+}): FormRuntimeGridColumn[] => {
   const columnDefinitions = splitPipeSeparated(input.columnsText ?? "");
   const numberColumns = new Set(splitCommaSeparated(input.numberColumnsText));
 
@@ -41,12 +41,12 @@ export const parseNextFormGridColumns = (input: {
         name,
         label,
         inputMode: numberColumns.has(name) ? "number" : "text",
-      } satisfies NextFormGridColumn;
+      } satisfies FormRuntimeGridColumn;
     })
-    .filter((entry): entry is NextFormGridColumn => entry !== null);
+    .filter((entry): entry is FormRuntimeGridColumn => entry !== null);
 };
 
-export const readNextFormGridMinRows = (rawValue: unknown, fallback = 3): number => {
+export const readFormRuntimeGridMinRows = (rawValue: unknown, fallback = 3): number => {
   const parsed = Number.parseInt(normalizeText(rawValue), 10);
 
   if (!Number.isFinite(parsed) || parsed < 1) {
@@ -56,10 +56,10 @@ export const readNextFormGridMinRows = (rawValue: unknown, fallback = 3): number
   return parsed;
 };
 
-export const parseNextFormGridRows = (input: {
+export const parseFormRuntimeGridRows = (input: {
   value: unknown;
-  columns: NextFormGridColumn[];
-}): NextFormGridRow[] => {
+  columns: FormRuntimeGridColumn[];
+}): FormRuntimeGridRow[] => {
   const { value, columns } = input;
   const columnNames = columns.map((column) => column.name);
 
@@ -91,9 +91,9 @@ export const parseNextFormGridRows = (input: {
     .filter((row) => Object.values(row).some((valueText) => valueText.length > 0));
 };
 
-export const serializeNextFormGridRows = (input: {
-  rows: NextFormGridRow[];
-  columns: NextFormGridColumn[];
+export const serializeFormRuntimeGridRows = (input: {
+  rows: FormRuntimeGridRow[];
+  columns: FormRuntimeGridColumn[];
 }): string => {
   const sanitizedRows = input.rows
     .map((row) => Object.fromEntries(
@@ -104,7 +104,7 @@ export const serializeNextFormGridRows = (input: {
   return JSON.stringify(sanitizedRows);
 };
 
-export const hasVisibleNextFormGridRows = (input: {
+export const hasVisibleFormRuntimeGridRows = (input: {
   value: unknown;
-  columns: NextFormGridColumn[];
-}): boolean => parseNextFormGridRows(input).length > 0;
+  columns: FormRuntimeGridColumn[];
+}): boolean => parseFormRuntimeGridRows(input).length > 0;

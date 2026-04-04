@@ -1,6 +1,6 @@
 ---
 title: Kundenauftrag fuer Serviceeinsatz
-key: craftsman-order
+key: customer-order
 version: 1
 ---
 

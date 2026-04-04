@@ -1,4 +1,4 @@
-<% if (templateDetail.nextFormReference) { %>
+<% if (templateDetail.formRuntimeReference) { %>
   <% const lifecycleLabel = templateDetail.template.status === "inactive" ? "unpublished" : templateDetail.template.status; %>
   <% const currentDraftVersion = templateDetail.versions.find((version) => version.status === "draft"); %>
   <% const currentPublishedVersion = templateDetail.versions.find((version) => version.status === "published"); %>
@@ -10,7 +10,7 @@
     <summary class="collapsible-summary">
       <div class="collapsible-summary-copy">
         <strong><%= templateDetail.template.name %></strong>
-        <span><%= templateDetail.template.name %> v<%= templateDetail.template.version %> · <%= templateDetail.workflow?.name ?? "Kein Workflow" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %> · <%= lifecycleLabel %></span>
+        <span><%= templateDetail.template.name %> v<%= templateDetail.template.version %> · <%= templateDetail.template.formType %> · <%= lifecycleLabel %></span>
       </div>
       <div class="collapsible-summary-meta">
         <span>Template</span>
@@ -20,7 +20,7 @@
     <div class="collapsible-body">
       <span class="eyebrow">Template</span>
       <h2><%= templateDetail.template.name %></h2>
-      <p class="hero-inline-meta"><strong>Formular:</strong> v<%= templateDetail.template.version %> · <strong>Workflow:</strong> <%= templateDetail.workflow?.name ?? "Nicht zugeordnet" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %></p>
+      <p class="hero-inline-meta"><strong>Formular:</strong> v<%= templateDetail.template.version %> · <strong>Typ:</strong> <%= templateDetail.template.formType %> · <strong>Workflow:</strong> <%= templateDetail.workflow?.name ?? "Nicht zugeordnet" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %></p>
       <p class="hero-inline-meta"><strong>Status:</strong> <%= lifecycleLabel %> · <strong>Key:</strong> <%= templateDetail.template.key %> · <strong>Updated:</strong> <%= templateDetail.template.updatedAt %></p>
       <p class="hero-inline-meta"><strong>Draft:</strong> <%= currentDraftVersion ? `v${currentDraftVersion.version}` : `naechster Draft v${nextDraftVersion}` %> · <strong>Published:</strong> <%= currentPublishedVersion ? `v${currentPublishedVersion.version}` : "keine" %></p>
       <div class="hero-actions">
@@ -43,6 +43,7 @@
       <div class="grid two-up detail-grid">
         <div>
           <p><strong>Workflow</strong><br /><%= templateDetail.workflow?.name ?? "Nicht zugeordnet" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %></p>
+          <p><strong>Form Type</strong><br /><%= templateDetail.template.formType %></p>
           <p><strong>Groups</strong><br /><%= templateDetail.assignmentsWithGroups.length > 0 ? templateDetail.assignmentsWithGroups.map(({ group, assignment }) => group?.name ?? assignment.groupId).join(", ") : "keine" %></p>
           <p><strong>Beschreibung</strong><br /><%= templateDetail.template.description ?? "Keine Beschreibung hinterlegt." %></p>
         </div>
@@ -80,11 +81,6 @@
         <div class="panel-header">
           <h4>Lifecycle</h4>
         </div>
-        <p class="panel-copy lifecycle-copy">
-          Betrachtet: v<%= viewedVersion %> ·
-          Draft in Arbeit: <%= currentDraftVersion ? `v${currentDraftVersion.version}` : `noch keiner` %> ·
-          Published: <%= currentPublishedVersion ? `v${currentPublishedVersion.version}` : "keine" %>
-        </p>
         <div class="field-block">
           <label class="field-label" for="template-workflow-version">Workflow-Version</label>
           <select id="template-workflow-version" name="workflowTemplateId" class="text-input">
@@ -132,23 +128,23 @@
         <div class="panel-header">
           <h4>Source</h4>
         </div>
-        <textarea name="source" rows="22" class="next-form-source-editor"><%= templateDetail.nextFormReference.sourceText %></textarea>
+        <textarea name="source" rows="22" class="form-runtime-source-editor"><%= templateDetail.formRuntimeReference.sourceText %></textarea>
       </article>
 
-      <% if (templateDetail.nextFormReference.apiBindings && templateDetail.nextFormReference.apiBindings.length > 0) { %>
+      <% if (templateDetail.formRuntimeReference.apiBindings && templateDetail.formRuntimeReference.apiBindings.length > 0) { %>
         <article class="subpanel">
           <div class="panel-header">
             <h4>API Operations</h4>
           </div>
           <div class="stack-list compact">
-            <% templateDetail.nextFormReference.apiBindings.forEach((binding) => { %>
+            <% templateDetail.formRuntimeReference.apiBindings.forEach((binding) => { %>
               <div class="field-block">
                 <label class="field-label" for="api-binding-<%= binding.actionName %>"><%= binding.label %></label>
                 <select id="api-binding-<%= binding.actionName %>" name="apiBinding.<%= binding.actionName %>" class="text-input">
                   <option value="">Keine Operation zugeordnet</option>
                   <% templateDetail.availableOperations.forEach((operation) => { %>
-                    <option value="<%= operation.operationRef %>" <%= operation.operationRef === binding.operationRef ? "selected" : "" %>>
-                      <%= operation.operationRef %> · <%= operation.name %>
+                    <option value="<%= operation.key %>" <%= operation.key === binding.operationRef ? "selected" : "" %>>
+                      <%= operation.key %> · <%= operation.title %> · <%= operation.status %>
                     </option>
                   <% }) %>
                 </select>
@@ -161,35 +157,36 @@
       <article class="subpanel">
         <h4>Kopfdaten</h4>
         <div class="grid two-up detail-grid">
+          <p><strong>form_type</strong><br /><%= templateDetail.template.formType %></p>
           <p><strong>attachments_enabled</strong><br /><%= templateDetail.templateFeatures.attachments.enabled ? "Ja" : "Nein" %></p>
           <p><strong>journal_enabled</strong><br /><%= templateDetail.templateFeatures.journal.enabled ? "Ja" : "Nein" %></p>
         </div>
       </article>
     </form>
 
-    <% if (templateDetail.nextFormReference.parseError) { %>
+    <% if (templateDetail.formRuntimeReference.parseError) { %>
       <div class="notice-card notice-error">
         <strong>Source aktuell nicht lesbar</strong>
-        <p><%= templateDetail.nextFormReference.parseError %></p>
+        <p><%= templateDetail.formRuntimeReference.parseError %></p>
       </div>
-    <% } else if (templateDetail.nextFormReference.parsedForm) { %>
+    <% } else if (templateDetail.formRuntimeReference.parsedForm) { %>
       <article class="subpanel">
         <div class="panel-header">
-          <h4>Preview</h4>
+          <h4>Form Layout</h4>
         </div>
-        <div class="next-form-readonly-stack">
-          <% templateDetail.nextFormReference.parsedForm.sections.forEach((section) => { %>
-            <article class="subpanel next-form-readonly-section">
+        <div class="form-runtime-readonly-stack">
+          <% templateDetail.formRuntimeReference.parsedForm.sections.forEach((section) => { %>
+            <article class="subpanel form-runtime-readonly-section">
               <div class="panel-header">
                 <h4><%= section.title %></h4>
               </div>
 
               <% section.rows.forEach((row) => { %>
-                <div class="next-form-readonly-row next-form-columns-<%= Math.min(row.slots.length, 3) %>">
+                <div class="form-runtime-readonly-row form-runtime-columns-<%= Math.min(row.slots.length, 3) %>">
                   <% row.slots.forEach((slot) => { %>
                     <% const element = slot.element; %>
                     <% if (element.kind === "field") { %>
-                      <article class="field-block next-form-readonly-field next-form-type-<%= element.controlType %>">
+                      <article class="field-block form-runtime-readonly-field form-runtime-type-<%= element.controlType %>">
                         <label class="field-label"><%= element.label ?? element.name %><% if (element.properties.required === true) { %><span class="field-required" aria-hidden="true">*</span><span class="sr-only"> Pflichtfeld</span><% } %></label>
                         <% if (element.controlType === "grid" && typeof element.properties.columns === "string") { %>
                           <% const gridColumns = element.properties.columns.split("|").map((column) => column.trim()).filter((column) => column.length > 0).map((column) => {
@@ -200,7 +197,7 @@
                             };
                           }).filter((column) => column.name.length > 0); %>
                           <div class="table-wrap">
-                            <table class="next-form-grid-table is-readonly">
+                            <table class="form-runtime-grid-table is-readonly">
                               <thead>
                                 <tr>
                                   <% gridColumns.forEach((column) => { %>
@@ -218,21 +215,21 @@
                             </table>
                           </div>
                         <% } else if (element.controlType === "textarea") { %>
-                          <div class="next-form-value next-form-value-textarea">Noch kein Wert</div>
+                          <div class="form-runtime-value form-runtime-value-textarea">Noch kein Wert</div>
                         <% } else if (element.controlType === "select") { %>
-                          <div class="next-form-value">Noch keine Auswahl</div>
+                          <div class="form-runtime-value">Noch keine Auswahl</div>
                         <% } else if (element.controlType === "signature") { %>
-                          <div class="next-form-signature-card">
+                          <div class="form-runtime-signature-card">
                             <strong>Noch nicht signiert</strong>
                           </div>
                         <% } else { %>
-                          <div class="next-form-value">Noch kein Wert</div>
+                          <div class="form-runtime-value">Noch kein Wert</div>
                         <% } %>
                       </article>
                     <% } else { %>
-                      <article class="field-block next-form-readonly-field next-form-action-card next-form-type-<%= element.controlType %>">
+                      <article class="field-block form-runtime-readonly-field form-runtime-action-card form-runtime-type-<%= element.controlType %>">
                         <label class="field-label"><%= element.label ?? element.name %></label>
-                        <div class="next-form-action-button" aria-disabled="true"><%= element.label ?? element.name %></div>
+                        <div class="form-runtime-action-button" aria-disabled="true"><%= element.label ?? element.name %></div>
                       </article>
                     <% } %>
                   <% }) %>
@@ -401,7 +398,7 @@
       <% if (templateDetail.integrations.actions.length === 0 && templateDetail.integrations.fields.length === 0) { %>
         <div class="empty-state">
           <strong>Keine Integrationsbezüge erkannt.</strong>
-          <p>Im aktuellen Template wurden keine Actions oder Felder mit operationRef erkannt.</p>
+          <p>Im aktuellen Template wurden keine API-Referenzen erkannt.</p>
         </div>
       <% } else { %>
         <ul class="stack-list compact">

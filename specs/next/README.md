@@ -31,5 +31,5 @@ Weiter als Hintergrund nuetzlich, aber nicht mehr fuehrender Produktweg:
 
 - `03_layout_target_spec.md`
 - `04_ui_model_target_spec.md`
-- `05_reference_example_craftsman_order_spec.md`
+- `05_reference_example_customer_order_spec.md`
 - `06_transition_migration_target_spec.md`

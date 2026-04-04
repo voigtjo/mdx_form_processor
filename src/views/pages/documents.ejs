@@ -1,28 +1,26 @@
 <section class="hero-card">
   <div>
-    <span class="eyebrow">Arbeits-UI</span>
     <h2>Documents</h2>
-    <p>Arbeitsuebersicht fuer sichtbare Documents mit Start, Filterung und direktem Zugang in die laufende Vorgangsarbeit.</p>
   </div>
   <div class="hero-metrics">
     <article>
       <strong><%= documentsList.summary.filteredCount %></strong>
-      <span>Shown</span>
+      <span>Sichtbar</span>
     </article>
     <article>
       <strong><%= documentsList.summary.activeCount %></strong>
-      <span>Active</span>
+      <span>Aktiv</span>
     </article>
     <article>
       <strong><%= documentsList.summary.archivedCount %></strong>
-      <span>Archived</span>
+      <span>Archiv</span>
     </article>
   </div>
 </section>
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Start Document</h3>
+    <h3>Neues Document</h3>
     <span class="chip"><%= activeUser.displayName %></span>
   </div>
   <% const startableTemplates = workspaceSummary.templates
@@ -39,10 +37,9 @@
           <option value="<%= template.id %>"><%= template.name %> (v<%= template.version %>) · <%= workflow?.name ?? "Workflow" %> (v<%= workflow?.version ?? "?" %>)</option>
         <% }) %>
       </select>
-      <button class="button-primary" type="submit" <%= startableTemplates.length === 0 ? "disabled" : "" %>>Start Document</button>
+      <button class="button-primary" type="submit" <%= startableTemplates.length === 0 ? "disabled" : "" %>>Starten</button>
     </form>
   </div>
-  <p class="panel-copy">Startbar sind publizierte, nicht archivierte Template-Staende mit publiziertem Workflow. Neue Dokumente bleiben danach auf genau dieser Template- und Workflow-Version gebunden.</p>
 </section>
 
 <% if (typeof startError === "string" && startError.length > 0) { %>
@@ -57,16 +54,16 @@
 
 <section class="panel">
   <div class="panel-header">
-    <h3>My Documents</h3>
-    <span class="chip">Arbeitsfinder</span>
+    <h3>Documents</h3>
+    <span class="chip"><%= documentsList.summary.filteredCount %></span>
   </div>
 
   <form method="get" action="/documents" class="filter-form">
     <input type="hidden" name="user" value="<%= activeUser.key %>" />
     <div class="filter-grid">
       <div>
-        <label class="field-label" for="documents-q">Search</label>
-        <input id="documents-q" type="search" name="q" value="<%= documentsList.filterState.q %>" placeholder="Document, Template oder Workflow" />
+        <label class="field-label" for="documents-q">Suche</label>
+        <input id="documents-q" type="search" name="q" value="<%= documentsList.filterState.q %>" placeholder="Titel, order_number, batch_id, qualification_record_number oder form_title" />
       </div>
       <div>
         <label class="field-label" for="documents-status">Status</label>
@@ -79,19 +76,14 @@
       </div>
       <label class="filter-toggle">
         <input type="checkbox" name="showArchived" value="1" <%= documentsList.filterState.showArchived ? "checked" : "" %> />
-        <span>Archivierte Documents einbeziehen</span>
+        <span>Archiv einbeziehen</span>
       </label>
       <div class="filter-actions">
-        <button class="button-secondary" type="submit">Apply Filters</button>
+        <button class="button-secondary" type="submit">Filtern</button>
         <a class="text-link" href="/documents?user=<%= activeUser.key %>">Reset</a>
       </div>
     </div>
   </form>
-
-  <p class="panel-copy">
-    Standardansicht zeigt sichtbare Documents ohne archivierte Eintraege. Template-, Workflow- und Assignment-Kontext bleiben in der Liste lesbar, die eigentliche Arbeit liegt weiterhin im Detail.
-  </p>
-
   <% if (documentsList.documents.length === 0) { %>
     <div class="empty-state">
       <strong>Keine Documents gefunden.</strong>
@@ -119,11 +111,19 @@
             <tr>
               <td>
                 <a class="text-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>"><%= document.title %></a>
-                <p class="table-meta"><%= document.status === "archived" ? "Archivierter Vorgang" : "Aktiver Vorgang" %></p>
+                <p class="table-meta">
+                  <%= document.status === "archived" ? "Archiviert" : "Aktiv" %>
+                  <% if (document.typedLeadField && document.typedLeadValue) { %>
+                    · <%= document.typedLeadField %>: <%= document.typedLeadValue %>
+                  <% } %>
+                  <% if (document.typedTableName) { %>
+                    · <%= document.typedTableName %>
+                  <% } %>
+                </p>
               </td>
               <td>
                 <strong><%= template?.name ?? "Unbekannt" %></strong>
-                <p class="table-meta"><%= template?.key ?? "ohne Template-Key" %><% if (template) { %> · v<%= template.version %><% } %></p>
+                <p class="table-meta"><%= template?.key ?? "ohne Template-Key" %><% if (template) { %> · <%= template.formType %> · v<%= template.version %><% } %></p>
               </td>
               <td>
                 <strong><%= workflow?.name ?? "Unbekannt" %></strong>

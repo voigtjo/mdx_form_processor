@@ -8,6 +8,7 @@ export type QualificationParticipantState = {
   submittedAt?: string;
   signature?: string;
   signatureAt?: string;
+  currentPage?: number;
   fieldValues?: Record<string, string | string[]>;
 };
 
@@ -89,6 +90,7 @@ export const normalizeQualificationParticipantStates = (
         ...(typeof record.submittedAt === "string" ? { submittedAt: record.submittedAt } : {}),
         ...(typeof record.signature === "string" ? { signature: record.signature } : {}),
         ...(typeof record.signatureAt === "string" ? { signatureAt: record.signatureAt } : {}),
+        ...(typeof record.currentPage === "number" ? { currentPage: record.currentPage } : {}),
         ...(record.fieldValues && typeof record.fieldValues === "object" && !Array.isArray(record.fieldValues)
           ? {
               fieldValues: Object.fromEntries(
