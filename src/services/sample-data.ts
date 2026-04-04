@@ -229,8 +229,9 @@ export const sampleOperations: Operation[] = [
     operationRef: "customerOrders.create",
     modulePath: "src/modules/operations/customer-orders.ts",
     authStrategy: "none",
+    connector: "reference",
     name: "Create Customer Order",
     description: "Platzhalter fuer spaetere TypeScript-Operationen im App-Kontext.",
+    tags: ["reference", "action"],
   },
 ];
-

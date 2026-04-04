@@ -5,6 +5,7 @@ import type { FastifyError } from "fastify";
 import ejs from "ejs";
 import type { Document, FormTemplate, User } from "../types/domain.js";
 import {
+  createApiCatalogViewModel,
   createAdminGroupDetailViewModel,
   createAdminGroupEditViewModel,
   createAdminGroupNewViewModel,
@@ -34,7 +35,12 @@ import { startDocumentForUser } from "../modules/documents/start.js";
 import { submitDocumentForUser } from "../modules/documents/submit.js";
 import { addJournalEntryForUser } from "../modules/journal/add.js";
 import { getActiveUser } from "../services/app-context.js";
+import { serializeCsv } from "../modules/data-exchange/csv.js";
+import { importReferenceEntitiesFromCsv } from "../modules/entities/import.js";
+import { findReferenceEntityByKey, listReferenceEntities } from "../modules/entities/read.js";
+import { findTemplateFormDataRecordVisibleToUser, listTemplateFormDataRecordsVisibleToUser } from "../modules/form-data/read.js";
 import { createTemplateDraft } from "../modules/templates/create.js";
+import { applyNextFormApiBindings } from "../modules/next-form/api-bindings.js";
 import { createTemplateAssignment, removeTemplateAssignment } from "../modules/templates/assign.js";
 import {
   archiveReferenceTemplateFamily,
@@ -51,11 +57,12 @@ import {
   publishWorkflowVersion,
   unpublishWorkflowVersion,
 } from "../modules/workflows/lifecycle.js";
-import { saveWorkflowDraftSource } from "../modules/workflows/source.js";
+import { buildWorkflowSourceTextFromTableInput, saveWorkflowDraftSource } from "../modules/workflows/source.js";
 
 type UserQuery = {
   user?: string;
   q?: string;
+  fields?: string;
   template?: string;
   workflow?: string;
   status?: string;
@@ -320,6 +327,28 @@ const renderDocumentWorkspaceFragment = async (
   ].join("");
 };
 
+const renderDocumentFormBodyFragment = async (
+  viewModel: NonNullable<DocumentRenderModel> & DocumentFeedbackState,
+  options?: { includeWorkflowZoneOob?: boolean; includeHeaderOob?: boolean; includeHistoryOob?: boolean },
+): Promise<string> => {
+  const [formBodyHtml, workflowZoneFragment, headerFragment, historyFragment] = await Promise.all([
+    renderEjsTemplate("partials/document-detail/next-form-form-body.ejs", {
+      documentDetail: viewModel.documentDetail,
+      activeUser: viewModel.activeUser,
+    }),
+    options?.includeWorkflowZoneOob ? renderDocumentWorkflowZoneFragment(viewModel, { oob: true }) : Promise.resolve(""),
+    options?.includeHeaderOob ? renderDocumentHeaderFragment(viewModel, { oob: true }) : Promise.resolve(""),
+    options?.includeHistoryOob ? renderDocumentHistoryFragment(viewModel, { oob: true }) : Promise.resolve(""),
+  ]);
+
+  return [
+    renderFragmentShell("div", "document-form-body-fragment", "document-form-body", formBodyHtml),
+    workflowZoneFragment,
+    headerFragment,
+    historyFragment,
+  ].join("");
+};
+
 const renderDocumentJournalFragment = async (
   viewModel: NonNullable<DocumentRenderModel> & DocumentFeedbackState,
   options?: { includeHeaderOob?: boolean; includeHistoryOob?: boolean },
@@ -369,6 +398,78 @@ const withDialog = async (request: FastifyRequest, input: Record<string, unknown
 };
 
 const normalizeSearchTerm = (value: string | undefined): string => value?.trim() ?? "";
+const parseFieldSelection = (request: FastifyRequest): string[] | undefined => {
+  const rawValue = query(request).fields?.trim();
+
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const fields = rawValue
+    .split(",")
+    .map((field) => field.trim())
+    .filter((field) => field.length > 0);
+
+  return fields.length > 0 ? fields : undefined;
+};
+
+const toEntityType = (value: string): "customer" | "product" | null => {
+  if (value === "customers") {
+    return "customer";
+  }
+
+  if (value === "products") {
+    return "product";
+  }
+
+  return null;
+};
+
+const serializeFormDataExportValue = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return JSON.stringify(value);
+};
+
+const collectIndexedWorkflowRowKeys = (body: Record<string, unknown>, prefix: string) => {
+  return Object.keys(body)
+    .filter((key) => key.startsWith(`${prefix}__`))
+    .map((key) => {
+      const index = Number(key.slice(prefix.length + 2));
+      return Number.isFinite(index) ? index : -1;
+    })
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right);
+};
+
+const resolveWorkflowSourceFromRequestBody = (body: Record<string, unknown>) => {
+  const sourceMode = typeof body.sourceMode === "string" ? body.sourceMode : "table";
+
+  if (sourceMode === "json") {
+    return typeof body.source === "string" ? body.source : "";
+  }
+
+  return buildWorkflowSourceTextFromTableInput({
+    baselineSourceText: typeof body.source === "string" ? body.source : "",
+    initialStatus: typeof body.initialStatus === "string" ? body.initialStatus : "",
+    statusesText: typeof body.statusesText === "string" ? body.statusesText : "",
+    rows: collectIndexedWorkflowRowKeys(body, "actionName").map((index) => ({
+      actionName: typeof body[`actionName__${index}`] === "string" ? String(body[`actionName__${index}`]) : "",
+      fromText: typeof body[`actionFrom__${index}`] === "string" ? String(body[`actionFrom__${index}`]) : "",
+      to: typeof body[`actionTo__${index}`] === "string" ? String(body[`actionTo__${index}`]) : "",
+      rolesText: typeof body[`actionRoles__${index}`] === "string" ? String(body[`actionRoles__${index}`]) : "",
+      mode: typeof body[`actionMode__${index}`] === "string" ? String(body[`actionMode__${index}`]) : "",
+      api: typeof body[`actionApi__${index}`] === "string" ? String(body[`actionApi__${index}`]) : "",
+      condition: typeof body[`actionCondition__${index}`] === "string" ? String(body[`actionCondition__${index}`]) : "",
+    })),
+  });
+};
 
 const normalizeShowArchived = (value: string | undefined): boolean => {
   return value === "1" || value === "true" || value === "yes";
@@ -450,7 +551,7 @@ const buildDialogRedirect = (targetUrl: string, input: { type?: "error" | "info"
 const renderPage = async (
   request: FastifyRequest,
   reply: FastifyReply,
-  section: "workspace" | "templates" | "workflows" | "documents" | "admin",
+  section: "workspace" | "templates" | "workflows" | "documents" | "apis" | "admin",
   page: string,
   title: string,
 ) => {
@@ -525,6 +626,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       product_master_id?: string;
       product_master_type?: string;
       product_master_status?: string;
+      work_signature?: string;
+      work_signature_at?: string;
     };
   }>("/next-form-preview/craftsman-order", async (request, reply) => {
     return reply.view(
@@ -549,6 +652,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             product_master_id: request.body.product_master_id,
             product_master_type: request.body.product_master_type,
             product_master_status: request.body.product_master_status,
+            work_signature: request.body.work_signature,
+            work_signature_at: request.body.work_signature_at,
           },
         }),
       ),
@@ -617,19 +722,35 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     Body: {
       source?: string;
       intent?: string;
+      workflowTemplateId?: string;
+      cascadePublishWorkflow?: string;
+      [key: string]: string | undefined;
     };
   }>("/templates/:id/source", async (request, reply) => {
     const params = request.params as { id: string };
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
-    const sourceText = request.body?.source ?? "";
+    const requestedSourceText = request.body?.source ?? "";
     const intent = request.body?.intent ?? "save_draft";
+    const workflowTemplateId = request.body?.workflowTemplateId ?? "";
+    const cascadePublishWorkflow = request.body?.cascadePublishWorkflow === "on";
+    const apiBindingEntries = Object.entries(request.body ?? {})
+      .filter(([key]) => key.startsWith("apiBinding."))
+      .map(([key, value]) => [key.replace(/^apiBinding\./, ""), value ?? ""] as const);
+    const sourceText = apiBindingEntries.length > 0
+      ? applyNextFormApiBindings({
+          sourceText: requestedSourceText,
+          bindings: Object.fromEntries(apiBindingEntries),
+        })
+      : requestedSourceText;
 
     try {
       const result = intent === "publish"
         ? await publishReferenceTemplateVersion({
             templateId: params.id,
             sourceText,
+            workflowTemplateId,
+            cascadePublishWorkflow,
           })
         : intent === "unpublish"
           ? await unpublishReferenceTemplateVersion({
@@ -642,6 +763,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             : await saveReferenceTemplateDraft({
                 templateId: params.id,
                 sourceText,
+                workflowTemplateId,
               });
 
       const dialogTitle =
@@ -673,6 +795,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       const message = error instanceof Error ? error.message : "Die Template-Quelle konnte nicht verarbeitet werden.";
       const viewModel = await createTemplateDetailViewModel(queryValue(request), params.id, {
         sourceText,
+        workflowTemplateId,
       });
 
       if (!viewModel) {
@@ -757,15 +880,27 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     Body: {
       source?: string;
       intent?: string;
+      sourceMode?: string;
+      initialStatus?: string;
+      statusesText?: string;
+      actionName?: string | string[];
+      actionFrom?: string | string[];
+      actionTo?: string | string[];
+      actionRoles?: string | string[];
+      actionMode?: string | string[];
+      actionApi?: string | string[];
+      actionCondition?: string | string[];
     };
   }>("/workflows/:id/source", async (request, reply) => {
     const params = request.params as { id: string };
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
-    const sourceText = request.body?.source ?? "";
     const intent = request.body?.intent ?? "save_draft";
 
     try {
+      const sourceText = intent === "unpublish" || intent === "archive"
+        ? typeof request.body?.source === "string" ? request.body.source : ""
+        : resolveWorkflowSourceFromRequestBody((request.body ?? {}) as Record<string, unknown>);
       const result = intent === "publish"
         ? await publishWorkflowVersion({
             workflowId: params.id,
@@ -808,8 +943,9 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Die Workflow-Quelle konnte nicht verarbeitet werden.";
+      const fallbackSourceText = typeof request.body?.source === "string" ? request.body.source : "";
       const viewModel = await createWorkflowDetailViewModel(queryValue(request), params.id, {
-        sourceText,
+        sourceText: fallbackSourceText,
       });
 
       if (!viewModel) {
@@ -835,6 +971,175 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         },
       });
     }
+  });
+
+  app.get("/apis", async (request, reply) => {
+    const viewModel = await createApiCatalogViewModel(queryValue(request));
+    return reply.view("pages/apis.ejs", await withDialog(request, viewModel));
+  });
+
+  app.post<{ Params: { entityType: string }; Body: { csvText?: string } }>("/apis/import/:entityType", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const entityType = toEntityType(request.params.entityType);
+
+    if (!entityType) {
+      return reply.redirect(
+        buildDialogRedirect(`/apis?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Import nicht moeglich",
+          message: "Der CSV-Import ist aktuell nur fuer Customers und Products verfuegbar.",
+        }),
+        303,
+      );
+    }
+
+    try {
+      const result = await importReferenceEntitiesFromCsv({
+        entityType,
+        csvText: request.body?.csvText ?? "",
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/apis?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "CSV importiert",
+          message: `${result.importedCount} ${entityType === "customer" ? "Customer" : "Product"}-Zeilen wurden importiert.`,
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Der CSV-Import konnte nicht verarbeitet werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/apis?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "CSV-Import fehlgeschlagen",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.get("/api/form-data/templates/:templateKey/export.csv", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { templateKey: string };
+    const fields = parseFieldSelection(request);
+    const records = await listTemplateFormDataRecordsVisibleToUser({
+      userId: activeUser.id,
+      templateKey: params.templateKey,
+      ...(fields ? { fields } : {}),
+    });
+    const exportFields = fields ?? records[0]?.template.tableFields ?? [];
+    const csvText = serializeCsv(
+      ["document_id", "document_title", "status", "created_at", "updated_at", ...exportFields],
+      records.map((record) => ({
+        document_id: record.id,
+        document_title: record.title,
+        status: record.status,
+        created_at: record.createdAt,
+        updated_at: record.updatedAt,
+        ...Object.fromEntries(exportFields.map((field) => [field, serializeFormDataExportValue(record.data[field])])),
+      })),
+    );
+
+    return reply
+      .type("text/csv; charset=utf-8")
+      .header("content-disposition", `attachment; filename="${params.templateKey}.csv"`)
+      .send(csvText);
+  });
+
+  app.get("/api/form-data/templates/:templateKey/:documentId", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { templateKey: string; documentId: string };
+    const fields = parseFieldSelection(request);
+    const record = await findTemplateFormDataRecordVisibleToUser({
+      userId: activeUser.id,
+      templateKey: params.templateKey,
+      documentId: params.documentId,
+      ...(fields ? { fields } : {}),
+    });
+
+    if (!record) {
+      return reply.code(404).send({
+        error: "not_found",
+        message: "Formulardatensatz nicht gefunden oder nicht sichtbar.",
+      });
+    }
+
+    return reply.type("application/json").send({
+      templateKey: params.templateKey,
+      ...(fields ? { fields } : {}),
+      item: record,
+    });
+  });
+
+  app.get("/api/form-data/templates/:templateKey", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { templateKey: string };
+    const fields = parseFieldSelection(request);
+    const records = await listTemplateFormDataRecordsVisibleToUser({
+      userId: activeUser.id,
+      templateKey: params.templateKey,
+      ...(fields ? { fields } : {}),
+    });
+
+    return reply.type("application/json").send({
+      templateKey: params.templateKey,
+      ...(fields ? { fields } : {}),
+      count: records.length,
+      items: records,
+    });
+  });
+
+  app.get("/api/entities/:entityType", async (request, reply) => {
+    const params = request.params as { entityType: string };
+    const entityType = toEntityType(params.entityType);
+
+    if (!entityType) {
+      return reply.code(404).send({
+        error: "not_found",
+        message: "Entitaetentyp nicht gefunden.",
+      });
+    }
+
+    const items = await listReferenceEntities(entityType);
+
+    return reply.type("application/json").send({
+      entityType,
+      count: items.length,
+      items,
+    });
+  });
+
+  app.get("/api/entities/:entityType/:entityKey", async (request, reply) => {
+    const params = request.params as { entityType: string; entityKey: string };
+    const entityType = toEntityType(params.entityType);
+
+    if (!entityType) {
+      return reply.code(404).send({
+        error: "not_found",
+        message: "Entitaetentyp nicht gefunden.",
+      });
+    }
+
+    const item = await findReferenceEntityByKey({
+      entityType,
+      entityKey: params.entityKey,
+    });
+
+    if (!item) {
+      return reply.code(404).send({
+        error: "not_found",
+        message: "Entitaet nicht gefunden.",
+      });
+    }
+
+    return reply.type("application/json").send({
+      entityType,
+      item,
+    });
   });
 
   app.get("/documents", async (request, reply) => {
@@ -1258,6 +1563,22 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       product_master_id?: string;
       product_master_type?: string;
       product_master_status?: string;
+      work_signature?: string;
+      work_signature_at?: string;
+      work_signature_requested?: string;
+      qualification_record_number?: string;
+      qualification_title?: string;
+      owner_user_id?: string;
+      attendee_user_ids?: string;
+      valid_until?: string;
+      qualification_result?: string;
+      qualification_topics?: string;
+      batch_id?: string;
+      serial_number?: string;
+      product_name?: string;
+      production_line?: string;
+      process_steps?: string;
+      approval_status?: string;
       labor_hours?: string;
       travel_hours?: string;
       break_minutes?: string;
@@ -1280,6 +1601,22 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       product_master_id: request.body.product_master_id,
       product_master_type: request.body.product_master_type,
       product_master_status: request.body.product_master_status,
+      work_signature: request.body.work_signature,
+      work_signature_at: request.body.work_signature_at,
+      work_signature_requested: request.body.work_signature_requested,
+      qualification_record_number: request.body.qualification_record_number,
+      qualification_title: request.body.qualification_title,
+      owner_user_id: request.body.owner_user_id,
+      attendee_user_ids: request.body.attendee_user_ids,
+      valid_until: request.body.valid_until,
+      qualification_result: request.body.qualification_result,
+      qualification_topics: request.body.qualification_topics,
+      batch_id: request.body.batch_id,
+      serial_number: request.body.serial_number,
+      product_name: request.body.product_name,
+      production_line: request.body.production_line,
+      process_steps: request.body.process_steps,
+      approval_status: request.body.approval_status,
       labor_hours: request.body.labor_hours,
       travel_hours: request.body.travel_hours,
       break_minutes: request.body.break_minutes,
@@ -1341,7 +1678,9 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       };
 
       if (isHtmxRequest(request)) {
-        return reply.type("text/html").send(await renderDocumentWorkspaceFragment(responseModel));
+        return reply.type("text/html").send(await renderDocumentFormBodyFragment(responseModel, {
+          includeWorkflowZoneOob: true,
+        }));
       }
 
       return reply.view("pages/document-detail.ejs", await withDialog(request, responseModel));
@@ -1350,6 +1689,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     const saveResult = await saveDocumentNextFormValuesForUser({
       documentId: request.params.id,
       userId: activeUser.id,
+      activeUserDisplayName: activeUser.displayName,
       submittedValues: nextFormFieldValues,
     });
 
@@ -1380,7 +1720,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         return reply
           .code(400)
           .type("text/html")
-          .send(await renderDocumentWorkspaceFragment({
+          .send(await renderDocumentFormBodyFragment({
             ...viewModel,
             saveError: saveErrorValue(request),
             saveStatus: saveStatusValue(request),
@@ -1398,6 +1738,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             nextFormStatus: nextFormStatusValue(request),
             uploadError: uploadErrorValue(request),
             uploadStatus: uploadStatusValue(request),
+          }, {
+            includeWorkflowZoneOob: true,
           }));
       }
 
@@ -1419,7 +1761,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         });
       }
 
-      return reply.type("text/html").send(await renderDocumentWorkspaceFragment({
+      return reply.type("text/html").send(await renderDocumentFormBodyFragment({
         ...viewModel,
         saveError: saveErrorValue(request),
         saveStatus: saveStatusValue(request),
@@ -1434,17 +1776,18 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         archiveError: archiveErrorValue(request),
         archiveStatus: archiveStatusValue(request),
         nextFormError: nextFormErrorValue(request),
-        nextFormStatus: "Werte gespeichert.",
+        nextFormStatus: saveResult.signatureApplied ? "Werte gespeichert. Signatur gesetzt." : "Werte gespeichert.",
         uploadError: uploadErrorValue(request),
         uploadStatus: uploadStatusValue(request),
       }, {
+        includeWorkflowZoneOob: true,
         includeHeaderOob: true,
         includeHistoryOob: true,
       }));
     }
 
     return reply.redirect(
-      `/documents/${encodeURIComponent(saveResult.documentId)}?user=${encodeURIComponent(activeUser.key)}&nextFormStatus=${encodeURIComponent("Werte gespeichert.")}`,
+      `/documents/${encodeURIComponent(saveResult.documentId)}?user=${encodeURIComponent(activeUser.key)}&nextFormStatus=${encodeURIComponent(saveResult.signatureApplied ? "Werte gespeichert. Signatur gesetzt." : "Werte gespeichert.")}`,
       303,
     );
   });
@@ -1621,11 +1964,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         }
 
         return reply.type("text/html").send(
-          await renderDocumentWorkspaceFragment({
+          await renderDocumentFormBodyFragment({
             ...viewModel,
             ...buildDocumentFeedbackStateFromRequest(request),
             submitError: message,
             submitStatus: undefined,
+          }, {
+            includeWorkflowZoneOob: true,
           }),
         );
       }
@@ -1649,12 +1994,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       }
 
       return reply.type("text/html").send(
-        await renderDocumentWorkspaceFragment({
+        await renderDocumentFormBodyFragment({
           ...viewModel,
           ...buildDocumentFeedbackStateFromRequest(request),
-          submitStatus: `Dokument wurde nach ${result.nextStatus} ueberfuehrt.`,
+          submitStatus: result.message ?? `Dokument wurde nach ${result.nextStatus} ueberfuehrt.`,
           submitError: undefined,
         }, {
+          includeWorkflowZoneOob: true,
           includeHeaderOob: true,
           includeHistoryOob: true,
         }),
@@ -1662,7 +2008,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     return reply.redirect(
-      `/documents/${encodeURIComponent(result.documentId)}?user=${encodeURIComponent(activeUser.key)}&submitStatus=${encodeURIComponent(`Dokument wurde nach ${result.nextStatus} ueberfuehrt.`)}`,
+      `/documents/${encodeURIComponent(result.documentId)}?user=${encodeURIComponent(activeUser.key)}&submitStatus=${encodeURIComponent(result.message ?? `Dokument wurde nach ${result.nextStatus} ueberfuehrt.`)}`,
       303,
     );
   });
@@ -1698,11 +2044,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         }
 
         return reply.type("text/html").send(
-          await renderDocumentWorkspaceFragment({
+          await renderDocumentFormBodyFragment({
             ...viewModel,
             ...buildDocumentFeedbackStateFromRequest(request),
             approveError: result.details ?? "Approve ist im aktuellen Status nicht verfuegbar.",
             approveStatus: undefined,
+          }, {
+            includeWorkflowZoneOob: true,
           }),
         );
       }
@@ -1726,12 +2074,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       }
 
       return reply.type("text/html").send(
-        await renderDocumentWorkspaceFragment({
+        await renderDocumentFormBodyFragment({
           ...viewModel,
           ...buildDocumentFeedbackStateFromRequest(request),
           approveStatus: `Dokument wurde nach ${result.nextStatus} ueberfuehrt.`,
           approveError: undefined,
         }, {
+          includeWorkflowZoneOob: true,
           includeHeaderOob: true,
           includeHistoryOob: true,
         }),
@@ -1775,11 +2124,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         }
 
         return reply.type("text/html").send(
-          await renderDocumentWorkspaceFragment({
+          await renderDocumentFormBodyFragment({
             ...viewModel,
             ...buildDocumentFeedbackStateFromRequest(request),
             rejectError: result.details ?? "Reject ist im aktuellen Status nicht verfuegbar.",
             rejectStatus: undefined,
+          }, {
+            includeWorkflowZoneOob: true,
           }),
         );
       }
@@ -1803,12 +2154,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       }
 
       return reply.type("text/html").send(
-        await renderDocumentWorkspaceFragment({
+        await renderDocumentFormBodyFragment({
           ...viewModel,
           ...buildDocumentFeedbackStateFromRequest(request),
           rejectStatus: `Dokument wurde nach ${result.nextStatus} ueberfuehrt.`,
           rejectError: undefined,
         }, {
+          includeWorkflowZoneOob: true,
           includeHeaderOob: true,
           includeHistoryOob: true,
         }),

@@ -1,24 +1,33 @@
 <% if (documentDetail.nextFormReference) { %>
-  <section class="hero-card hero-card-compact">
-    <div>
+  <details class="panel panel-collapsible page-header-collapsible">
+    <summary class="collapsible-summary">
+      <div class="collapsible-summary-copy">
+        <strong><%= documentDetail.document.title %></strong>
+        <span><%= documentDetail.document.templateName %> v<%= documentDetail.document.templateVersion %> · <%= documentDetail.document.workflowTemplateName %> v<%= documentDetail.document.workflowTemplateVersion %> · <%= documentDetail.document.status %></span>
+      </div>
+      <div class="collapsible-summary-meta">
+        <span>Document</span>
+        <span><%= documentDetail.document.status %></span>
+      </div>
+    </summary>
+    <div class="collapsible-body">
       <span class="eyebrow">Document</span>
       <h2><%= documentDetail.document.title %></h2>
-      <p class="hero-inline-meta"><strong>Dokument:</strong> <%= documentDetail.document.title %> · <strong>Formular:</strong> <%= documentDetail.document.templateName %> v<%= documentDetail.document.templateVersion %> · <strong>Workflow:</strong> <%= documentDetail.document.workflowTemplateName %> v<%= documentDetail.document.workflowTemplateVersion %></p>
-      <p class="hero-inline-meta"><strong>Status:</strong> <%= documentDetail.document.status %> · <strong>Assignments:</strong> <%= activeAssignments.length %> aktiv<%= assignmentSummary ? " · " + assignmentSummary : "" %> · <strong><%= nextStepLabel %></strong></p>
-      <p class="hero-inline-meta">Gestartet aus Formular v<%= documentDetail.document.templateVersion %> und Workflow v<%= documentDetail.document.workflowTemplateVersion %> · Updated <%= documentDetail.document.updatedAt %> · Created <%= documentDetail.document.createdAt %></p>
+      <p class="hero-inline-meta"><strong>Formular:</strong> <%= documentDetail.document.templateName %> v<%= documentDetail.document.templateVersion %> · <strong>Workflow:</strong> <%= documentDetail.document.workflowTemplateName %> v<%= documentDetail.document.workflowTemplateVersion %></p>
+      <p class="hero-inline-meta"><strong>Status:</strong> <%= documentDetail.document.status %> · <strong><%= nextStepLabel %></strong><% if (activeAssignments.length > 0) { %> · <strong>Assignments:</strong> <%= activeAssignments.length %> aktiv<%= assignmentSummary ? " · " + assignmentSummary : "" %><% } %> · Updated <%= documentDetail.document.updatedAt %></p>
+      <div class="workflow-track workflow-track-header">
+        <% workflowStepsForHeader.forEach((step) => { %>
+          <span class="workflow-step <%= documentDetail.document.status === step ? "is-active" : "" %>"><%= step %></span>
+        <% }) %>
+        <% if (!workflowStepsForHeader.includes(documentDetail.document.status)) { %>
+          <span class="workflow-step is-active"><%= documentDetail.document.status %></span>
+        <% } %>
+      </div>
+      <div class="hero-actions">
+        <a class="text-link" href="/documents?user=<%= activeUser.key %>">Back to Documents</a>
+      </div>
     </div>
-    <div class="workflow-track workflow-track-header">
-      <% workflowStepsForHeader.forEach((step) => { %>
-        <span class="workflow-step <%= documentDetail.document.status === step ? "is-active" : "" %>"><%= step %></span>
-      <% }) %>
-      <% if (!workflowStepsForHeader.includes(documentDetail.document.status)) { %>
-        <span class="workflow-step is-active"><%= documentDetail.document.status %></span>
-      <% } %>
-    </div>
-    <div class="hero-actions">
-      <a class="text-link" href="/documents?user=<%= activeUser.key %>">Back to Documents</a>
-    </div>
-  </section>
+  </details>
 <% } else { %>
   <section class="hero-card">
     <div>

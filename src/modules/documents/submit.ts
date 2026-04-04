@@ -2,7 +2,16 @@ import { withDbTransaction } from "../../db/pool.js";
 import { findDocumentAccessContextForUser, type DocumentAccessContext, type WorkflowJson } from "./access.js";
 import { buildReadOnlyFormDefinition } from "../templates/form-read.js";
 import { isNextFormReferenceTemplate, mapDocumentDataToNextFormValues } from "../next-form/document-bridge.js";
-import { referenceNextFormSubmitRequiredFieldNames } from "../next-form/document-ui.js";
+import { getReferenceNextFormSubmitRequiredFieldNames } from "../next-form/document-ui.js";
+import { hasVisibleRichTextContent } from "../next-form/rich-text.js";
+import {
+  getQualificationCurrentUserState,
+  getQualificationRequiredEditorUserIds,
+  getQualificationSubmitModeLabel,
+  getQualificationSubmittedEditorUserIds,
+  synchronizeQualificationAssignments,
+  writeQualificationParticipantState,
+} from "../qualification/progress.js";
 
 type SubmitDocumentInput = {
   documentId: string;
@@ -19,6 +28,7 @@ type SubmitDocumentSuccess = {
   ok: true;
   documentId: string;
   nextStatus: string;
+  message?: string;
 };
 
 type SubmitDocumentFailure = {
@@ -41,6 +51,8 @@ const readSubmitTransition = (workflowJson: WorkflowJson): { from: string[]; to:
     to: submitAction.to,
   };
 };
+
+const isQualificationRecord = (document: DocumentAccessContext): boolean => document.templateKey === "qualification-record";
 
 const getAllowedSubmitFromStatuses = (
   document: DocumentAccessContext,
@@ -70,21 +82,37 @@ const isMissingRequiredValue = (value: unknown): boolean => {
   return value === null || value === undefined;
 };
 
-const getReferenceNextFormMissingFieldLabels = (document: DocumentAccessContext): string[] => {
-  const nextFormValues = mapDocumentDataToNextFormValues(document.templateKey, document.dataJson);
+const getReferenceNextFormMissingFieldLabels = (document: DocumentAccessContext, userId?: string): string[] => {
+  const nextFormValues = mapDocumentDataToNextFormValues(document.templateKey, document.dataJson, {
+    ...(userId ? { currentUserId: userId } : {}),
+  });
   const fieldLabels: Record<string, string> = {
     order_number: "Auftragsnummer",
     customer: "Kunde",
     work_description: "Taetigkeitsbeschreibung",
     material: "Material",
+    qualification_record_number: "Nachweisnummer",
+    qualification_title: "Qualifikation / Schulung",
+    owner_user_id: "Verantwortlich",
+    attendee_user_ids: "Teilnehmende",
+    qualification_result: "Selbsteinschaetzung",
+    qualification_topics: "Bestaetigte Themen",
+    batch_id: "Batch-ID",
+    product_name: "Produkt",
   };
-  const requiredFields = referenceNextFormSubmitRequiredFieldNames.map((name) => ({
+  const requiredFields = getReferenceNextFormSubmitRequiredFieldNames(document.templateKey).map((name) => ({
     name,
     label: fieldLabels[name] ?? name,
   }));
 
   return requiredFields
-    .filter((field) => isMissingRequiredValue(nextFormValues[field.name]))
+    .filter((field) => {
+      if (field.name === "work_description") {
+        return !hasVisibleRichTextContent(nextFormValues[field.name]);
+      }
+
+      return isMissingRequiredValue(nextFormValues[field.name]);
+    })
     .map((field) => field.label);
 };
 
@@ -146,12 +174,40 @@ export const getDocumentSubmitStateForUser = async (documentId: string, userId: 
     };
   }
 
-  const missingFieldLabels = getMissingRequiredFieldLabels(document);
+  const missingFieldLabels = isQualificationRecord(document)
+    ? getReferenceNextFormMissingFieldLabels(document, userId)
+    : getMissingRequiredFieldLabels(document);
 
   if (missingFieldLabels.length > 0) {
     return {
       isAvailable: false,
       reason: `Pflichtfelder fehlen: ${missingFieldLabels.join(", ")}.`,
+    };
+  }
+
+  if (isQualificationRecord(document)) {
+    const currentUserState = getQualificationCurrentUserState(document.dataJson, userId);
+
+    if (typeof currentUserState.submittedAt === "string") {
+      return {
+        isAvailable: false,
+        reason: "Dein Nachweis ist bereits submitted.",
+      };
+    }
+
+    const requiredEditorUserIds = getQualificationRequiredEditorUserIds(document.dataJson);
+    const submittedEditorUserIds = getQualificationSubmittedEditorUserIds({
+      data: document.dataJson,
+      requiredEditorUserIds,
+    });
+    const submitModeLabel = getQualificationSubmitModeLabel(document.workflowJson);
+    const nextStatus = submitModeLabel === "AND" && submittedEditorUserIds.length + 1 < requiredEditorUserIds.length
+      ? document.status
+      : submitTransition.to;
+
+    return {
+      isAvailable: true,
+      nextStatus,
     };
   }
 
@@ -198,7 +254,9 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
     };
   }
 
-  const missingFieldLabels = getMissingRequiredFieldLabels(document);
+  const missingFieldLabels = isQualificationRecord(document)
+    ? getReferenceNextFormMissingFieldLabels(document, userId)
+    : getMissingRequiredFieldLabels(document);
 
   if (missingFieldLabels.length > 0) {
     return {
@@ -208,7 +266,99 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
     };
   }
 
+  if (isQualificationRecord(document)) {
+    const currentUserState = getQualificationCurrentUserState(document.dataJson, userId);
+
+    if (typeof currentUserState.submittedAt === "string") {
+      return {
+        ok: false,
+        reason: "submit_not_allowed",
+        details: "Dieser Nutzer hat den Nachweis bereits submitted.",
+      };
+    }
+  }
+
   return withDbTransaction(async (client) => {
+    if (isQualificationRecord(document)) {
+      const submittedAt = new Date().toISOString();
+      const nextDocumentDataBase = writeQualificationParticipantState({
+        data: document.dataJson,
+        userId,
+        patch: {
+          savedAt: submittedAt,
+          submittedAt,
+        },
+      });
+      const requiredEditorUserIds = getQualificationRequiredEditorUserIds(nextDocumentDataBase);
+      const submittedEditorUserIds = getQualificationSubmittedEditorUserIds({
+        data: nextDocumentDataBase,
+        requiredEditorUserIds,
+      });
+      const submitModeLabel = getQualificationSubmitModeLabel(document.workflowJson);
+      const isComplete =
+        submitModeLabel === "AND"
+          ? requiredEditorUserIds.length > 0 && submittedEditorUserIds.length >= requiredEditorUserIds.length
+          : submittedEditorUserIds.length > 0;
+      const nextStatus = isComplete ? submitTransition.to : document.status;
+      const nextDocumentData = {
+        ...nextDocumentDataBase,
+        approval_status: isComplete ? "pruefung" : (typeof nextDocumentDataBase.approval_status === "string" && nextDocumentDataBase.approval_status.length > 0
+          ? nextDocumentDataBase.approval_status
+          : "offen"),
+      };
+
+      await client.query(
+        `
+        update documents
+        set status = $2,
+            data_json = $3::jsonb,
+            updated_at = now()
+        where id = $1
+        `,
+        [documentId, nextStatus, JSON.stringify(nextDocumentData)],
+      );
+
+      await synchronizeQualificationAssignments({
+        client,
+        documentId,
+        actorUserId: userId,
+        documentTitle: document.title,
+        documentStatus: nextStatus,
+        data: nextDocumentData,
+      });
+
+      await client.query(
+        `
+        insert into audit_events (document_id, event_type, actor_user_id, message, payload_json)
+        values ($1, $2, $3, $4, $5::jsonb)
+        `,
+        [
+          documentId,
+          isComplete ? "submitted" : "participant_submitted",
+          userId,
+          isComplete
+            ? `${document.title} submitted.`
+            : `${document.title}: participant submit stored.`,
+          JSON.stringify({
+            fromStatus: document.status,
+            toStatus: nextStatus,
+            submitMode: submitModeLabel,
+            submittedCount: submittedEditorUserIds.length,
+            requiredCount: requiredEditorUserIds.length,
+          }),
+        ],
+      );
+
+      return {
+        ok: true,
+        documentId,
+        nextStatus,
+        ...(isComplete
+          ? { message: `Dokument wurde nach ${nextStatus} ueberfuehrt.` }
+          : { message: `Dein Stand ist submitted. Weitere Beteiligte sind noch offen (${submittedEditorUserIds.length}/${requiredEditorUserIds.length}).` }),
+      };
+    }
+
     await client.query(
       `
       update documents
@@ -289,6 +439,7 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
       ok: true,
       documentId,
       nextStatus: submitTransition.to,
+      message: `Dokument wurde nach ${submitTransition.to} ueberfuehrt.`,
     };
   });
 };

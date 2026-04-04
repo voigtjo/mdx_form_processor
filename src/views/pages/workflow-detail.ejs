@@ -1,22 +1,36 @@
 <% const viewedVersion = workflowDetail.workflow.version; %>
-<section class="hero-card hero-card-compact">
-  <div>
+<% const editableRows = workflowDetail.transitionRows.concat([
+  { actionName: "", from: [], to: "", roles: [], rolesLabel: "", modeLabel: "OR", apiLabel: "", conditionLabel: "" },
+  { actionName: "", from: [], to: "", roles: [], rolesLabel: "", modeLabel: "OR", apiLabel: "", conditionLabel: "" },
+]); %>
+
+<details class="panel panel-collapsible page-header-collapsible">
+  <summary class="collapsible-summary">
+    <div class="collapsible-summary-copy">
+      <strong><%= workflowDetail.workflow.name %></strong>
+      <span><%= workflowDetail.workflow.name %> v<%= workflowDetail.workflow.version %> · <%= workflowDetail.lifecycleLabel %> · <%= workflowDetail.workflow.statuses.length %> Status</span>
+    </div>
+    <div class="collapsible-summary-meta">
+      <span>Workflow</span>
+      <span>v<%= viewedVersion %></span>
+    </div>
+  </summary>
+  <div class="collapsible-body">
     <span class="eyebrow">Workflow</span>
     <h2><%= workflowDetail.workflow.name %></h2>
-    <p class="hero-inline-meta"><strong>Workflow:</strong> <%= workflowDetail.workflow.name %> v<%= workflowDetail.workflow.version %> · <strong>Key:</strong> <%= workflowDetail.workflow.key %></p>
-    <p class="hero-inline-meta"><strong>Status:</strong> <%= workflowDetail.lifecycleLabel %> · <strong>Initial:</strong> <%= workflowDetail.workflow.initialStatus %> · <strong>Updated:</strong> <%= workflowDetail.workflow.updatedAt %></p>
-    <p class="hero-inline-meta"><strong>Betrachtet:</strong> v<%= viewedVersion %> · <strong>Draft in Arbeit:</strong> <%= workflowDetail.currentDraftVersion ? `v${workflowDetail.currentDraftVersion.version}` : `noch keiner (naechster Draft v${workflowDetail.nextDraftVersion})` %> · <strong>Published:</strong> <%= workflowDetail.currentPublishedVersion ? `v${workflowDetail.currentPublishedVersion.version}` : "keine" %></p>
+    <p class="hero-inline-meta"><strong>Key:</strong> <%= workflowDetail.workflow.key %> · <strong>Status:</strong> <%= workflowDetail.lifecycleLabel %> · <strong>Initial:</strong> <%= workflowDetail.workflow.initialStatus %></p>
+    <p class="hero-inline-meta"><strong>Draft:</strong> <%= workflowDetail.currentDraftVersion ? `v${workflowDetail.currentDraftVersion.version}` : `naechster Draft v${workflowDetail.nextDraftVersion}` %> · <strong>Published:</strong> <%= workflowDetail.currentPublishedVersion ? `v${workflowDetail.currentPublishedVersion.version}` : "keine" %> · <strong>Updated:</strong> <%= workflowDetail.workflow.updatedAt %></p>
+    <div class="hero-actions">
+      <a class="button-secondary" href="/workflows?user=<%= activeUser.key %>">Back to Workflows</a>
+    </div>
   </div>
-  <div class="hero-actions">
-    <a class="button-secondary" href="/workflows?user=<%= activeUser.key %>">Back to Workflows</a>
-  </div>
-</section>
+</details>
 
 <details class="panel panel-collapsible">
   <summary class="collapsible-summary">
     <div class="collapsible-summary-copy">
       <strong>Context</strong>
-      <span><%= workflowDetail.workflow.statuses.length %> Status · <%= workflowDetail.transitionRows.length %> Actions · <%= workflowDetail.relatedTemplates.length %> Templates · <%= workflowDetail.relatedDocuments.length %> Documents</span>
+      <span><%= workflowDetail.transitionRows.length %> Actions · <%= workflowDetail.relatedTemplates.length %> Templates · <%= workflowDetail.relatedDocuments.length %> Documents</span>
     </div>
     <div class="collapsible-summary-meta">
       <span><%= workflowDetail.versions.length %> Versionen</span>
@@ -26,12 +40,11 @@
     <div class="grid two-up detail-grid">
       <div>
         <p><strong>Beschreibung</strong><br /><%= workflowDetail.workflow.description ?? "Keine Beschreibung hinterlegt." %></p>
-        <p><strong>Statusfolge</strong><br /><%= workflowDetail.workflow.statuses.join(" → ") %></p>
+        <p><strong>Statusfolge</strong><br /><%= workflowDetail.sourceStatuses.join(" → ") %></p>
         <p><strong>Templates</strong><br /><%= workflowDetail.relatedTemplates.length > 0 ? workflowDetail.relatedTemplates.map((template) => `${template.name} v${template.version}`).join(", ") : "keine sichtbaren Templates" %></p>
-        <p><strong>Hooks im Quellmodell</strong><br /><%= workflowDetail.workflow.hooks.length %> definiert</p>
       </div>
       <div>
-        <h4>Versions</h4>
+        <h4>Versionen</h4>
         <ul class="stack-list compact">
           <% workflowDetail.versions.forEach((version) => { %>
             <% const versionLifecycleLabel = version.status === "inactive" ? "unpublished" : version.status; %>
@@ -55,11 +68,15 @@
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Workflow Source</h3>
-    <span class="chip"><%= workflowDetail.lifecycleLabel %> · v<%= workflowDetail.workflow.version %></span>
+    <h3>Workflow Table</h3>
+    <div class="panel-header-actions">
+      <span class="chip"><%= workflowDetail.transitionRows.length %> Actions</span>
+      <button class="button-secondary" type="button" data-modal-open="workflow-json-dialog">JSON</button>
+    </div>
   </div>
 
   <form method="post" action="/workflows/<%= workflowDetail.workflow.id %>/source?user=<%= activeUser.key %>" class="stack-list">
+    <textarea class="sr-only" name="source"><%= workflowDetail.workflowSourceText %></textarea>
     <article class="subpanel">
       <div class="panel-header">
         <h4>Lifecycle</h4>
@@ -74,7 +91,7 @@
         <button class="button-secondary" type="submit" name="intent" value="save_draft">
           Save Draft v<%= workflowDetail.nextDraftVersion %>
         </button>
-        <button class="button-primary" type="submit" name="intent" value="publish" <%= workflowDetail.sourceError ? "disabled" : "" %>>
+        <button class="button-primary" type="submit" name="intent" value="publish">
           Publish v<%= workflowDetail.publishTargetVersion %>
         </button>
         <button
@@ -94,44 +111,35 @@
           Archive v<%= viewedVersion %>
         </button>
       </div>
-      <% if (workflowDetail.publishedTemplateUsages.length > 0) { %>
-        <p class="panel-copy"><strong>Published Templates auf dieser Version:</strong> <%= workflowDetail.publishedTemplateUsages.map((template) => `${template.name} v${template.version}`).join(", ") %></p>
-      <% } %>
       <% if (workflowDetail.unpublishBlockedReason) { %>
-        <p class="panel-copy"><strong>Unpublish:</strong> <%= workflowDetail.unpublishBlockedReason %></p>
+        <p class="field-help"><%= workflowDetail.unpublishBlockedReason %></p>
       <% } %>
       <% if (workflowDetail.archiveBlockedReason) { %>
-        <p class="panel-copy"><strong>Archive:</strong> <%= workflowDetail.archiveBlockedReason %></p>
+        <p class="field-help"><%= workflowDetail.archiveBlockedReason %></p>
       <% } %>
     </article>
 
-    <article class="subpanel">
-      <div class="panel-header">
-        <h4>JSON Source</h4>
-        <span class="chip">Primaerquelle</span>
+    <% if (workflowDetail.sourceError) { %>
+      <div class="notice-card notice-error notice-inline">
+        <strong>Workflow Source nicht lesbar</strong>
+        <p><%= workflowDetail.sourceError %></p>
       </div>
-      <textarea name="source" rows="24" class="next-form-source-editor"><%= workflowDetail.workflowSourceText %></textarea>
-    </article>
-  </form>
+    <% } %>
 
-  <% if (workflowDetail.sourceError) { %>
-    <div class="notice-card notice-error">
-      <strong>Workflow Source aktuell nicht lesbar</strong>
-      <p><%= workflowDetail.sourceError %></p>
-    </div>
-  <% } %>
-
-  <article class="subpanel">
-    <div class="panel-header">
-      <h4>Transition View</h4>
-      <span class="chip"><%= workflowDetail.transitionRows.length %> Actions</span>
-    </div>
-    <p class="panel-copy workflow-model-copy"><strong>Lesemodell:</strong> Status + Actions + Uebergaenge. Die Tabelle zeigt den Workflow bereits als fachliches Transition-Modell statt als reine JSON-Review.</p>
-    <% if (!workflowDetail.sourceError) { %>
-      <p class="panel-copy workflow-status-line"><strong>Statusfolge:</strong> <%= workflowDetail.sourceStatuses.join(" → ") %></p>
+    <article class="subpanel">
+      <div class="workflow-table-meta">
+        <div class="field-block">
+          <label class="field-label" for="workflow-initial-status">Initialstatus</label>
+          <input id="workflow-initial-status" class="text-input" type="text" name="initialStatus" value="<%= workflowDetail.workflow.initialStatus %>" />
+        </div>
+        <div class="field-block">
+          <label class="field-label" for="workflow-statuses-text">Statusfolge</label>
+          <input id="workflow-statuses-text" class="text-input" type="text" name="statusesText" value="<%= workflowDetail.sourceStatuses.join(', ') %>" />
+        </div>
+      </div>
 
       <div class="table-wrap">
-        <table class="workflow-transition-table">
+        <table class="workflow-transition-table workflow-transition-editor-table">
           <thead>
             <tr>
               <th>Action</th>
@@ -144,25 +152,42 @@
             </tr>
           </thead>
           <tbody>
-            <% workflowDetail.transitionRows.forEach((row) => { %>
+            <% editableRows.forEach((row, index) => { %>
               <tr>
-                <td><strong><%= row.actionName %></strong></td>
-                <td><%= row.from.length > 0 ? row.from.join(", ") : "—" %></td>
-                <td><%= row.to %></td>
-                <td><%= row.rolesLabel %></td>
-                <td><span class="chip workflow-mode-chip"><%= row.modeLabel %></span></td>
-                <td class="workflow-transition-cell"><%= row.apiLabel %></td>
-                <td class="workflow-transition-cell"><%= row.conditionLabel %></td>
+                <td><input class="text-input" type="text" name="actionName__<%= index %>" value="<%= row.actionName %>" placeholder="submit" /></td>
+                <td><input class="text-input" type="text" name="actionFrom__<%= index %>" value="<%= row.from.join(', ') %>" placeholder="created, started" /></td>
+                <td><input class="text-input" type="text" name="actionTo__<%= index %>" value="<%= row.to %>" placeholder="submitted" /></td>
+                <td><input class="text-input" type="text" name="actionRoles__<%= index %>" value="<%= row.roles.join(', ') %>" placeholder="editor, approver" /></td>
+                <td>
+                  <select class="text-input" name="actionMode__<%= index %>">
+                    <option value="OR" <%= row.modeLabel === "OR" ? "selected" : "" %>>OR</option>
+                    <option value="AND" <%= row.modeLabel === "AND" ? "selected" : "" %>>AND</option>
+                  </select>
+                </td>
+                <td><input class="text-input" type="text" name="actionApi__<%= index %>" value="<%= row.apiLabel === '—' ? '' : row.apiLabel %>" placeholder="customerOrders.setStatusFromContext" /></td>
+                <td><input class="text-input" type="text" name="actionCondition__<%= index %>" value="<%= row.conditionLabel === '—' ? '' : row.conditionLabel %>" placeholder='requiredFields: customer_id' /></td>
               </tr>
             <% }) %>
           </tbody>
         </table>
       </div>
-    <% } else { %>
-      <div class="empty-state">
-        <strong>Transition View aktuell nicht ableitbar.</strong>
-        <p>Bitte korrigiere die Workflow Source und speichere den Draft erneut.</p>
-      </div>
-    <% } %>
-  </article>
+    </article>
+  </form>
 </section>
+
+<dialog id="workflow-json-dialog" class="workflow-json-dialog">
+  <div class="workflow-json-dialog-card">
+    <div class="panel-header">
+      <h4>Workflow JSON</h4>
+      <button class="button-secondary" type="button" data-modal-close>Schliessen</button>
+    </div>
+    <form method="post" action="/workflows/<%= workflowDetail.workflow.id %>/source?user=<%= activeUser.key %>" class="stack-list">
+      <input type="hidden" name="sourceMode" value="json" />
+      <textarea name="source" rows="24" class="next-form-source-editor"><%= workflowDetail.workflowSourceText %></textarea>
+      <div class="template-lifecycle-actions">
+        <button class="button-secondary" type="submit" name="intent" value="save_draft">Save Draft v<%= workflowDetail.nextDraftVersion %></button>
+        <button class="button-primary" type="submit" name="intent" value="publish">Publish v<%= workflowDetail.publishTargetVersion %></button>
+      </div>
+    </form>
+  </div>
+</dialog>

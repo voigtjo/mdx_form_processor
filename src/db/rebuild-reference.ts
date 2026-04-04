@@ -14,6 +14,7 @@ const truncateReferenceData = async (client: PoolClient): Promise<void> => {
       attachments,
       document_assignments,
       documents,
+      reference_entities,
       template_assignments,
       form_templates,
       workflow_templates,

@@ -1,85 +1,94 @@
 <% if (nextFormStatus) { %>
-  <div class="notice-card notice-success">
-    <strong>Formular aktualisiert</strong>
+  <div class="notice-card notice-success notice-inline">
+    <strong>Gespeichert</strong>
     <p><%= nextFormStatus %></p>
   </div>
 <% } %>
 
 <% if (nextFormError) { %>
-  <div class="notice-card notice-error">
-    <strong>Aktion nicht moeglich</strong>
+  <div class="notice-card notice-error notice-inline">
+    <strong>Nicht moeglich</strong>
     <p><%= nextFormError %></p>
   </div>
 <% } %>
 
 <% if (submitStatus) { %>
-  <div class="notice-card notice-success">
-    <strong>Submit erfolgreich</strong>
+  <div class="notice-card notice-success notice-inline">
+    <strong>Submitted</strong>
     <p><%= submitStatus %></p>
   </div>
 <% } %>
 
 <% if (submitError) { %>
-  <div class="notice-card notice-error">
-    <strong>Submit nicht moeglich</strong>
+  <div class="notice-card notice-error notice-inline">
+    <strong>Submit blockiert</strong>
     <p><%= submitError %></p>
   </div>
 <% } %>
 
 <% if (approveStatus) { %>
-  <div class="notice-card notice-success">
-    <strong>Approve erfolgreich</strong>
+  <div class="notice-card notice-success notice-inline">
+    <strong>Approved</strong>
     <p><%= approveStatus %></p>
   </div>
 <% } %>
 
 <% if (approveError) { %>
-  <div class="notice-card notice-error">
-    <strong>Approve nicht moeglich</strong>
+  <div class="notice-card notice-error notice-inline">
+    <strong>Approve blockiert</strong>
     <p><%= approveError %></p>
   </div>
 <% } %>
 
 <% if (rejectStatus) { %>
-  <div class="notice-card notice-success">
-    <strong>Reject erfolgreich</strong>
+  <div class="notice-card notice-success notice-inline">
+    <strong>Rejected</strong>
     <p><%= rejectStatus %></p>
   </div>
 <% } %>
 
 <% if (rejectError) { %>
-  <div class="notice-card notice-error">
-    <strong>Reject nicht moeglich</strong>
+  <div class="notice-card notice-error notice-inline">
+    <strong>Reject blockiert</strong>
     <p><%= rejectError %></p>
   </div>
 <% } %>
 
 <% if (archiveStatus) { %>
-  <div class="notice-card notice-success">
-    <strong>Archive erfolgreich</strong>
+  <div class="notice-card notice-success notice-inline">
+    <strong>Archiviert</strong>
     <p><%= archiveStatus %></p>
   </div>
 <% } %>
 
 <% if (archiveError) { %>
-  <div class="notice-card notice-error">
-    <strong>Archive nicht moeglich</strong>
+  <div class="notice-card notice-error notice-inline">
+    <strong>Archiv blockiert</strong>
     <p><%= archiveError %></p>
   </div>
 <% } %>
 
 <% const nextFormEditState = documentDetail.nextFormReference?.editState ?? documentDetail.editState; %>
+<% const participantProgress = documentDetail.nextFormReference?.participantProgress; %>
 
 <div class="next-form-toolbar">
+  <% if (participantProgress) { %>
+    <div class="workflow-action-strip workflow-action-strip-meta">
+      <span>Deine Rollen: <%= participantProgress.currentUserRoles.length > 0 ? participantProgress.currentUserRoles.join(", ") : "keine" %></span>
+      <span>Submit <%= participantProgress.submitModeLabel %> · <%= participantProgress.submitProgressLabel %></span>
+      <span>Approve <%= participantProgress.approvalModeLabel %></span>
+    </div>
+  <% } %>
   <div class="workflow-action-strip">
     <button
       type="submit"
       class="button-primary"
       name="intent"
       value="save-next-form"
+      data-preserve-form-position="true"
       hx-post="/documents/<%= documentDetail.document.id %>/next-form?user=<%= activeUser.key %>"
-      hx-target="#document-workspace-fragment"
-      hx-swap="outerHTML show:none"
+      hx-target="#document-form-body-fragment"
+      hx-swap="outerHTML"
       <%= nextFormEditState.isAvailable ? "" : "disabled" %>
     >Werte speichern</button>
     <% if (documentDetail.submitState.isAvailable) { %>
@@ -88,8 +97,9 @@
         type="submit"
         formaction="/documents/<%= documentDetail.document.id %>/submit?user=<%= activeUser.key %>"
         hx-post="/documents/<%= documentDetail.document.id %>/submit?user=<%= activeUser.key %>"
-        hx-target="#document-workspace-fragment"
-        hx-swap="outerHTML show:none"
+        hx-target="#document-form-body-fragment"
+        hx-swap="outerHTML"
+        data-preserve-form-position="true"
       >Submit</button>
     <% } else if (documentDetail.document.status === "created") { %>
       <button class="button-secondary" type="button" disabled>Submit</button>
@@ -100,8 +110,9 @@
         type="submit"
         formaction="/documents/<%= documentDetail.document.id %>/approve?user=<%= activeUser.key %>"
         hx-post="/documents/<%= documentDetail.document.id %>/approve?user=<%= activeUser.key %>"
-        hx-target="#document-workspace-fragment"
-        hx-swap="outerHTML show:none"
+        hx-target="#document-form-body-fragment"
+        hx-swap="outerHTML"
+        data-preserve-form-position="true"
       >Approve</button>
     <% } %>
     <% if (documentDetail.rejectState.isAvailable) { %>
@@ -110,18 +121,10 @@
         type="submit"
         formaction="/documents/<%= documentDetail.document.id %>/reject?user=<%= activeUser.key %>"
         hx-post="/documents/<%= documentDetail.document.id %>/reject?user=<%= activeUser.key %>"
-        hx-target="#document-workspace-fragment"
-        hx-swap="outerHTML show:none"
+        hx-target="#document-form-body-fragment"
+        hx-swap="outerHTML"
+        data-preserve-form-position="true"
       >Reject</button>
     <% } %>
   </div>
-  <% if (!nextFormEditState.isAvailable) { %>
-    <p class="field-help">Formular aktuell read-only. <%= nextFormEditState.reason ?? "Bearbeitung ist im aktuellen Status nicht verfuegbar." %></p>
-  <% } %>
-  <% if (!documentDetail.submitState.isAvailable && documentDetail.document.status === "created") { %>
-    <p class="field-help">Fuer Submit fehlen noch Angaben. <%= documentDetail.submitState.reason ?? "Pflichtfelder oder Berechtigungen fehlen." %></p>
-  <% } %>
-  <% if (!documentDetail.submitState.isAvailable && !documentDetail.approveState.isAvailable && !documentDetail.rejectState.isAvailable && documentDetail.document.status === "submitted" && activeApproverNames.length > 0) { %>
-    <p class="field-help">Freigabe liegt bei <strong><%= activeApproverNames.join(", ") %></strong>.</p>
-  <% } %>
 </div>

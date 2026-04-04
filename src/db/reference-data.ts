@@ -39,6 +39,22 @@ type SeedOperation = {
   authStrategy: string;
   description: string;
   tags: string[];
+  inputSchema?: {
+    fields: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+      description?: string;
+    }>;
+  };
+  outputSchema?: {
+    fields: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+      description?: string;
+    }>;
+  };
 };
 
 type SeedWorkflow = {
@@ -132,6 +148,11 @@ type SeedAuditEvent = {
   createdAt: string;
 };
 
+type SeedReferenceEntityImport = {
+  entityType: "customer" | "product";
+  csvText: string;
+};
+
 export type ReferenceSeedData = {
   users: SeedUser[];
   groups: SeedGroup[];
@@ -145,6 +166,77 @@ export type ReferenceSeedData = {
   tasks: SeedTask[];
   attachments: SeedAttachment[];
   auditEvents: SeedAuditEvent[];
+  entityImports: SeedReferenceEntityImport[];
+};
+
+const customerOrderWorkflowJson = {
+  initialStatus: "created",
+  statuses: ["created", "assigned", "started", "progressed", "submitted", "approved", "rejected", "archived"],
+  actions: {
+    assign: {
+      from: ["created"],
+      to: "assigned",
+      allowedRoles: ["editor"],
+      completionMode: "single",
+    },
+    start: {
+      from: ["assigned"],
+      to: "started",
+      allowedRoles: ["editor"],
+      completionMode: "single",
+    },
+    save: {
+      from: ["started", "progressed"],
+      to: "progressed",
+      allowedRoles: ["editor"],
+      completionMode: "single",
+    },
+    submit: {
+      from: ["assigned", "started", "progressed"],
+      to: "submitted",
+      allowedRoles: ["editor"],
+      completionMode: "single",
+    },
+    approve: {
+      from: ["submitted"],
+      to: "approved",
+      allowedRoles: ["approver"],
+      completionMode: "single",
+    },
+    reject: {
+      from: ["submitted"],
+      to: "progressed",
+      allowedRoles: ["approver"],
+      completionMode: "single",
+    },
+    archive: {
+      from: ["approved", "rejected"],
+      to: "archived",
+      allowedRoles: ["approver"],
+      completionMode: "single",
+    },
+  },
+  fieldRules: {
+    submitted: {
+      editable: [],
+      readonly: ["order_number", "customer", "service_location", "work_description", "material", "work_signature"],
+    },
+    approved: {
+      editable: [],
+      readonly: ["order_number", "customer", "service_location", "work_description", "material", "work_signature"],
+    },
+    archived: {
+      editable: [],
+      readonly: ["order_number", "customer", "service_location", "work_description", "material", "work_signature"],
+    },
+  },
+  approval: {
+    editors: "single",
+    approvers: "single",
+    submitMode: "single",
+    approvalMode: "single",
+  },
+  hooks: [],
 };
 
 const productionWorkflowJson = {
@@ -183,7 +275,7 @@ const productionWorkflowJson = {
     },
     reject: {
       from: ["submitted"],
-      to: "rejected",
+      to: "progressed",
       allowedRoles: ["approver"],
       completionMode: "single",
     },
@@ -195,37 +287,21 @@ const productionWorkflowJson = {
     },
   },
   fieldRules: {
-    created: {
-      editable: ["product_id"],
-      readonly: ["batch_id"],
-    },
-    assigned: {
-      editable: ["batch_id"],
-      readonly: ["product_id"],
-    },
-    started: {
-      editable: ["fulfillment_flags", "inspection_steps"],
-      readonly: ["product_id", "batch_id"],
-    },
-    progressed: {
-      editable: ["fulfillment_flags", "inspection_steps"],
-      readonly: ["product_id", "batch_id"],
-    },
     submitted: {
       editable: [],
-      readonly: ["product_id", "batch_id", "fulfillment_flags", "inspection_steps"],
+      readonly: ["batch_id", "serial_number", "product_name", "production_line", "process_steps", "work_signature"],
     },
-    rejected: {
+    approved: {
       editable: [],
-      readonly: ["product_id", "batch_id", "fulfillment_flags", "inspection_steps"],
+      readonly: ["batch_id", "serial_number", "product_name", "production_line", "process_steps", "work_signature"],
     },
     archived: {
       editable: [],
-      readonly: ["product_id", "batch_id", "fulfillment_flags", "inspection_steps"],
+      readonly: ["batch_id", "serial_number", "product_name", "production_line", "process_steps", "work_signature"],
     },
   },
   approval: {
-    editors: "multiple",
+    editors: "single",
     approvers: "single",
     submitMode: "single",
     approvalMode: "single",
@@ -233,7 +309,7 @@ const productionWorkflowJson = {
   hooks: [],
 };
 
-const evidenceWorkflowJson = {
+const qualificationWorkflowJson = {
   initialStatus: "created",
   statuses: ["created", "assigned", "submitted", "approved", "rejected", "archived"],
   actions: {
@@ -247,7 +323,7 @@ const evidenceWorkflowJson = {
       from: ["assigned"],
       to: "submitted",
       allowedRoles: ["editor"],
-      completionMode: "single",
+      completionMode: "all",
     },
     approve: {
       from: ["submitted"],
@@ -269,644 +345,643 @@ const evidenceWorkflowJson = {
     },
   },
   fieldRules: {
-    assigned: {
-      editable: ["evidence_number", "evidence_notes", "evidence_steps"],
-      readonly: [],
-    },
     submitted: {
       editable: [],
-      readonly: ["evidence_number", "evidence_notes", "evidence_steps"],
+      readonly: [
+        "qualification_record_number",
+        "qualification_title",
+        "owner_user_id",
+        "attendee_user_ids",
+        "valid_until",
+        "qualification_result",
+        "qualification_topics",
+        "work_signature",
+      ],
     },
-    rejected: {
+    approved: {
       editable: [],
-      readonly: ["evidence_number", "evidence_notes", "evidence_steps"],
+      readonly: [
+        "qualification_record_number",
+        "qualification_title",
+        "owner_user_id",
+        "attendee_user_ids",
+        "valid_until",
+        "qualification_result",
+        "qualification_topics",
+        "work_signature",
+      ],
     },
     archived: {
       editable: [],
-      readonly: ["evidence_number", "evidence_notes", "evidence_steps"],
+      readonly: [
+        "qualification_record_number",
+        "qualification_title",
+        "owner_user_id",
+        "attendee_user_ids",
+        "valid_until",
+        "qualification_result",
+        "qualification_topics",
+        "work_signature",
+      ],
     },
   },
   approval: {
-    editors: "single",
+    editors: "multiple",
     approvers: "single",
-    submitMode: "single",
+    submitMode: "all",
     approvalMode: "single",
   },
   hooks: [],
 };
 
-const productionBatchMdx = `---
-key: production-batch
-name: Production Batch
-version: 1
-status: published
-workflowTemplateKey: production.standard.v1
-description: Reference MDX form template for production batch documentation.
----
-
-<Fields>
-  <Field name="product_id" type="lookup" label="Product" operationRef="products.listValid" valueKey="id" labelKey="name" templateKey tableField required />
-  <Field name="batch_id" type="text" label="Batch ID" documentKey tableField />
-  <Field name="fulfillment_flags" type="checkboxGroup" label="Fulfillment Flags" options={["prepared", "checked", "released"]} />
-  <Field name="inspection_steps" type="journal" label="Inspection Steps" />
-  <Field name="attachments_main" type="attachmentArea" label="Attachments" />
-</Fields>
-
-<Action name="create_batch" label="Create Batch" operationRef="batches.create" visibleIn={["started", "progressed"]} enabledIn={["started", "progressed"]} />
-
-# Production Batch
-
-<Section title="Batch">
-  <Row>
-    <Column width={6}><FieldRef name="product_id" /></Column>
-    <Column width={6}><FieldRef name="batch_id" /></Column>
-  </Row>
-</Section>
-
-<Section title="Execution">
-  <FieldRef name="fulfillment_flags" />
-  <JournalRef name="inspection_steps" />
-</Section>
-
-<Section title="Attachments">
-  <AttachmentAreaRef name="attachments_main" />
-</Section>
-`;
-
-const evidenceBasicMdx = `---
-key: evidence-basic
-name: Evidence Basic
-version: 1
-status: published
-workflowTemplateKey: evidence.group-submit.v1
-description: Reference MDX form template for a compact evidence process.
----
-
-<Fields>
-  <Field name="evidence_number" type="text" label="Evidence Number" documentKey tableField required />
-  <Field name="evidence_notes" type="textarea" label="Evidence Notes" tableField />
-  <Field name="evidence_steps" type="journal" label="Evidence Steps" />
-  <Field name="attachments_main" type="attachmentArea" label="Attachments" />
-</Fields>
-
-# Evidence Basic
-
-<Section title="Evidence">
-  <Row>
-    <Column width={6}><FieldRef name="evidence_number" /></Column>
-    <Column width={6}><FieldRef name="evidence_notes" /></Column>
-  </Row>
-</Section>
-
-<Section title="Journal">
-  <JournalRef name="evidence_steps" />
-</Section>
-
-<Section title="Attachments">
-  <AttachmentAreaRef name="attachments_main" />
-</Section>
-`;
-
 export const getReferenceSeedData = async (): Promise<ReferenceSeedData> => {
   const customerOrderMdx = await loadSpecFile("21_example_form_template.mdx");
-  const customerOrderWorkflowJson = JSON.parse(await loadSpecFile("22_example_workflow_template.json")) as Record<string, unknown>;
+  const productionBatchMdx = await loadSpecFile("24_example_production_batch_form_template.mdx");
+  const qualificationRecordMdx = await loadSpecFile("23_example_qualification_form_template.mdx");
+  const customersCsv = await loadSpecFile("next/examples/customers_import.csv");
+  const productsCsv = await loadSpecFile("next/examples/products_import.csv");
 
   return {
     users: [
       {
         id: "11111111-1111-1111-1111-111111111111",
-        key: "alice",
-        displayName: "Alice",
-        email: "alice@example.local",
+        key: "admin",
+        displayName: "Admin",
+        email: "admin@example.local",
+        description: "Plattform-Admin fuer Referenz- und Freigabefluss.",
         status: "active",
       },
       {
         id: "22222222-2222-2222-2222-222222222222",
-        key: "bob",
-        displayName: "Bob",
-        email: "bob@example.local",
+        key: "service-auftrag-freigabe",
+        displayName: "Service Auftrag / Freigabe",
+        email: "service-lead@example.local",
+        status: "active",
+      },
+      {
+        id: "33333333-3333-3333-3333-333333333333",
+        key: "service-durchfuehrung-dokumentation",
+        displayName: "Service Durchfuehrung / Dokumentation",
+        email: "service-worker@example.local",
+        status: "active",
+      },
+      {
+        id: "44444444-4444-4444-4444-444444444444",
+        key: "produktion-auftrag-freigabe",
+        displayName: "Produktion Auftrag / Freigabe",
+        email: "production-lead@example.local",
+        status: "active",
+      },
+      {
+        id: "55555555-5555-5555-5555-555555555555",
+        key: "produktion-durchfuehrung-dokumentation",
+        displayName: "Produktion Durchfuehrung / Dokumentation",
+        email: "production-worker@example.local",
         status: "active",
       },
     ],
     groups: [
       {
-        id: "33333333-3333-3333-3333-333333333333",
-        key: "ops",
-        name: "Ops",
-        description: "Operations team",
+        id: "66666666-6666-6666-6666-666666666661",
+        key: "kundenservice",
+        name: "Kundenservice",
+        description: "Service-Auftraege, Durchfuehrung und Freigabe beim Kunden.",
         status: "active",
       },
       {
-        id: "44444444-4444-4444-4444-444444444444",
-        key: "quality",
-        name: "Quality",
-        description: "Quality team",
+        id: "66666666-6666-6666-6666-666666666662",
+        key: "produktion",
+        name: "Produktion",
+        description: "Produktionsauftraege, Dokumentation und Freigabe.",
         status: "active",
       },
     ],
     memberships: [
       {
-        id: "55555555-5555-5555-5555-555555555551",
+        id: "77777777-7777-7777-7777-777777777771",
         userId: "11111111-1111-1111-1111-111111111111",
-        groupId: "33333333-3333-3333-3333-333333333333",
+        groupId: "66666666-6666-6666-6666-666666666661",
         rights: "rwx",
       },
       {
-        id: "55555555-5555-5555-5555-555555555552",
-        userId: "22222222-2222-2222-2222-222222222222",
-        groupId: "33333333-3333-3333-3333-333333333333",
+        id: "77777777-7777-7777-7777-777777777772",
+        userId: "11111111-1111-1111-1111-111111111111",
+        groupId: "66666666-6666-6666-6666-666666666662",
         rights: "rwx",
       },
       {
-        id: "55555555-5555-5555-5555-555555555553",
+        id: "77777777-7777-7777-7777-777777777773",
         userId: "22222222-2222-2222-2222-222222222222",
-        groupId: "44444444-4444-4444-4444-444444444444",
-        rights: "r",
+        groupId: "66666666-6666-6666-6666-666666666661",
+        rights: "rwx",
+      },
+      {
+        id: "77777777-7777-7777-7777-777777777774",
+        userId: "33333333-3333-3333-3333-333333333333",
+        groupId: "66666666-6666-6666-6666-666666666661",
+        rights: "rwx",
+      },
+      {
+        id: "77777777-7777-7777-7777-777777777775",
+        userId: "44444444-4444-4444-4444-444444444444",
+        groupId: "66666666-6666-6666-6666-666666666662",
+        rights: "rwx",
+      },
+      {
+        id: "77777777-7777-7777-7777-777777777776",
+        userId: "55555555-5555-5555-5555-555555555555",
+        groupId: "66666666-6666-6666-6666-666666666662",
+        rights: "rwx",
       },
     ],
     operations: [
       {
-        operationRef: "products.listValid",
-        name: "Products List Valid",
-        connector: "reference",
-        modulePath: "src/modules/operations/reference/products.ts",
+        operationRef: "customers.lookup",
+        name: "Customer Lookup",
+        connector: "internal-reference",
+        modulePath: "src/modules/next-form/load-customer.ts",
         authStrategy: "none",
-        description: "Reference lookup for valid products.",
-        tags: ["reference", "lookup"],
+        description: "Liest Kundenauftrag und Einsatzort aus den internen Customer-Stammdaten.",
+        tags: ["typescript-api", "lookup", "forms", "customers"],
+        inputSchema: {
+          fields: [
+            {
+              name: "order_number",
+              type: "string",
+              required: true,
+              description: "Auftragsnummer fuer den internen Kundenauftrag-Lookup.",
+            },
+          ],
+        },
+        outputSchema: {
+          fields: [
+            { name: "customer", type: "string", description: "Angezeigter Kundenname." },
+            { name: "service_location", type: "string", description: "Einsatzort fuer den Serviceeinsatz." },
+            { name: "customer_master_id", type: "string", description: "Technischer Stammdatenschluessel." },
+            { name: "customer_master_status", type: "string", description: "Stammdatenstatus." },
+            { name: "customer_order_status", type: "string", description: "Auftragsstatus." },
+            { name: "customer_order_created_at", type: "string", description: "Anlagezeitpunkt des Auftrags." },
+          ],
+        },
       },
       {
-        operationRef: "customers.listValid",
-        name: "Customers List Valid",
-        connector: "reference",
-        modulePath: "src/modules/operations/reference/customers.ts",
+        operationRef: "products.suggest",
+        name: "Product Suggest",
+        connector: "internal-reference",
+        modulePath: "src/modules/next-form/suggest-material.ts",
         authStrategy: "none",
-        description: "Reference lookup for valid customers.",
-        tags: ["reference", "lookup"],
+        description: "Schlaegt ein internes Produkt oder Wartungsset aus den Product-Stammdaten vor.",
+        tags: ["typescript-api", "lookup", "forms", "products"],
+        inputSchema: {
+          fields: [
+            {
+              name: "work_description",
+              type: "html|string",
+              required: true,
+              description: "Taetigkeitsbeschreibung als Grundlage fuer den Vorschlag.",
+            },
+          ],
+        },
+        outputSchema: {
+          fields: [
+            { name: "material", type: "string", description: "Vorgeschlagenes Produkt oder Material." },
+            { name: "product_master_id", type: "string", description: "Technischer Stammdatenschluessel." },
+            { name: "product_master_type", type: "string", description: "Produkttyp." },
+            { name: "product_master_status", type: "string", description: "Stammdatenstatus." },
+          ],
+        },
       },
       {
-        operationRef: "batches.create",
-        name: "Create Batch",
-        connector: "reference",
-        modulePath: "src/modules/operations/reference/batches.ts",
+        operationRef: "customers.list",
+        name: "Customers List",
+        connector: "internal-reference",
+        modulePath: "src/modules/entities/read.ts",
         authStrategy: "none",
-        description: "Reference batch creation action.",
-        tags: ["reference", "action"],
+        description: "Liefert interne Customer-Stammdaten fuer API und CSV-basierte Referenzwelt.",
+        tags: ["typescript-api", "read", "customers"],
       },
       {
-        operationRef: "customerOrders.create",
-        name: "Create Customer Order",
-        connector: "reference",
-        modulePath: "src/modules/operations/reference/customer-orders.ts",
+        operationRef: "products.list",
+        name: "Products List",
+        connector: "internal-reference",
+        modulePath: "src/modules/entities/read.ts",
         authStrategy: "none",
-        description: "Reference customer order creation action.",
-        tags: ["reference", "action"],
-      },
-      {
-        operationRef: "customerOrders.setStatus",
-        name: "Set Customer Order Status",
-        connector: "reference",
-        modulePath: "src/modules/operations/reference/customer-orders.ts",
-        authStrategy: "none",
-        description: "Reference customer order status sync.",
-        tags: ["reference", "hook"],
-      },
-      {
-        operationRef: "customerOrders.setStatusFromContext",
-        name: "Set Customer Order Status From Context",
-        connector: "reference",
-        modulePath: "src/modules/operations/reference/customer-orders.ts",
-        authStrategy: "none",
-        description: "Reference hook for syncing customer order status from integration context.",
-        tags: ["reference", "hook"],
+        description: "Liefert interne Product-Stammdaten fuer API und CSV-basierte Referenzwelt.",
+        tags: ["typescript-api", "read", "products"],
       },
     ],
     workflows: [
       {
-        id: "66666666-6666-6666-6666-666666666661",
+        id: "88888888-8888-8888-8888-888888888881",
         key: "customer-order.group-submit.v1",
-        name: "Customer Order Group Submit",
-        description: "Reference workflow for customer order submit and approval.",
+        name: "Kundenauftrag Freigabe",
+        description: "Workflow fuer Kundenauftrag, Service-Durchfuehrung und Freigabe.",
         version: 1,
         status: "published",
         workflowJson: customerOrderWorkflowJson,
       },
       {
-        id: "66666666-6666-6666-6666-666666666662",
+        id: "88888888-8888-8888-8888-888888888882",
         key: "production.standard.v1",
-        name: "Production Standard",
-        description: "Reference workflow for production batch work including journal and attachments.",
+        name: "Produktionsdokumentation Freigabe",
+        description: "Workflow fuer batch- und serienbezogene Produktionsdokumentation.",
         version: 1,
         status: "published",
         workflowJson: productionWorkflowJson,
       },
       {
-        id: "66666666-6666-6666-6666-666666666663",
-        key: "evidence.group-submit.v1",
-        name: "Evidence Group Submit",
-        description: "Reference workflow for compact evidence review and approval.",
+        id: "88888888-8888-8888-8888-888888888883",
+        key: "qualification.review.v1",
+        name: "Qualifikationsnachweis Review",
+        description: "Workflow fuer Mehrbenutzer-Nachweise mit per-User Submit und Review.",
         version: 1,
         status: "published",
-        workflowJson: evidenceWorkflowJson,
+        workflowJson: qualificationWorkflowJson,
       },
     ],
     templates: [
       {
-        id: "77777777-7777-7777-7777-777777777771",
+        id: "99999999-9999-9999-9999-999999999991",
         key: "customer-order-test",
-        name: "Customer Order Test",
-        description: "Reference template for customer order processing.",
+        name: "Kundenauftrag",
+        description: "Serviceauftrag mit internem Customer- und Product-Lookup.",
         version: 1,
         status: "published",
-        workflowTemplateId: "66666666-6666-6666-6666-666666666661",
+        workflowTemplateId: "88888888-8888-8888-8888-888888888881",
         mdxBody: customerOrderMdx,
-        templateKeys: ["customer_id"],
+        templateKeys: ["order_number"],
         documentKeys: ["customer_order_number"],
-        tableFields: ["customer_id", "customer_order_number", "fulfillment_flags"],
+        tableFields: ["customer_order_number", "customer_name", "service_location", "material", "approval_status"],
       },
       {
-        id: "77777777-7777-7777-7777-777777777772",
+        id: "99999999-9999-9999-9999-999999999992",
         key: "production-batch",
-        name: "Production Batch",
-        description: "Reference template for production batch documentation.",
+        name: "Produktionsdokumentation",
+        description: "Batch- und serienbezogene Produktionsdokumentation mit Grid fuer Schritte.",
         version: 1,
         status: "published",
-        workflowTemplateId: "66666666-6666-6666-6666-666666666662",
+        workflowTemplateId: "88888888-8888-8888-8888-888888888882",
         mdxBody: productionBatchMdx,
-        templateKeys: ["product_id"],
+        templateKeys: ["product_name"],
         documentKeys: ["batch_id"],
-        tableFields: ["product_id", "batch_id", "fulfillment_flags"],
+        tableFields: ["batch_id", "serial_number", "product_name", "production_line"],
       },
       {
-        id: "77777777-7777-7777-7777-777777777773",
-        key: "evidence-basic",
-        name: "Evidence Basic",
-        description: "Reference template for compact evidence documentation.",
+        id: "99999999-9999-9999-9999-999999999993",
+        key: "qualification-record",
+        name: "Qualifikationsnachweis",
+        description: "Mehrbenutzer-Nachweis fuer Service und Produktion mit Fragen und per-User Submit.",
         version: 1,
         status: "published",
-        workflowTemplateId: "66666666-6666-6666-6666-666666666663",
-        mdxBody: evidenceBasicMdx,
+        workflowTemplateId: "88888888-8888-8888-8888-888888888883",
+        mdxBody: qualificationRecordMdx,
         templateKeys: [],
-        documentKeys: ["evidence_number"],
-        tableFields: ["evidence_number", "evidence_notes"],
+        documentKeys: ["qualification_record_number"],
+        tableFields: ["qualification_record_number", "qualification_title", "owner_user_id", "valid_until"],
       },
     ],
     templateAssignments: [
       {
-        id: "88888888-8888-8888-8888-888888888881",
-        templateId: "77777777-7777-7777-7777-777777777771",
-        groupId: "33333333-3333-3333-3333-333333333333",
+        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+        templateId: "99999999-9999-9999-9999-999999999991",
+        groupId: "66666666-6666-6666-6666-666666666661",
         status: "active",
-        assignedAt: "2026-03-24T08:00:00.000Z",
+        assignedAt: "2026-04-03T08:00:00.000Z",
       },
       {
-        id: "88888888-8888-8888-8888-888888888882",
-        templateId: "77777777-7777-7777-7777-777777777772",
-        groupId: "33333333-3333-3333-3333-333333333333",
+        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2",
+        templateId: "99999999-9999-9999-9999-999999999992",
+        groupId: "66666666-6666-6666-6666-666666666662",
         status: "active",
-        assignedAt: "2026-03-24T08:00:00.000Z",
+        assignedAt: "2026-04-03T08:00:00.000Z",
       },
       {
-        id: "88888888-8888-8888-8888-888888888883",
-        templateId: "77777777-7777-7777-7777-777777777773",
-        groupId: "33333333-3333-3333-3333-333333333333",
+        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3",
+        templateId: "99999999-9999-9999-9999-999999999993",
+        groupId: "66666666-6666-6666-6666-666666666661",
         status: "active",
-        assignedAt: "2026-03-24T08:00:00.000Z",
+        assignedAt: "2026-04-03T08:00:00.000Z",
+      },
+      {
+        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4",
+        templateId: "99999999-9999-9999-9999-999999999993",
+        groupId: "66666666-6666-6666-6666-666666666662",
+        status: "active",
+        assignedAt: "2026-04-03T08:00:00.000Z",
       },
     ],
     documents: [
       {
-        id: "99999999-9999-9999-9999-999999999991",
-        templateId: "77777777-7777-7777-7777-777777777771",
+        id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1",
+        templateId: "99999999-9999-9999-9999-999999999991",
         templateVersion: 1,
-        workflowTemplateId: "66666666-6666-6666-6666-666666666661",
-        workflowTemplateVersion: 1,
-        status: "submitted",
-        dataJson: {
-          customer_id: "customer-acme",
-          customer_name: "Acme Retail",
-          customer_order_number: "4711",
-          fulfillment_flags: ["packed", "reviewed"],
-          review_notes: "Awaiting final approval.",
-        },
-        externalJson: {
-          customer_order_number: "4711",
-        },
-        snapshotJson: {
-          customer_order_created_ok: true,
-        },
-        integrationContextJson: {
-          customer_order_id: "CO-4711",
-        },
-        createdBy: "11111111-1111-1111-1111-111111111111",
-        createdAt: "2026-03-24T08:10:00.000Z",
-        updatedAt: "2026-03-24T09:10:00.000Z",
-      },
-      {
-        id: "99999999-9999-9999-9999-999999999992",
-        templateId: "77777777-7777-7777-7777-777777777772",
-        templateVersion: 1,
-        workflowTemplateId: "66666666-6666-6666-6666-666666666662",
+        workflowTemplateId: "88888888-8888-8888-8888-888888888881",
         workflowTemplateVersion: 1,
         status: "progressed",
         dataJson: {
-          product_id: "product-batch-a",
-          product_name: "Batch Product A",
-          batch_id: "B-2026-0042",
-          fulfillment_flags: ["prepared", "checked"],
-          inspection_steps: [
-            { at: "2026-03-24T08:15:00.000Z", text: "Visual inspection completed." },
-            { at: "2026-03-24T08:45:00.000Z", text: "Packaging verified." },
-          ],
+          customer_order_number: "KD-2026-1007",
+          customer_name: "Baukontor Nord",
+          service_location: "Lagerhalle 2 Bremen",
+          customer_master_id: "customer-baukontor",
+          customer_master_status: "Aktiv",
+          customer_order_status: "in_bearbeitung",
+          customer_order_created_at: "2026-04-02T08:15:00.000Z",
+          work_description: "<p>Wartung der Hallenheizung mit Filterwechsel und Funktionspruefung.</p>",
+          material: "Wartungsset Heizung",
+          product_master_id: "product-heating-maintenance-kit",
+          product_master_type: "Wartungsset",
+          product_master_status: "Aktiv",
+          labor_hours: "2.50",
+          travel_hours: "0.75",
+          break_minutes: "15",
+          approval_status: "pruefung",
+          work_signature: "Service Durchfuehrung / Dokumentation",
+          work_signature_at: "2026-04-03T10:15:00.000Z",
         },
         externalJson: {},
         snapshotJson: {
-          attachments_visible: true,
+          masterdataSource: "csv",
         },
         integrationContextJson: {},
-        createdBy: "11111111-1111-1111-1111-111111111111",
-        createdAt: "2026-03-24T08:15:00.000Z",
-        updatedAt: "2026-03-24T09:05:00.000Z",
+        createdBy: "22222222-2222-2222-2222-222222222222",
+        createdAt: "2026-04-03T08:30:00.000Z",
+        updatedAt: "2026-04-03T10:15:00.000Z",
       },
       {
-        id: "99999999-9999-9999-9999-999999999993",
-        templateId: "77777777-7777-7777-7777-777777777773",
+        id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2",
+        templateId: "99999999-9999-9999-9999-999999999992",
         templateVersion: 1,
-        workflowTemplateId: "66666666-6666-6666-6666-666666666663",
+        workflowTemplateId: "88888888-8888-8888-8888-888888888882",
+        workflowTemplateVersion: 1,
+        status: "progressed",
+        dataJson: {
+          batch_id: "PB-2026-0042",
+          serial_number: "SN-2026-0042-A",
+          product_name: "Steuerkasten Serie S2",
+          production_line: "Linie 3",
+          process_steps: [
+            {
+              step: "Vorbereitung",
+              station: "Linie 3",
+              target_qty: "12",
+              actual_qty: "12",
+              result: "Material bereitgestellt",
+            },
+            {
+              step: "Endpruefung",
+              station: "QS",
+              target_qty: "12",
+              actual_qty: "12",
+              result: "Freigabe vorbereitet",
+            },
+          ],
+          approval_status: "pruefung",
+          work_signature: "Produktion Durchfuehrung / Dokumentation",
+          work_signature_at: "2026-04-03T09:55:00.000Z",
+        },
+        externalJson: {},
+        snapshotJson: {
+          gridSlice: "live",
+        },
+        integrationContextJson: {},
+        createdBy: "44444444-4444-4444-4444-444444444444",
+        createdAt: "2026-04-03T08:40:00.000Z",
+        updatedAt: "2026-04-03T09:55:00.000Z",
+      },
+      {
+        id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee3",
+        templateId: "99999999-9999-9999-9999-999999999993",
+        templateVersion: 1,
+        workflowTemplateId: "88888888-8888-8888-8888-888888888883",
         workflowTemplateVersion: 1,
         status: "assigned",
         dataJson: {
-          evidence_number: "2026-101",
-          evidence_notes: "Initial evidence package prepared.",
-          evidence_steps: [
-            { at: "2026-03-24T08:50:00.000Z", text: "Evidence request created." },
+          qualification_record_number: "QN-2026-001",
+          qualification_title: "Arbeitsschutz und digitale Dokumentation",
+          owner_user_id: "11111111-1111-1111-1111-111111111111",
+          attendee_user_ids: [
+            "33333333-3333-3333-3333-333333333333",
+            "55555555-5555-5555-5555-555555555555",
           ],
+          valid_until: "2027-03-31",
+          approval_status: "offen",
+          qualification_participant_states: {
+            "33333333-3333-3333-3333-333333333333": {
+              savedAt: "2026-04-03T09:10:00.000Z",
+              fieldValues: {
+                qualification_result: "sicher",
+                qualification_topics: ["Arbeitsschutz", "Dokumentation"],
+              },
+              signature: "Service Durchfuehrung / Dokumentation",
+              signatureAt: "2026-04-03T09:10:00.000Z",
+            },
+          },
         },
         externalJson: {},
         snapshotJson: {},
         integrationContextJson: {},
-        createdBy: "22222222-2222-2222-2222-222222222222",
-        createdAt: "2026-03-24T08:50:00.000Z",
-        updatedAt: "2026-03-24T09:00:00.000Z",
-      },
-      {
-        id: "99999999-9999-9999-9999-999999999994",
-        templateId: "77777777-7777-7777-7777-777777777771",
-        templateVersion: 1,
-        workflowTemplateId: "66666666-6666-6666-6666-666666666661",
-        workflowTemplateVersion: 1,
-        status: "approved",
-        dataJson: {
-          customer_id: "customer-northwind",
-          customer_name: "Northwind",
-          customer_order_number: "4709",
-          fulfillment_flags: ["packed", "reviewed", "released"],
-          review_notes: "Approved and synced.",
-        },
-        externalJson: {
-          customer_order_number: "4709",
-        },
-        snapshotJson: {
-          customer_order_sync_ok: true,
-        },
-        integrationContextJson: {
-          customer_order_id: "CO-4709",
-          synced_status: "approved",
-        },
         createdBy: "11111111-1111-1111-1111-111111111111",
-        createdAt: "2026-03-24T07:30:00.000Z",
-        updatedAt: "2026-03-24T08:40:00.000Z",
+        createdAt: "2026-04-03T09:00:00.000Z",
+        updatedAt: "2026-04-03T09:10:00.000Z",
       },
     ],
     documentAssignments: [
       {
-        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
-        documentId: "99999999-9999-9999-9999-999999999991",
-        userId: "11111111-1111-1111-1111-111111111111",
-        role: "editor",
-        assignedBy: "11111111-1111-1111-1111-111111111111",
-        assignedAt: "2026-03-24T08:20:00.000Z",
-        active: true,
-      },
-      {
-        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2",
-        documentId: "99999999-9999-9999-9999-999999999991",
-        userId: "22222222-2222-2222-2222-222222222222",
-        role: "approver",
-        assignedBy: "11111111-1111-1111-1111-111111111111",
-        assignedAt: "2026-03-24T08:20:00.000Z",
-        active: true,
-      },
-      {
-        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3",
-        documentId: "99999999-9999-9999-9999-999999999992",
-        userId: "11111111-1111-1111-1111-111111111111",
-        role: "editor",
-        assignedBy: "11111111-1111-1111-1111-111111111111",
-        assignedAt: "2026-03-24T08:15:00.000Z",
-        active: true,
-      },
-      {
-        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4",
-        documentId: "99999999-9999-9999-9999-999999999993",
-        userId: "22222222-2222-2222-2222-222222222222",
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1",
+        userId: "33333333-3333-3333-3333-333333333333",
         role: "editor",
         assignedBy: "22222222-2222-2222-2222-222222222222",
-        assignedAt: "2026-03-24T08:55:00.000Z",
+        assignedAt: "2026-04-03T08:35:00.000Z",
         active: true,
       },
       {
-        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5",
-        documentId: "99999999-9999-9999-9999-999999999994",
-        userId: "11111111-1111-1111-1111-111111111111",
-        role: "editor",
-        assignedBy: "11111111-1111-1111-1111-111111111111",
-        assignedAt: "2026-03-24T07:35:00.000Z",
-        active: true,
-      },
-      {
-        id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6",
-        documentId: "99999999-9999-9999-9999-999999999994",
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1",
         userId: "22222222-2222-2222-2222-222222222222",
         role: "approver",
         assignedBy: "11111111-1111-1111-1111-111111111111",
-        assignedAt: "2026-03-24T07:35:00.000Z",
+        assignedAt: "2026-04-03T08:35:00.000Z",
+        active: true,
+      },
+      {
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2",
+        userId: "55555555-5555-5555-5555-555555555555",
+        role: "editor",
+        assignedBy: "44444444-4444-4444-4444-444444444444",
+        assignedAt: "2026-04-03T08:45:00.000Z",
+        active: true,
+      },
+      {
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb4",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2",
+        userId: "44444444-4444-4444-4444-444444444444",
+        role: "approver",
+        assignedBy: "11111111-1111-1111-1111-111111111111",
+        assignedAt: "2026-04-03T08:45:00.000Z",
+        active: true,
+      },
+      {
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb5",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee3",
+        userId: "33333333-3333-3333-3333-333333333333",
+        role: "editor",
+        assignedBy: "11111111-1111-1111-1111-111111111111",
+        assignedAt: "2026-04-03T09:00:00.000Z",
+        active: true,
+      },
+      {
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb6",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee3",
+        userId: "55555555-5555-5555-5555-555555555555",
+        role: "editor",
+        assignedBy: "11111111-1111-1111-1111-111111111111",
+        assignedAt: "2026-04-03T09:00:00.000Z",
+        active: true,
+      },
+      {
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb7",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee3",
+        userId: "11111111-1111-1111-1111-111111111111",
+        role: "approver",
+        assignedBy: "11111111-1111-1111-1111-111111111111",
+        assignedAt: "2026-04-03T09:00:00.000Z",
         active: true,
       },
     ],
     tasks: [
       {
-        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1",
-        documentId: "99999999-9999-9999-9999-999999999991",
+        id: "cccccccc-cccc-cccc-cccc-ccccccccccc1",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1",
         userId: "22222222-2222-2222-2222-222222222222",
-        title: "Approve Customer Order 4711",
+        title: "Kundenauftrag KD-2026-1007 freigeben",
         action: "approve",
         status: "open",
         role: "approver",
-        createdAt: "2026-03-24T09:10:00.000Z",
-        updatedAt: "2026-03-24T09:10:00.000Z",
+        createdAt: "2026-04-03T10:15:00.000Z",
+        updatedAt: "2026-04-03T10:15:00.000Z",
       },
       {
-        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2",
-        documentId: "99999999-9999-9999-9999-999999999992",
-        userId: "11111111-1111-1111-1111-111111111111",
-        title: "Submit Batch B-2026-0042",
-        action: "submit",
-        status: "open",
-        role: "editor",
-        createdAt: "2026-03-24T09:05:00.000Z",
-        updatedAt: "2026-03-24T09:05:00.000Z",
-      },
-      {
-        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3",
-        documentId: "99999999-9999-9999-9999-999999999993",
-        userId: "22222222-2222-2222-2222-222222222222",
-        title: "Continue Evidence 2026-101",
+        id: "cccccccc-cccc-cccc-cccc-ccccccccccc2",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2",
+        userId: "55555555-5555-5555-5555-555555555555",
+        title: "Produktionsdokumentation PB-2026-0042 weiterfuehren",
         action: "save",
         status: "open",
         role: "editor",
-        createdAt: "2026-03-24T09:00:00.000Z",
-        updatedAt: "2026-03-24T09:00:00.000Z",
+        createdAt: "2026-04-03T09:55:00.000Z",
+        updatedAt: "2026-04-03T09:55:00.000Z",
+      },
+      {
+        id: "cccccccc-cccc-cccc-cccc-ccccccccccc3",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee3",
+        userId: "33333333-3333-3333-3333-333333333333",
+        title: "Qualifikationsnachweis QN-2026-001 submitten",
+        action: "submit",
+        status: "open",
+        role: "editor",
+        createdAt: "2026-04-03T09:10:00.000Z",
+        updatedAt: "2026-04-03T09:10:00.000Z",
+      },
+      {
+        id: "cccccccc-cccc-cccc-cccc-ccccccccccc4",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee3",
+        userId: "55555555-5555-5555-5555-555555555555",
+        title: "Qualifikationsnachweis QN-2026-001 submitten",
+        action: "submit",
+        status: "open",
+        role: "editor",
+        createdAt: "2026-04-03T09:10:00.000Z",
+        updatedAt: "2026-04-03T09:10:00.000Z",
       },
     ],
     attachments: [
       {
-        id: "cccccccc-cccc-cccc-cccc-ccccccccccc1",
-        documentId: "99999999-9999-9999-9999-999999999991",
-        filename: "contract.pdf",
+        id: "dddddddd-dddd-dddd-dddd-ddddddddddd1",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1",
+        filename: "kundenauftrag-checkliste.pdf",
         mimeType: "application/pdf",
-        size: 182345,
-        storageKey: "reference/customer-order-4711/contract.pdf",
-        uploadedBy: "11111111-1111-1111-1111-111111111111",
-        createdAt: "2026-03-24T08:35:00.000Z",
+        size: 148320,
+        storageKey: "reference/kundenauftrag/kd-2026-1007/checkliste.pdf",
+        uploadedBy: "33333333-3333-3333-3333-333333333333",
+        createdAt: "2026-04-03T09:40:00.000Z",
       },
       {
-        id: "cccccccc-cccc-cccc-cccc-ccccccccccc2",
-        documentId: "99999999-9999-9999-9999-999999999992",
-        filename: "batch-photo.jpg",
+        id: "dddddddd-dddd-dddd-dddd-ddddddddddd2",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2",
+        filename: "linienfoto.jpg",
         mimeType: "image/jpeg",
-        size: 248120,
-        storageKey: "reference/batch-b-2026-0042/batch-photo.jpg",
-        uploadedBy: "11111111-1111-1111-1111-111111111111",
-        createdAt: "2026-03-24T08:55:00.000Z",
+        size: 214220,
+        storageKey: "reference/produktion/pb-2026-0042/linienfoto.jpg",
+        uploadedBy: "55555555-5555-5555-5555-555555555555",
+        createdAt: "2026-04-03T09:20:00.000Z",
       },
     ],
     auditEvents: [
       {
-        id: "dddddddd-dddd-dddd-dddd-ddddddddddd1",
-        documentId: "99999999-9999-9999-9999-999999999991",
+        id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1",
         eventType: "created",
-        actorUserId: "11111111-1111-1111-1111-111111111111",
-        message: "Customer Order 4711 created.",
+        actorUserId: "22222222-2222-2222-2222-222222222222",
+        message: "Kundenauftrag KD-2026-1007 angelegt.",
         payloadJson: {},
-        createdAt: "2026-03-24T08:10:00.000Z",
+        createdAt: "2026-04-03T08:30:00.000Z",
       },
       {
-        id: "dddddddd-dddd-dddd-dddd-ddddddddddd2",
-        documentId: "99999999-9999-9999-9999-999999999991",
-        eventType: "assigned",
-        actorUserId: "11111111-1111-1111-1111-111111111111",
-        message: "Alice and Bob assigned to Customer Order 4711.",
-        payloadJson: { roles: ["editor", "approver"] },
-        createdAt: "2026-03-24T08:20:00.000Z",
-      },
-      {
-        id: "dddddddd-dddd-dddd-dddd-ddddddddddd3",
-        documentId: "99999999-9999-9999-9999-999999999991",
+        id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee2",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1",
         eventType: "saved",
-        actorUserId: "11111111-1111-1111-1111-111111111111",
-        message: "Customer Order 4711 saved.",
+        actorUserId: "33333333-3333-3333-3333-333333333333",
+        message: "Kundenauftrag KD-2026-1007 gespeichert.",
         payloadJson: {},
-        createdAt: "2026-03-24T08:45:00.000Z",
+        createdAt: "2026-04-03T10:15:00.000Z",
       },
       {
-        id: "dddddddd-dddd-dddd-dddd-ddddddddddd4",
-        documentId: "99999999-9999-9999-9999-999999999991",
-        eventType: "submitted",
-        actorUserId: "11111111-1111-1111-1111-111111111111",
-        message: "Customer Order 4711 submitted for approval.",
-        payloadJson: {},
-        createdAt: "2026-03-24T09:10:00.000Z",
-      },
-      {
-        id: "dddddddd-dddd-dddd-dddd-ddddddddddd5",
-        documentId: "99999999-9999-9999-9999-999999999992",
+        id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee3",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2",
         eventType: "created",
-        actorUserId: "11111111-1111-1111-1111-111111111111",
-        message: "Batch B-2026-0042 created.",
+        actorUserId: "44444444-4444-4444-4444-444444444444",
+        message: "Produktionsdokumentation PB-2026-0042 angelegt.",
         payloadJson: {},
-        createdAt: "2026-03-24T08:15:00.000Z",
+        createdAt: "2026-04-03T08:40:00.000Z",
       },
       {
-        id: "dddddddd-dddd-dddd-dddd-ddddddddddd6",
-        documentId: "99999999-9999-9999-9999-999999999992",
-        eventType: "started",
-        actorUserId: "11111111-1111-1111-1111-111111111111",
-        message: "Batch B-2026-0042 started.",
-        payloadJson: {},
-        createdAt: "2026-03-24T08:30:00.000Z",
-      },
-      {
-        id: "dddddddd-dddd-dddd-dddd-ddddddddddd7",
-        documentId: "99999999-9999-9999-9999-999999999992",
+        id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee4",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2",
         eventType: "saved",
-        actorUserId: "11111111-1111-1111-1111-111111111111",
-        message: "Batch B-2026-0042 saved.",
+        actorUserId: "55555555-5555-5555-5555-555555555555",
+        message: "Produktionsdokumentation PB-2026-0042 gespeichert.",
         payloadJson: {},
-        createdAt: "2026-03-24T09:05:00.000Z",
+        createdAt: "2026-04-03T09:55:00.000Z",
       },
       {
-        id: "dddddddd-dddd-dddd-dddd-ddddddddddd8",
-        documentId: "99999999-9999-9999-9999-999999999992",
-        eventType: "attachment_uploaded",
-        actorUserId: "11111111-1111-1111-1111-111111111111",
-        message: "Batch photo uploaded.",
-        payloadJson: { filename: "batch-photo.jpg" },
-        createdAt: "2026-03-24T08:55:00.000Z",
-      },
-      {
-        id: "dddddddd-dddd-dddd-dddd-ddddddddddd9",
-        documentId: "99999999-9999-9999-9999-999999999993",
+        id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee5",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee3",
         eventType: "created",
-        actorUserId: "22222222-2222-2222-2222-222222222222",
-        message: "Evidence 2026-101 created.",
-        payloadJson: {},
-        createdAt: "2026-03-24T08:50:00.000Z",
-      },
-      {
-        id: "dddddddd-dddd-dddd-dddd-dddddddddd10",
-        documentId: "99999999-9999-9999-9999-999999999993",
-        eventType: "assigned",
-        actorUserId: "22222222-2222-2222-2222-222222222222",
-        message: "Evidence 2026-101 assigned.",
-        payloadJson: {},
-        createdAt: "2026-03-24T08:55:00.000Z",
-      },
-      {
-        id: "dddddddd-dddd-dddd-dddd-dddddddddd11",
-        documentId: "99999999-9999-9999-9999-999999999994",
-        eventType: "approved",
-        actorUserId: "22222222-2222-2222-2222-222222222222",
-        message: "Customer Order 4709 approved.",
-        payloadJson: {},
-        createdAt: "2026-03-24T08:35:00.000Z",
-      },
-      {
-        id: "dddddddd-dddd-dddd-dddd-dddddddddd12",
-        documentId: "99999999-9999-9999-9999-999999999994",
-        eventType: "workflow_hook_executed",
-        actorUserId: "22222222-2222-2222-2222-222222222222",
-        message: "Customer order status synced from integration context.",
-        payloadJson: { operationRef: "customerOrders.setStatusFromContext" },
-        createdAt: "2026-03-24T08:40:00.000Z",
-      },
-      {
-        id: "dddddddd-dddd-dddd-dddd-dddddddddd13",
-        documentId: "99999999-9999-9999-9999-999999999991",
-        eventType: "action_executed",
         actorUserId: "11111111-1111-1111-1111-111111111111",
-        message: "Create Customer Order action executed.",
-        payloadJson: { operationRef: "customerOrders.create" },
-        createdAt: "2026-03-24T08:40:00.000Z",
+        message: "Qualifikationsnachweis QN-2026-001 angelegt.",
+        payloadJson: {},
+        createdAt: "2026-04-03T09:00:00.000Z",
+      },
+      {
+        id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee6",
+        documentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee3",
+        eventType: "saved",
+        actorUserId: "33333333-3333-3333-3333-333333333333",
+        message: "Teilnehmerstand fuer QN-2026-001 gespeichert.",
+        payloadJson: {},
+        createdAt: "2026-04-03T09:10:00.000Z",
+      },
+    ],
+    entityImports: [
+      {
+        entityType: "customer",
+        csvText: customersCsv,
+      },
+      {
+        entityType: "product",
+        csvText: productsCsv,
       },
     ],
   };

@@ -4,9 +4,9 @@
       <strong>History</strong>
       <% if (latestAuditEvent) { %>
         <% const latestActor = users.find((entry) => entry.id === latestAuditEvent.actorUserId); %>
-        <span>Letzte Aktion: <%= latestAuditEvent.eventType %> · <%= latestActor?.displayName ?? "System" %> · <%= latestAuditEvent.createdAt %></span>
+        <span><%= latestAuditEvent.eventType %> · <%= latestActor?.displayName ?? "System" %> · <%= latestAuditEvent.createdAt %></span>
       <% } else { %>
-        <span>Keine Audit Events vorhanden.</span>
+        <span>Keine Eintraege.</span>
       <% } %>
     </div>
     <div class="collapsible-summary-meta">
@@ -15,18 +15,34 @@
   </summary>
   <div class="collapsible-body">
     <% if (documentDetail.auditEvents.length === 0) { %>
-      <p>Keine Audit Events vorhanden.</p>
+      <p>Keine Eintraege.</p>
     <% } else { %>
-      <ul class="stack-list">
-        <% documentDetail.auditEvents.forEach((event) => { %>
-          <% const actor = users.find((entry) => entry.id === event.actorUserId); %>
-          <li>
-            <strong><%= event.eventType %></strong>
-            <p><%= event.message %></p>
-            <p><%= actor?.displayName ?? "System" %> · <%= event.createdAt %></p>
-          </li>
-        <% }) %>
-      </ul>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Aktion</th>
+              <th>Von</th>
+              <th>Zeitpunkt</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% documentDetail.auditEvents.forEach((event) => { %>
+              <% const actor = users.find((entry) => entry.id === event.actorUserId); %>
+              <tr>
+                <td>
+                  <strong><%= event.eventType %></strong>
+                  <% if (event.message) { %>
+                    <div class="table-meta"><%= event.message %></div>
+                  <% } %>
+                </td>
+                <td><%= actor?.displayName ?? "System" %></td>
+                <td><%= event.createdAt %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
     <% } %>
   </div>
 </details>

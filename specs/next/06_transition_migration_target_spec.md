@@ -1,8 +1,9 @@
-# Ziel-Spec: Uebergang und Migration in die neue Richtung
+# Hintergrund-Spec: Uebergang und Migration in die neue Richtung
 
 ## Zweck
 
 Diese Spec beschreibt den Zielrahmen fuer den Uebergang vom aktuellen Alt-Modell in die neue Richtung.
+Sie bleibt als Hintergrund fuer kontrollierte Migration nuetzlich, ist aber nicht mehr die fuehrende Produktbeschreibung.
 
 ## Grundsatz
 

@@ -236,8 +236,37 @@ export type Operation = {
   operationRef: string;
   modulePath: string;
   authStrategy: string;
+  connector?: string;
   name: string;
   description?: string;
+  tags: string[];
+  inputSchema?: {
+    fields: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+      description?: string;
+    }>;
+  };
+  outputSchema?: {
+    fields: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+      description?: string;
+    }>;
+  };
+};
+
+export type ReferenceEntity = {
+  id: string;
+  entityType: "customer" | "product";
+  entityKey: string;
+  displayName: string;
+  status: "active" | "inactive";
+  source: string;
+  dataJson: Record<string, unknown>;
+  updatedAt: string;
 };
 
 export type WorkspaceContext = {

@@ -22,19 +22,23 @@ import { getDocumentSubmitStateForUser } from "../modules/documents/submit.js";
 import { findGroupById, listGroups, listGroupsForUser } from "../modules/groups/read.js";
 import { listMemberships, listMembershipsForGroup, listMembershipsForUser } from "../modules/memberships/read.js";
 import { buildReferenceNextFormJournalDefinition } from "../modules/journal/reference.js";
+import { listOperations } from "../modules/operations/read.js";
+import { listNextFormApiBindings } from "../modules/next-form/api-bindings.js";
 import {
   buildReferenceNextFormActionUi,
   buildReferenceNextFormFieldUi,
   buildReferenceNextFormMasterDataSections,
   getReferenceNextFormEditState,
-  referenceNextFormLookupMetaFieldNames,
-  referenceNextFormSubmitRequiredFieldNames,
+  getReferenceNextFormHiddenFieldNames,
+  getReferenceNextFormSubmitRequiredFieldNames,
 } from "../modules/next-form/document-ui.js";
 import { findVisibleProductionBatchReferenceByMaterial } from "../modules/next-form/form-reference.js";
 import { parseNextFormSource, readNextFormSourceText, referenceCraftsmanOrderFormPath } from "../modules/next-form/read.js";
+import { buildQualificationProgressView, getQualificationOwnerUserId } from "../modules/qualification/progress.js";
 import { executeLoadCustomerAction } from "../modules/next-form/load-customer.js";
 import { executeSuggestMaterialAction } from "../modules/next-form/suggest-material.js";
 import { loadNextFormState, saveNextFormState } from "../modules/next-form/state-store.js";
+import { listReferenceEntities } from "../modules/entities/read.js";
 import { readTemplateFeatureToggles } from "../modules/templates/features.js";
 import { isNextFormReferenceTemplate, mapDocumentDataToNextFormValues } from "../modules/next-form/document-bridge.js";
 import { buildReadOnlyFormDefinition } from "../modules/templates/form-read.js";
@@ -59,7 +63,7 @@ import type { User } from "../types/domain.js";
 import type { NavItem } from "../types/navigation.js";
 import type { NextFormDefinition } from "../modules/next-form/types.js";
 
-type SectionKey = "workspace" | "templates" | "workflows" | "documents" | "admin" | "next-form";
+type SectionKey = "workspace" | "templates" | "workflows" | "documents" | "apis" | "admin" | "next-form";
 
 const buildHref = (path: string, activeUserKey: string): string => `${path}?user=${encodeURIComponent(activeUserKey)}`;
 
@@ -83,6 +87,7 @@ export const getNavigation = (section: SectionKey, activeUserKey: string): NavIt
     { key: "templates" as const, label: "Templates", path: "/templates" },
     { key: "workflows" as const, label: "Workflows", path: "/workflows" },
     { key: "documents" as const, label: "Documents", path: "/documents" },
+    { key: "apis" as const, label: "APIs", path: "/apis" },
     { key: "admin" as const, label: "Admin", path: "/admin" },
   ];
 
@@ -119,6 +124,7 @@ export const createTemplateDetailViewModel = async (
   templateId: string,
   input?: {
     sourceText?: string | undefined;
+    workflowTemplateId?: string | undefined;
   },
 ) => {
   const shellContext = await createShellContext("templates", userKey);
@@ -134,15 +140,17 @@ export const createTemplateDetailViewModel = async (
     return null;
   }
 
-  const [groups, templateAssignments, workflows, documents, versions] = await Promise.all([
+  const [groups, templateAssignments, workflows, documents, versions, operations] = await Promise.all([
     listGroups(),
     listTemplateAssignmentsForTemplate(template.id),
     listWorkflowTemplates(),
     listDocumentsVisibleToUser(activeUser.id),
     listFormTemplateVersions(template.key),
+    listOperations(),
   ]);
 
-  const workflow = workflows.find((item) => item.id === template.workflowTemplateId) ?? null;
+  const selectedWorkflowTemplateId = input?.workflowTemplateId ?? template.workflowTemplateId;
+  const workflow = workflows.find((item) => item.id === selectedWorkflowTemplateId) ?? null;
   const relatedAssignments = templateAssignments;
   const relatedGroups = groups.filter((group) => relatedAssignments.some((assignment) => assignment.groupId === group.id));
   const assignmentsWithGroups = relatedAssignments.map((assignment) => ({
@@ -153,6 +161,13 @@ export const createTemplateDetailViewModel = async (
   const sourceTextForReference = isNextFormReferenceTemplate(template.key)
     ? input?.sourceText ?? template.mdxBody
     : template.mdxBody;
+  const workflowPublishBlockedReason = workflow
+    ? workflow.status === "archived"
+      ? "Archivierte Workflow-Versionen koennen nicht zugeordnet oder publiziert werden."
+      : workflow.status !== "published"
+        ? "Die zugeordnete Workflow-Version ist noch nicht publiziert."
+        : undefined
+    : "Bitte ordne dem Template eine Workflow-Version zu.";
   const formDefinition = buildReadOnlyFormDefinition({
     templateId: template.id,
     templateKey: template.key,
@@ -172,6 +187,12 @@ export const createTemplateDetailViewModel = async (
     | {
         sourceFilePath: string;
         sourceText: string;
+        apiBindings: Array<{
+          actionName: string;
+          label: string;
+          controlType: "action" | "lookup";
+          operationRef?: string;
+        }>;
         parsedForm?: NextFormDefinition;
         parseError?: string;
       }
@@ -181,10 +202,12 @@ export const createTemplateDetailViewModel = async (
     nextFormReference = {
       sourceFilePath: "form_templates.mdx_body",
       sourceText: sourceTextForReference,
+      apiBindings: [],
     };
 
     try {
       nextFormReference.parsedForm = parseNextFormSource(sourceTextForReference);
+      nextFormReference.apiBindings = listNextFormApiBindings(nextFormReference.parsedForm);
     } catch (error: unknown) {
       nextFormReference.parseError = error instanceof Error ? error.message : "Die neue Formularquelle konnte nicht gelesen werden.";
     }
@@ -202,9 +225,13 @@ export const createTemplateDetailViewModel = async (
       assignmentsWithGroups,
       versions,
       relatedDocuments,
+      availableWorkflows: workflows,
+      selectedWorkflowTemplateId,
+      workflowPublishBlockedReason,
       formDefinition,
       templateFeatures,
       ...(nextFormReference ? { nextFormReference } : {}),
+      availableOperations: operations,
       integrations: {
         actions: formDefinition.actions.filter((action) => action.operationRef),
         fields: formDefinition.fields.filter((field) => field.operationRef),
@@ -333,6 +360,119 @@ export const createWorkflowNewViewModel = async (userKey: string | undefined) =>
     ...shellContext,
     title: "New Workflow",
     pageSection: "workflows" as const,
+  };
+};
+
+const readNextFormOperationRefs = (templateKey: string, sourceText: string): string[] => {
+  if (!isNextFormReferenceTemplate(templateKey)) {
+    return [];
+  }
+
+  try {
+    const parsedForm = parseNextFormSource(sourceText);
+    return parsedForm.actions.flatMap((action) => (action.ref ? [action.ref] : []));
+  } catch {
+    return [];
+  }
+};
+
+const readWorkflowOperationRefs = (workflowJson: Record<string, unknown>): string[] => {
+  try {
+    const parsedSource = parseWorkflowSourceText(serializeWorkflowSource(workflowJson));
+    const tableRefs = parsedSource.transitionRows.flatMap((row) =>
+      (row.apiLabel ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0 && value !== "—"),
+    );
+    const hooks = Array.isArray((workflowJson as { hooks?: unknown }).hooks) ? (workflowJson as { hooks: unknown[] }).hooks : [];
+    const hookRefs = hooks.flatMap((hook) => {
+      if (!hook || typeof hook !== "object" || Array.isArray(hook)) {
+        return [];
+      }
+
+      const record = hook as Record<string, unknown>;
+      return typeof record.operationRef === "string" ? [record.operationRef] : [];
+    });
+
+    return Array.from(new Set([...tableRefs, ...hookRefs]));
+  } catch {
+    return [];
+  }
+};
+
+export const createApiCatalogViewModel = async (userKey: string | undefined) => {
+  const shellContext = await createShellContext("apis", userKey);
+  const { activeUser } = shellContext;
+
+  const [operations, visibleTemplates, visibleWorkflows, documents, importedCustomers, importedProducts] = await Promise.all([
+    listOperations(),
+    listFormTemplatesForUser(activeUser.id),
+    listWorkflowTemplates(),
+    listDocumentsVisibleToUser(activeUser.id),
+    listReferenceEntities("customer"),
+    listReferenceEntities("product"),
+  ]);
+  const templates = (
+    await Promise.all(visibleTemplates.map((template) => findFormTemplateById(template.id)))
+  ).filter((template): template is NonNullable<typeof template> => Boolean(template));
+  const workflows = (
+    await Promise.all(visibleWorkflows.map((workflow) => findWorkflowTemplateById(workflow.id)))
+  ).filter((workflow): workflow is NonNullable<typeof workflow> => Boolean(workflow));
+
+  const operationsWithUsage = operations.map((operation) => {
+    const templateUsages = templates
+      .filter((template) => readNextFormOperationRefs(template.key, template.mdxBody).includes(operation.operationRef))
+      .map((template) => ({
+        id: template.id,
+        key: template.key,
+        name: template.name,
+        version: template.version,
+        status: template.status,
+        documentCount: documents.filter((document) => document.templateId === template.id).length,
+      }));
+    const workflowUsages = workflows
+      .filter((workflow) => readWorkflowOperationRefs(workflow.workflowJson).includes(operation.operationRef))
+      .map((workflow) => ({
+        id: workflow.id,
+        key: workflow.key,
+        name: workflow.name,
+        version: workflow.version,
+        status: workflow.status,
+      }));
+
+    return {
+      operation,
+      templateUsages,
+      workflowUsages,
+      documentCount: templateUsages.reduce((count, usage) => count + usage.documentCount, 0),
+      requestFields: operation.inputSchema?.fields ?? [],
+      responseFields: operation.outputSchema?.fields ?? [],
+    };
+  });
+
+  const visibleTemplateFamilies = Array.from(new Map(templates.map((template) => [template.key, template])).values())
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((template) => ({
+      id: template.id,
+      key: template.key,
+      name: template.name,
+      version: template.version,
+      status: template.status,
+      tableFields: template.tableFields,
+      documentCount: documents.filter((document) => document.templateId === template.id).length,
+    }));
+
+  return {
+    ...shellContext,
+    title: "APIs",
+    pageSection: "apis" as const,
+    apiCatalog: {
+      operations: operationsWithUsage,
+      visibleTemplateFamilies,
+      importedCustomers,
+      importedProducts,
+    },
   };
 };
 
@@ -681,7 +821,7 @@ export const createDocumentDetailViewModel = async (
     return null;
   }
 
-  const [assignments, tasks, attachments, auditEvents, attachmentUploadState, editState, submitState, approveState, rejectState, archiveState] = await Promise.all([
+  const [assignments, tasks, attachments, auditEvents, attachmentUploadState, editState, submitState, approveState, rejectState, archiveState, workflowDetail] = await Promise.all([
     listAssignmentsForDocument(document.id),
     listTasksForDocument(document.id),
     listAttachmentsForDocument(document.id),
@@ -692,6 +832,7 @@ export const createDocumentDetailViewModel = async (
     getDocumentApproveStateForUser(document.id, activeUser.id),
     getDocumentRejectStateForUser(document.id, activeUser.id),
     getDocumentArchiveStateForUser(document.id, activeUser.id),
+    findWorkflowTemplateById(document.workflowTemplateId),
   ]);
 
   const formDefinition = buildReadOnlyFormDefinition({
@@ -716,7 +857,7 @@ export const createDocumentDetailViewModel = async (
         sourceText: string;
         fieldValues: Record<string, string>;
         fieldUi: Record<string, {
-          controlType: "text" | "date" | "textarea" | "number" | "select";
+          controlType: "text" | "date" | "textarea" | "html-editor" | "grid" | "number" | "select" | "radio-group" | "checkbox-group" | "user-select" | "user-multiselect" | "signature";
           runtimeRole: "lookup_input" | "lookup_prefill" | "manual_input" | "derived_readonly" | "workflow_readonly";
           lookupRole: "none" | "input" | "result" | "masterdata";
           isSubmitRequired: boolean;
@@ -725,6 +866,11 @@ export const createDocumentDetailViewModel = async (
           state: "editable" | "readonly";
           emptyValueLabel?: string;
           helpText?: string;
+          optionItems?: Array<{
+            value: string;
+            label: string;
+          }>;
+          displayValue?: string;
         }>;
         actionUi: Record<string, {
           controlType: "action" | "lookup";
@@ -735,7 +881,7 @@ export const createDocumentDetailViewModel = async (
           isEnabled: boolean;
           hint?: string;
         }>;
-        lookupMetaFieldNames: string[];
+        hiddenFieldNames: string[];
         editState: {
           isAvailable: boolean;
           reason?: string;
@@ -762,6 +908,26 @@ export const createDocumentDetailViewModel = async (
             emptyValueLabel: string;
           }>;
         }>;
+        participantProgress?: {
+          rows: Array<{
+            userId: string;
+            userKey?: string;
+            displayName: string;
+            participationLabel: string;
+            workflowRoles: Array<"editor" | "approver">;
+            saved: boolean;
+            submitted: boolean;
+            signed: boolean;
+            lastUpdatedAt?: string;
+            isCurrentUser: boolean;
+          }>;
+          submitModeLabel: "AND" | "OR";
+          approvalModeLabel: "AND" | "OR";
+          submitProgressLabel: string;
+          submitCount: number;
+          submitRequiredCount: number;
+          currentUserRoles: Array<"editor" | "approver">;
+        };
         submitRequiredFieldNames: string[];
         parsedForm?: NextFormDefinition;
         parseError?: string;
@@ -773,44 +939,81 @@ export const createDocumentDetailViewModel = async (
       documentStatus: document.status,
       baseEditState: editState,
     });
-    const nextFormFieldUi = buildReferenceNextFormFieldUi({
-      canEdit: nextFormEditState.isAvailable,
-    });
-    const nextFormActionUi = buildReferenceNextFormActionUi({
-      canEdit: nextFormEditState.isAvailable,
-    });
     const nextFormFieldValues = {
-      ...mapDocumentDataToNextFormValues(document.templateKey, document.documentDataJson),
+      ...mapDocumentDataToNextFormValues(document.templateKey, document.documentDataJson, {
+        currentUserId: activeUser.id,
+      }),
       ...Object.fromEntries(
         Object.entries(input?.nextFormFieldValues ?? {}).map(([key, value]) => [key, value?.toString() ?? ""]),
       ),
     };
+    const nextFormFieldUi = buildReferenceNextFormFieldUi({
+      templateKey: document.templateKey,
+      canEdit: nextFormEditState.isAvailable,
+      fieldValues: nextFormFieldValues,
+      availableUsers: users,
+    });
+    if (document.templateKey === "qualification-record" && activeUser.id !== getQualificationOwnerUserId(document.documentDataJson)) {
+      for (const fieldName of [
+        "qualification_record_number",
+        "qualification_title",
+        "owner_user_id",
+        "attendee_user_ids",
+        "valid_until",
+        "approval_status",
+      ]) {
+        const field = nextFormFieldUi[fieldName];
+
+        if (field) {
+          field.isEditable = false;
+          field.isReadOnly = true;
+          field.state = "readonly";
+        }
+      }
+    }
+    const nextFormActionUi = buildReferenceNextFormActionUi({
+      templateKey: document.templateKey,
+      canEdit: nextFormEditState.isAvailable,
+    });
     const linkedProductionBatchReference = await findVisibleProductionBatchReferenceByMaterial({
       userId: activeUser.id,
       activeUserKey: activeUser.key,
       materialName: nextFormFieldValues.material ?? "",
     });
+    const participantProgress = document.templateKey === "qualification-record"
+      ? buildQualificationProgressView({
+          data: document.documentDataJson,
+          assignments,
+          users,
+          currentUserId: activeUser.id,
+          workflowJson: (workflowDetail?.workflowJson ?? {}) as Parameters<typeof buildQualificationProgressView>[0]["workflowJson"],
+        })
+      : undefined;
 
-    nextFormReference = {
+    const currentNextFormReference: NonNullable<typeof nextFormReference> = {
       sourceFilePath: "documents.template_mdx_body",
       sourceText: document.formTemplateMdxBody,
       fieldValues: nextFormFieldValues,
       fieldUi: nextFormFieldUi,
       actionUi: nextFormActionUi,
-      lookupMetaFieldNames: [...referenceNextFormLookupMetaFieldNames],
+      hiddenFieldNames: getReferenceNextFormHiddenFieldNames(document.templateKey),
       editState: nextFormEditState,
       masterDataSections: buildReferenceNextFormMasterDataSections({
+        templateKey: document.templateKey,
         fieldValues: nextFormFieldValues,
       }),
       linkedFormReferences: linkedProductionBatchReference ? [linkedProductionBatchReference] : [],
-      submitRequiredFieldNames: [...referenceNextFormSubmitRequiredFieldNames],
+      ...(participantProgress ? { participantProgress } : {}),
+      submitRequiredFieldNames: getReferenceNextFormSubmitRequiredFieldNames(document.templateKey),
     };
 
     try {
-      nextFormReference.parsedForm = parseNextFormSource(document.formTemplateMdxBody);
+      currentNextFormReference.parsedForm = parseNextFormSource(document.formTemplateMdxBody);
     } catch (error: unknown) {
-      nextFormReference.parseError = error instanceof Error ? error.message : "Die neue Formularquelle konnte nicht gelesen werden.";
+      currentNextFormReference.parseError = error instanceof Error ? error.message : "Die neue Formularquelle konnte nicht gelesen werden.";
     }
+
+    nextFormReference = currentNextFormReference;
   }
 
   return {

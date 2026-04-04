@@ -1,197 +1,106 @@
-# Implementierungsroadmap fuer die vereinfachte Richtung
+# Implementierungsroadmap bis zum Meilenstein
 
-## Zweck
+## Ziel
 
-Diese Roadmap beschreibt die empfohlene Reihenfolge fuer die naechste Produktphase auf Basis von:
+Diese Roadmap beschreibt die Reihenfolge bis zum Meilenstein:
 
-- `docs/acceptance-checkpoint.md`
-- `docs/changes/`
-- `specs/next/`
+- **plattformfaehig fuer die Handwerker-App**
 
-Sie legt die Umsetzungsreihenfolge fest, ohne selbst schon Runtime oder UI zu implementieren.
+Sie priorisiert klar:
 
-## High-Level-Reihenfolge
+- was die Plattform dafuer noch unbedingt braucht
+- was erst danach in breitere Produktauspraegungen gehen soll
 
-1. neue Richtung zuerst parallel und kontrolliert aufbauen
-2. den neuen Referenzfall frueh als Leitbeispiel nutzen
-3. zuerst Formmodell und Read-Pfade stabilisieren
-4. erst danach UI- und Bindingschritte darauf aufsetzen
-5. Alt-Modell nicht per Big Bang abloesen, sondern schrittweise zurueckdrängen
+## Leitprinzipien
 
-## Was zunaechst bestehen bleibt
+1. Kein Builder zuerst.
+2. Kein Big-Bang-Umbau.
+3. Neue Produktfaehigkeit im normalen Pfad, nicht im Preview-Pfad.
+4. Forms, Workflows und TypeScript APIs gemeinsam denken.
+5. Alles entlang echter Handwerker-Nutzung pruefen.
 
-In den ersten Phasen bleiben bestehen:
+## Phase 1: Plattform-Kern konsolidieren
 
-- Postgres- und Rebuild-Basis
-- Hauptnavigation und Shell
-- bestehende Alt-Modelle fuer Templates, Workflows und Documents
-- bestehende Laufzeitpfade fuer Start, Save, Submit, Approve, Reject, Archive
-- bestehende Admin-Grundpflege
+Ziel:
 
-## Was zuerst ersetzt oder parallel aufgebaut werden soll
+- fuehrende Specs bereinigen
+- Produktpfad staerken
+- Preview- und Uebergangsballast zuruecknehmen
 
-Zuerst parallel aufzubauen sind:
+Ergebnis:
 
-- das vereinfachte Formmodell
-- die direkte lokale Bindinglogik als neues Zielmodell
-- der neue Referenzfall `Auftragsdokumentation fuer Handwerker`
+- klare Plattformlinie
+- klare Roadmap
+- stabile Kernbegriffe
 
-Noch nicht frueh zu ersetzen sind:
+## Phase 2: Formularmodell vervollstaendigen
 
-- der gesamte Workflow-Laufzeitpfad
-- der gesamte Admin-Bereich
-- die gesamte bestehende Documents-Arbeits-UI
+Ziel:
 
-## Phasen
+- Controls-Katalog explizit machen
+- User-Select, User-Multiselect, Signatur und HTML-/WYSIWYG-Control festziehen
+- readonly, required, lookup und reference konsistent modellieren
 
-## Phase 1: Neuer Referenz-Slice ohne UI-Umbau
+Ohne diese Phase ist die Plattform fuer reale Handwerker- und Nachweisfaelle noch zu schmal.
 
-Zweck:
+## Phase 3: Workflow-Modell als Transition-Modell festigen
 
-- die neue Richtung an einem klaren Beispiel materialisieren
-- das neue Formmodell klein und isoliert pruefbar machen
+Ziel:
 
-Umfang:
+- Workflow fachlich voll auf Status / Actions / From / To / Roles / Mode / API / Condition ausrichten
+- JSON klar als technisches Speicherformat behandeln
+- Verknuepfung zu Formularen und APIs ruhig und produktnah halten
 
-- Referenzartefakte fuer `Auftragsdokumentation fuer Handwerker`
-- erster isolierter Read-/Validierungsslice fuer das neue vereinfachte Formularmodell
-- noch keine Umschaltung bestehender Screens
+## Phase 4: Datenblatt-, Referenz- und Datenaustauschmodell
 
-Warum zuerst:
+Ziel:
 
-- niedriges Risiko
-- hohe Klarheit
-- gute Testbarkeit
-- trennt neue Richtung sauber vom Alt-Modell
+- Template-Datenblatt / Grid pro Template
+- Referenzen auf Stammdaten
+- Referenzen auf andere Formulare
+- CSV-Import fuer Entitaeten
+- CSV-Export fuer Formulardaten
+- Formulare als API-Datenquelle
 
-## Phase 2: Paralleler Read-Pfad fuer das neue Formmodell
+Diese Phase macht die Plattform erstmals fuer echte Datendrehscheiben-Aufgaben brauchbar.
 
-Zweck:
+## Phase 5: Medien und Nachweisfaehigkeit
 
-- das neue Modell ausserhalb des Alt-Parsers lesbar machen
-- die Grundbausteine des neuen Formats stabilisieren
+Ziel:
 
-Umfang:
+- Medienmodell fuer Journal und Attachments sauber festziehen
+- Bilder und Nachweise in beiden Zielwelten fachlich konsistent fuehren
 
-- neuer, kleiner Read-Pfad fuer das neue Formularmodell
-- keine allgemeine Migration aller Templates
-- keine alte Logik entfernen
+Das ist fuer die Handwerker-App wesentlich, soll aber erst auf dem stabilen Form-/Referenzrahmen aufsetzen.
 
-Warum jetzt:
+## Phase 6: Start-to-End-Teststrategie umsetzen
 
-- erst wenn der neue Read-Pfad stabil ist, lohnt sich weitere UI-Anbindung
+Ziel:
 
-## Phase 3: Konfigurationskontexte fuer das neue Modell
+- Smoke-Tests um echte Start-to-End-Linien ergaenzen
+- getrennte Testdatensaetze fuer Handwerkerwelt und Produktionswelt
+- dritter Testfall fuer Qualifikations-/Nachweisformulare vorbereiten
 
-Zweck:
+## Meilenstein: Plattformfaehig fuer die Handwerker-App
 
-- Templates und Workflows im neuen objektzentrierten Modell ruhig abbilden
+Der Meilenstein ist erreicht, wenn mindestens vorhanden sind:
 
-Umfang:
+- Forms als ruhiger produktiver Pfad
+- Workflows als einfaches Transition-Modell
+- TypeScript APIs als dritter Kernbaustein
+- Controls-Katalog fuer reale Business-Controls
+- Referenzen auf Stammdaten und andere Formulare
+- Tabellen-/Grid-Modell pro Template
+- CSV-Import und CSV-Export
+- Formulare als API-Datenquelle
+- Medienmodell fuer Nachweise
+- belastbare Start-to-End-Testlinie fuer die Handwerker-App
 
-- Detail-/Review-Kontexte fuer das neue Modell
-- New/Edit entlang `Liste -> Detail -> New/Edit`
-- keine Review-Karten unter Tabellen
+## Danach
 
-Warum erst nach Phase 2:
-
-- Konfigurationsscreens sollen auf einem lesbaren Zielmodell aufbauen, nicht auf einer halb fertigen Syntax
-
-## Phase 4: Arbeits-UI sauber vom Technikmodell trennen
-
-Zweck:
-
-- Standard-Arbeitsseiten beruhigen
-- Review-/Konfigurationssicht aus Arbeitsseiten herausloesen
-
-Umfang:
-
-- klare Trennung von Arbeits- und Technik-/Review-Kontext
-- kein Vollumbau aller Screens auf einmal
-
-Warum hier:
-
-- erst nachdem das Zielmodell in Konfigurationskontexten tragfaehig ist
-
-## Phase 5: Direkte API-/Action-Bindings im neuen Modell
-
-Zweck:
-
-- lokale, direkte Bindings im neuen Formularmodell anschliessen
-
-Umfang:
-
-- lokale Referenzierung am Nutzungspunkt
-- keine Registry-Wiederbelebung
-- keine allgemeine Operationsplattform als erster Schritt
-
-Warum spaeter:
-
-- Bindings sollen auf das neue Formmodell aufsetzen, nicht parallel zu einem instabilen Format entstehen
-
-## Phase 6: Kontrollierter Uebergang des Laufzeitpfads
-
-Zweck:
-
-- neue Richtung schrittweise in die eigentliche Produktlaufzeit bringen
-
-Umfang:
-
-- einzelne vertikale Uebernahmen in den echten Produktfluss
-- Alt- und Neumodell fuer eine begrenzte Uebergangszeit parallel
-- keine Big-Bang-Ablösung
-
-Warum zuletzt:
-
-- hier ist das Risiko am hoechsten
-- dieser Schritt braucht die vorherigen Phasen als stabile Grundlage
-
-## Referenzbeispiel in der Roadmap
-
-Der Referenzfall `Auftragsdokumentation fuer Handwerker` wird:
-
-- in Phase 1 als neuer Leitfall eingefuehrt
-- in Phase 2 als Read- und Modellslice genutzt
-- in Phase 3 als erster sinnvoller Konfigurationsfall verwendet
-- spaeter in Phase 6 als priorisierter produktnaher Uebergangsfall genutzt
-
-## Erster empfohlener Implementierungsschritt
-
-Der erste echte Implementierungsschritt der neuen Richtung sollte sein:
-
-- ein isolierter Parallel-Slice fuer das neue vereinfachte Formmodell am Referenzbeispiel `Auftragsdokumentation fuer Handwerker`
-
-Eigenschaften dieses ersten Schritts:
-
-- klein
-- risikoarm
-- gut testbar
-- ohne UI-Umbau
-- ohne Umschaltung bestehender Laufzeitpfade
-
-## Was bewusst spaeter kommt
-
-Bewusst spaeter kommen:
-
-- direkte Bindings mit echter Laufzeitwirkung
-- Umbau der bestehenden Documents-Arbeitsseite
-- breitere Migration vorhandener Templates
-- Ausbau tieferer Workflow- oder Policy-Logik
-
-## Nicht empfohlen
-
-Nicht empfohlen ist:
-
-- Big-Bang-Umbau
-- gleichzeitiger Parser-, UI- und Runtime-Wechsel
-- sofortige Ablösung des Alt-Modells ohne Parallelphase
-
-## Ableitbarkeit fuer spaetere Codex-Schritte
-
-Jede Phase soll spaeter in kleine Codex-taugliche Implementierungsschritte zerlegt werden.
-
-Die Roadmap dient dafuer als:
-
-- Reihenfolgespezifikation
-- Abgrenzungshilfe
-- Migrationsrahmen
+Erst nach diesem Meilenstein sollen breiter ausgebaut werden:
+
+- Produktionsdokumentation als eigener staerkerer Produktstrang
+- Qualifikations- und Nachweisformulare als eigene App-Familie
+- weitergehende Integrations- oder Reporting-Themen
+- Builder-nahe Themen, falls spaeter ueberhaupt sinnvoll

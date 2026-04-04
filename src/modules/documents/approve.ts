@@ -1,5 +1,6 @@
 import { withDbTransaction } from "../../db/pool.js";
 import { findDocumentAccessContextForUser, type WorkflowJson } from "./access.js";
+import { synchronizeQualificationAssignments } from "../qualification/progress.js";
 
 type ApproveDocumentInput = {
   documentId: string;
@@ -115,14 +116,22 @@ export const approveDocumentForUser = async ({ documentId, userId }: ApproveDocu
   }
 
   return withDbTransaction(async (client) => {
+    const nextDocumentData = document.templateKey === "qualification-record"
+      ? {
+          ...document.dataJson,
+          approval_status: "freigegeben",
+        }
+      : document.dataJson;
+
     await client.query(
       `
       update documents
       set status = $2,
+          data_json = $3::jsonb,
           updated_at = now()
       where id = $1
       `,
-      [documentId, approveTransition.to],
+      [documentId, approveTransition.to, JSON.stringify(nextDocumentData)],
     );
 
     await client.query(
@@ -136,6 +145,17 @@ export const approveDocumentForUser = async ({ documentId, userId }: ApproveDocu
       `,
       [documentId],
     );
+
+    if (document.templateKey === "qualification-record") {
+      await synchronizeQualificationAssignments({
+        client,
+        documentId,
+        actorUserId: userId,
+        documentTitle: document.title,
+        documentStatus: approveTransition.to,
+        data: nextDocumentData,
+      });
+    }
 
     await client.query(
       `

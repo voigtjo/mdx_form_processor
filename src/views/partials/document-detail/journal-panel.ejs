@@ -72,20 +72,20 @@
     <% if (latestJournalEntry) { %>
       Letzter Eintrag: <strong><%= latestJournalEntry.journal.label %></strong> · <%= truncateJournalText(latestJournalEntry.text, 72) %> · <%= latestJournalEntry.by %>
     <% } else { %>
-      Noch kein Journal-Eintrag vorhanden.
+      Keine Eintraege.
     <% } %>
   </p>
 
   <% if (journalStatus) { %>
-    <div class="notice-card notice-success">
-      <strong>Journal aktualisiert</strong>
+    <div class="notice-card notice-success notice-inline">
+      <strong>Gespeichert</strong>
       <p><%= journalStatus %></p>
     </div>
   <% } %>
 
   <% if (journalError) { %>
-    <div class="notice-card notice-error">
-      <strong>Journal nicht moeglich</strong>
+    <div class="notice-card notice-error notice-inline">
+      <strong>Nicht moeglich</strong>
       <p><%= journalError %></p>
     </div>
   <% } %>
@@ -102,14 +102,10 @@
             <span class="chip"><%= journal.entries.length %> Eintraege</span>
           </div>
 
-          <% if (journal.helpText) { %>
-            <p class="field-help"><%= journal.helpText %></p>
-          <% } %>
-
           <% if (journal.isEditable) { %>
             <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/journal?user=<%= activeUser.key %>">
               <input type="hidden" name="journalFieldName" value="<%= journal.name %>" />
-              <label class="field-label" for="journal-entry-<%= journal.name %>">New Entry</label>
+              <label class="field-label" for="journal-entry-<%= journal.name %>">Eintrag</label>
               <textarea id="journal-entry-<%= journal.name %>" name="entryText" rows="3" placeholder="Journal-Eintrag erfassen"></textarea>
               <button
                 class="button-secondary"
@@ -117,10 +113,10 @@
                 hx-post="/documents/<%= documentDetail.document.id %>/journal?user=<%= activeUser.key %>"
                 hx-target="#document-journal-fragment"
                 hx-swap="outerHTML"
-              >Add Journal Entry</button>
+              >Hinzufuegen</button>
             </form>
           <% } else { %>
-            <p class="field-help"><%= documentDetail.editState.reason ?? "Journal ist im aktuellen Status read-only." %></p>
+            <p class="field-help"><%= documentDetail.editState.reason ?? "Read-only." %></p>
           <% } %>
 
           <div class="panel-divider"></div>
@@ -152,14 +148,12 @@
                           data-journal-dialog-open="<%= journalDialogId %>"
                         >
                           <div class="journal-entry-preview"><%= truncateJournalText(row.text) %></div>
-                          <span class="journal-entry-summary-hint">Vollansicht</span>
                         </button>
                         <dialog id="<%= journalDialogId %>" class="journal-entry-dialog">
                           <form class="journal-entry-dialog-card" method="dialog">
                             <div class="panel-header">
                               <div>
-                                <h4>Vollansicht</h4>
-                                <p class="field-help"><%= journal.label %></p>
+                                <h4><%= journal.label %></h4>
                               </div>
                               <button class="button-secondary" type="submit" data-journal-dialog-close>Schliessen</button>
                             </div>

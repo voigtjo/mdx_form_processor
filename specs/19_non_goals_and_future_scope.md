@@ -18,6 +18,7 @@ Dieses Dokument ist die führende Grenze zwischen MVP und späterem Ausbau.
 Für das MVP gilt:
 
 - Das Produkt soll **produktiv nutzbar** sein
+- Das Produkt soll **plattformfaehig fuer die Handwerker-App** werden
 - Es soll **einfach** wirken
 - Es soll **nicht** alles auf einmal lösen
 - Es soll **keine verdeckte zweite Produktvision** im MVP mittragen
@@ -71,7 +72,7 @@ Nicht Ziel des MVP ist:
 - ein Meta-Builder für beliebige Geschäftsanwendungen
 - eine frei modellierbare Prozessplattform ohne inhaltlichen Fokus
 
-Das Produkt bleibt im MVP eine fokussierte App für:
+Das Produkt bleibt im MVP eine fokussierte Plattform mit erster Ziel-App fuer:
 
 - digitale Dokumentation
 - Nachweise

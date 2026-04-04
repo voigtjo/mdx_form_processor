@@ -1,6 +1,6 @@
-# Neue Ziel-Specs für die nächste Produktphase
+# Ziel-Specs fuer die naechste Produktphase
 
-Diese Dokumente beschreiben die **neue Zielrichtung** nach dem Alt-Spec-Abnahmepunkt.
+Diese Dokumente beschreiben die produktnahe Zielrichtung fuer die naechste Plattformphase.
 
 Sie bauen auf auf:
 
@@ -8,22 +8,28 @@ Sie bauen auf auf:
 - `docs/acceptance-checkpoint.md`
 - den Änderungsspecs unter `docs/changes/`
 
-Sie sind noch **nicht implementiert** und ersetzen den aktuellen Runtime-Stand nicht.
+Sie sind noch **nicht voll implementiert** und ersetzen den aktuellen Runtime-Stand nicht.
 
-Reihenfolge:
+Wichtige Lesereihenfolge:
 
-1. Alt-Spec-Abnahmecheckpoint
-2. Änderungsspecs unter `docs/changes/`
-3. Ziel-Specs unter `specs/next/`
-4. Implementierungsroadmap
-5. Umsetzung
+1. Plattform-Zielbild und Form-/API-Grundrichtung
+2. fehlende Kernbausteine fuer Controls, Datenblatt, Referenzen und Tests
+3. Roadmap bis zum Meilenstein `plattformfaehig fuer die Handwerker-App`
 
-Enthalten sind:
+Fuehrend enthalten sind:
 
 - `01_form_model_target_spec.md`
 - `02_api_action_binding_target_spec.md`
+- `07_implementation_roadmap.md`
+- `08_platform_target_for_craftsman_app.md`
+- `09_controls_catalog_target_spec.md`
+- `10_template_grid_and_data_exchange_target_spec.md`
+- `11_reference_and_related_records_target_spec.md`
+- `12_test_strategy_target_spec.md`
+
+Weiter als Hintergrund nuetzlich, aber nicht mehr fuehrender Produktweg:
+
 - `03_layout_target_spec.md`
 - `04_ui_model_target_spec.md`
 - `05_reference_example_craftsman_order_spec.md`
 - `06_transition_migration_target_spec.md`
-- `07_implementation_roadmap.md`

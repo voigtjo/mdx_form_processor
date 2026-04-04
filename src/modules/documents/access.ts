@@ -2,11 +2,17 @@ import { withDb } from "../../db/pool.js";
 import type { EntityStatus, WorkflowFieldRules } from "../../types/domain.js";
 
 export type WorkflowJson = {
+  approval?: {
+    submitMode?: string;
+    approvalMode?: string;
+  };
   actions?: Record<
     string,
     {
       from?: string[];
       to?: string;
+      allowedRoles?: Array<"editor" | "approver">;
+      completionMode?: string;
     }
   >;
 };
@@ -55,17 +61,25 @@ type DocumentAccessRow = {
 const formatDocumentTitle = (templateKey: string, dataJson: Record<string, unknown>, templateName: string): string => {
   if (templateKey === "customer-order-test") {
     const orderNumber = dataJson.customer_order_number;
-    return typeof orderNumber === "string" ? `Customer Order ${orderNumber}` : templateName;
+    return typeof orderNumber === "string" ? `Kundenauftrag ${orderNumber}` : templateName;
   }
 
   if (templateKey === "production-batch") {
     const batchId = dataJson.batch_id;
-    return typeof batchId === "string" ? `Batch ${batchId}` : templateName;
+    return typeof batchId === "string" ? `Produktion ${batchId}` : templateName;
   }
 
-  if (templateKey === "evidence-basic") {
-    const evidenceNumber = dataJson.evidence_number;
-    return typeof evidenceNumber === "string" ? `Evidence ${evidenceNumber}` : templateName;
+  if (templateKey === "qualification-record") {
+    const qualificationRecordNumber = dataJson.qualification_record_number;
+    const qualificationTitle = dataJson.qualification_title;
+
+    if (typeof qualificationRecordNumber === "string" && qualificationRecordNumber.trim().length > 0) {
+      return `Qualifikationsnachweis ${qualificationRecordNumber}`;
+    }
+
+    return typeof qualificationTitle === "string" && qualificationTitle.trim().length > 0
+      ? qualificationTitle
+      : templateName;
   }
 
   return templateName;

@@ -59,6 +59,11 @@ Im aktuellen `.form.md`-Stand sind diese Control-Typen explizit vorgesehen:
 - `textarea`
 - `number`
 - `select`
+- `user-select`
+- `user-multiselect`
+- `signature`
+- `html-editor`
+- `grid`
 - `action`
 - `lookup`
 
@@ -80,6 +85,7 @@ Ein Feld kann damit z. B. sein:
 - readonly Lookup-Ergebnis
 - readonly Workflow-/Statusfeld
 - readonly Stammdatenanzeige
+- tabellarische Mehrzeilen-Erfassung
 
 Wichtig:
 
@@ -100,6 +106,10 @@ Lookup-nahe Controls werden im Zielbild klar unterschieden:
   Beispiel: `Einsatzort`
 - readonly Stammdatenanzeige
   Beispiel: Kunden- oder Produktattribute im Formularumfeld
+- einzelner verantwortlicher User
+  Beispiel: `Verantwortlich`
+- mehrere bezogene User
+  Beispiel: `Teilnehmende`
 
 Die Lookup-Aktion selbst soll lokal beim fachlich passenden Feld erscheinen und nicht als separater technischer Bedienblock.
 
@@ -131,6 +141,25 @@ Eine Section:
 Lookup-Aktionen sollen spaeter direkt im fachlich passenden Feldkontext erscheinen.
 Readonly Stammdaten duerfen im Document als ruhige Form-Nebensektionen sichtbar werden, wenn sie aus denselben Lookup-Ergebnissen abgeleitet werden.
 Ein erster formularuebergreifender Produktpfad darf readonly Werte aus einem anderen Formular im normalen Document Detail einblenden, wenn der Bezug klein, fachlich eindeutig und testbar ist.
+
+## Grid-Control
+
+Ein erster kleiner Grid-Control ist explizit Teil des Modells.
+
+Er erlaubt:
+
+- definierte Spalten in der Formularquelle
+- mehrere Zeilen im Dokument
+- strukturierte Speicherung pro Zeile
+- ruhige readonly Darstellung im Formular
+
+Die aktuelle `.form.md`-Minimsyntax ist:
+
+```md
+- Schritte: grid(process_steps, columns="step:Schritt|station:Station|target_qty:Sollmenge|actual_qty:Istmenge|result:Ergebnis", numberColumns="target_qty,actual_qty", rows=4)
+```
+
+Der erste produktive Einsatz liegt in `production-batch`.
 
 ## Journale und Attachments im Zielbild
 

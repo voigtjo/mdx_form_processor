@@ -1,7 +1,6 @@
 <section class="panel panel-primary-slice">
   <div class="panel-header">
     <h3>Formular</h3>
-    <span class="chip"><%= documentDetail.document.status %></span>
   </div>
 
   <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/next-form?user=<%= activeUser.key %>">

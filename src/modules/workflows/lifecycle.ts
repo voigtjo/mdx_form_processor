@@ -72,11 +72,13 @@ const normalizeWorkflowSource = (sourceText: string): string => {
 
 export const publishWorkflowVersion = async (input: {
   workflowId: string;
-  sourceText: string;
+  sourceText?: string;
 }): Promise<WorkflowLifecycleResult> => {
   return withDbTransaction(async (client) => {
     const workflow = ensureWorkflow(await loadWorkflowBase(client, input.workflowId));
-    const normalizedSource = normalizeWorkflowSource(input.sourceText);
+    const normalizedSource = normalizeWorkflowSource(
+      input.sourceText ?? serializeWorkflowSource(workflow.workflow_json),
+    );
 
     if (workflow.status === "draft") {
       await client.query(

@@ -125,7 +125,7 @@ const isNextFormControlType = (value: string): value is NextFormControlType =>
   (nextFormControlTypes as readonly string[]).includes(value);
 
 const parseControlSlot = (source: string): NextFormSlot => {
-  const match = source.match(/^(.+?):\s*([a-zA-Z][a-zA-Z0-9_]*)\((.*)\)$/);
+  const match = source.match(/^(.+?):\s*([a-zA-Z][a-zA-Z0-9_-]*)\((.*)\)$/);
 
   if (!match) {
     throw new Error(`Ungueltiger Control-Slot: "${source}"`);

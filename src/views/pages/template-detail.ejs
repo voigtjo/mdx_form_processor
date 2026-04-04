@@ -6,18 +6,28 @@
   <% const nextDraftVersion = currentDraftVersion ? currentDraftVersion.version : highestKnownVersion + 1; %>
   <% const publishTargetVersion = templateDetail.template.status === "draft" ? templateDetail.template.version : nextDraftVersion; %>
   <% const viewedVersion = templateDetail.template.version; %>
-  <section class="hero-card hero-card-compact">
-    <div>
+  <details class="panel panel-collapsible page-header-collapsible">
+    <summary class="collapsible-summary">
+      <div class="collapsible-summary-copy">
+        <strong><%= templateDetail.template.name %></strong>
+        <span><%= templateDetail.template.name %> v<%= templateDetail.template.version %> · <%= templateDetail.workflow?.name ?? "Kein Workflow" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %> · <%= lifecycleLabel %></span>
+      </div>
+      <div class="collapsible-summary-meta">
+        <span>Template</span>
+        <span>v<%= viewedVersion %></span>
+      </div>
+    </summary>
+    <div class="collapsible-body">
       <span class="eyebrow">Template</span>
       <h2><%= templateDetail.template.name %></h2>
-      <p class="hero-inline-meta"><strong>Template:</strong> <%= templateDetail.template.name %> v<%= templateDetail.template.version %> · <strong>Workflow:</strong> <%= templateDetail.workflow?.name ?? "Nicht zugeordnet" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %></p>
+      <p class="hero-inline-meta"><strong>Formular:</strong> v<%= templateDetail.template.version %> · <strong>Workflow:</strong> <%= templateDetail.workflow?.name ?? "Nicht zugeordnet" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %></p>
       <p class="hero-inline-meta"><strong>Status:</strong> <%= lifecycleLabel %> · <strong>Key:</strong> <%= templateDetail.template.key %> · <strong>Updated:</strong> <%= templateDetail.template.updatedAt %></p>
-      <p class="hero-inline-meta"><strong>Betrachtet:</strong> v<%= viewedVersion %> · <strong>Draft in Arbeit:</strong> <%= currentDraftVersion ? `v${currentDraftVersion.version}` : `noch keiner (naechster Draft v${nextDraftVersion})` %> · <strong>Published:</strong> <%= currentPublishedVersion ? `v${currentPublishedVersion.version}` : "keine" %></p>
+      <p class="hero-inline-meta"><strong>Draft:</strong> <%= currentDraftVersion ? `v${currentDraftVersion.version}` : `naechster Draft v${nextDraftVersion}` %> · <strong>Published:</strong> <%= currentPublishedVersion ? `v${currentPublishedVersion.version}` : "keine" %></p>
+      <div class="hero-actions">
+        <a class="button-secondary" href="/templates?user=<%= activeUser.key %>">Back to Templates</a>
+      </div>
     </div>
-    <div class="hero-actions">
-      <a class="button-secondary" href="/templates?user=<%= activeUser.key %>">Back to Templates</a>
-    </div>
-  </section>
+  </details>
 
   <details class="panel panel-collapsible">
     <summary class="collapsible-summary">
@@ -62,20 +72,36 @@
   <section class="panel">
     <div class="panel-header">
       <h3>Template Source</h3>
-      <span class="chip"><%= lifecycleLabel %> · v<%= templateDetail.template.version %></span>
+      <span><%= lifecycleLabel %> · v<%= templateDetail.template.version %></span>
     </div>
 
     <form method="post" action="/templates/<%= templateDetail.template.id %>/source?user=<%= activeUser.key %>" class="stack-list">
       <article class="subpanel">
         <div class="panel-header">
           <h4>Lifecycle</h4>
-          <span class="chip">Versionen</span>
         </div>
         <p class="panel-copy lifecycle-copy">
           Betrachtet: v<%= viewedVersion %> ·
           Draft in Arbeit: <%= currentDraftVersion ? `v${currentDraftVersion.version}` : `noch keiner` %> ·
           Published: <%= currentPublishedVersion ? `v${currentPublishedVersion.version}` : "keine" %>
         </p>
+        <div class="field-block">
+          <label class="field-label" for="template-workflow-version">Workflow-Version</label>
+          <select id="template-workflow-version" name="workflowTemplateId" class="text-input">
+            <% templateDetail.availableWorkflows.forEach((workflowVersion) => { %>
+              <option value="<%= workflowVersion.id %>" <%= workflowVersion.id === templateDetail.selectedWorkflowTemplateId ? "selected" : "" %>>
+                <%= workflowVersion.name %> · <%= workflowVersion.key %> · v<%= workflowVersion.version %> · <%= workflowVersion.status === "inactive" ? "unpublished" : workflowVersion.status %>
+              </option>
+            <% }) %>
+          </select>
+          <% if (templateDetail.workflowPublishBlockedReason) { %>
+            <p class="field-help"><%= templateDetail.workflowPublishBlockedReason %></p>
+          <% } %>
+          <label class="checkbox-item">
+            <input type="checkbox" name="cascadePublishWorkflow" />
+            <span>Cascade Publish Workflow</span>
+          </label>
+        </div>
         <div class="template-lifecycle-actions">
           <button class="button-secondary" type="submit" name="intent" value="save_draft">
             Save Draft v<%= nextDraftVersion %>
@@ -105,26 +131,39 @@
       <article class="subpanel">
         <div class="panel-header">
           <h4>Source</h4>
-          <span class="chip">Header + Form Body</span>
         </div>
         <textarea name="source" rows="22" class="next-form-source-editor"><%= templateDetail.nextFormReference.sourceText %></textarea>
       </article>
 
+      <% if (templateDetail.nextFormReference.apiBindings && templateDetail.nextFormReference.apiBindings.length > 0) { %>
+        <article class="subpanel">
+          <div class="panel-header">
+            <h4>API Operations</h4>
+          </div>
+          <div class="stack-list compact">
+            <% templateDetail.nextFormReference.apiBindings.forEach((binding) => { %>
+              <div class="field-block">
+                <label class="field-label" for="api-binding-<%= binding.actionName %>"><%= binding.label %></label>
+                <select id="api-binding-<%= binding.actionName %>" name="apiBinding.<%= binding.actionName %>" class="text-input">
+                  <option value="">Keine Operation zugeordnet</option>
+                  <% templateDetail.availableOperations.forEach((operation) => { %>
+                    <option value="<%= operation.operationRef %>" <%= operation.operationRef === binding.operationRef ? "selected" : "" %>>
+                      <%= operation.operationRef %> · <%= operation.name %>
+                    </option>
+                  <% }) %>
+                </select>
+              </div>
+            <% }) %>
+          </div>
+        </article>
+      <% } %>
+
       <article class="subpanel">
-        <div class="panel-header">
-          <h4>Header Values</h4>
-          <span class="chip">aus derselben Quelle</span>
+        <h4>Kopfdaten</h4>
+        <div class="grid two-up detail-grid">
+          <p><strong>attachments_enabled</strong><br /><%= templateDetail.templateFeatures.attachments.enabled ? "Ja" : "Nein" %></p>
+          <p><strong>journal_enabled</strong><br /><%= templateDetail.templateFeatures.journal.enabled ? "Ja" : "Nein" %></p>
         </div>
-        <ul class="stack-list compact">
-          <li>
-            <strong>attachments_enabled</strong>
-            <p><%= templateDetail.templateFeatures.attachments.enabled ? "Ja" : "Nein" %></p>
-          </li>
-          <li>
-            <strong>journal_enabled</strong>
-            <p><%= templateDetail.templateFeatures.journal.enabled ? "Ja" : "Nein" %></p>
-          </li>
-        </ul>
       </article>
     </form>
 
@@ -137,64 +176,63 @@
       <article class="subpanel">
         <div class="panel-header">
           <h4>Preview</h4>
-          <span class="chip"><%= templateDetail.nextFormReference.parsedForm.sections.length %> Sections</span>
         </div>
         <div class="next-form-readonly-stack">
           <% templateDetail.nextFormReference.parsedForm.sections.forEach((section) => { %>
             <article class="subpanel next-form-readonly-section">
               <div class="panel-header">
                 <h4><%= section.title %></h4>
-                <span class="chip"><%= section.rows.length %> Zeilen</span>
               </div>
 
               <% section.rows.forEach((row) => { %>
                 <div class="next-form-readonly-row next-form-columns-<%= Math.min(row.slots.length, 3) %>">
                   <% row.slots.forEach((slot) => { %>
                     <% const element = slot.element; %>
-                    <% const optionHint = typeof element.properties.options === "string" ? element.properties.options.split(",").join(", ") : ""; %>
                     <% if (element.kind === "field") { %>
                       <article class="field-block next-form-readonly-field next-form-type-<%= element.controlType %>">
-                        <div class="next-form-field-head">
-                          <label class="field-label"><%= element.label ?? element.name %></label>
-                          <% if (element.properties.required === true) { %>
-                            <span class="chip">Pflichtfeld</span>
-                          <% } %>
-                        </div>
-
-                        <% if (element.controlType === "textarea") { %>
+                        <label class="field-label"><%= element.label ?? element.name %><% if (element.properties.required === true) { %><span class="field-required" aria-hidden="true">*</span><span class="sr-only"> Pflichtfeld</span><% } %></label>
+                        <% if (element.controlType === "grid" && typeof element.properties.columns === "string") { %>
+                          <% const gridColumns = element.properties.columns.split("|").map((column) => column.trim()).filter((column) => column.length > 0).map((column) => {
+                            const [namePart, labelPart] = column.split(":");
+                            return {
+                              name: (namePart ?? "").trim(),
+                              label: (labelPart ?? namePart ?? "").trim() || (namePart ?? "").trim(),
+                            };
+                          }).filter((column) => column.name.length > 0); %>
+                          <div class="table-wrap">
+                            <table class="next-form-grid-table is-readonly">
+                              <thead>
+                                <tr>
+                                  <% gridColumns.forEach((column) => { %>
+                                    <th><%= column.label %></th>
+                                  <% }) %>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <% gridColumns.forEach(() => { %>
+                                    <td>—</td>
+                                  <% }) %>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        <% } else if (element.controlType === "textarea") { %>
                           <div class="next-form-value next-form-value-textarea">Noch kein Wert</div>
                         <% } else if (element.controlType === "select") { %>
                           <div class="next-form-value">Noch keine Auswahl</div>
+                        <% } else if (element.controlType === "signature") { %>
+                          <div class="next-form-signature-card">
+                            <strong>Noch nicht signiert</strong>
+                          </div>
                         <% } else { %>
                           <div class="next-form-value">Noch kein Wert</div>
-                        <% } %>
-
-                        <% if (element.controlType === "select" && optionHint) { %>
-                          <p class="field-help">Auswahl: <%= optionHint %></p>
-                        <% } else if (element.controlType === "textarea") { %>
-                          <p class="field-help">Mehrzeiliges Feld im Form Body.</p>
-                        <% } else { %>
-                          <p class="field-help"><%= element.controlType %> im Form Body.</p>
                         <% } %>
                       </article>
                     <% } else { %>
                       <article class="field-block next-form-readonly-field next-form-action-card next-form-type-<%= element.controlType %>">
-                        <div class="next-form-field-head">
-                          <label class="field-label"><%= element.label ?? element.name %></label>
-                          <span class="chip"><%= element.kind === "action" ? "Action" : "Lookup" %></span>
-                        </div>
+                        <label class="field-label"><%= element.label ?? element.name %></label>
                         <div class="next-form-action-button" aria-disabled="true"><%= element.label ?? element.name %></div>
-                        <div class="next-form-action-meta">
-                          <% if (element.ref) { %>
-                            <p><strong>Ref:</strong> <code><%= element.ref %></code></p>
-                          <% } %>
-                          <% if (element.args && element.args.length > 0) { %>
-                            <p><strong>Args:</strong> <%= element.args.join(", ") %></p>
-                          <% } %>
-                          <% if (element.bind && element.bind.length > 0) { %>
-                            <p><strong>Bind:</strong> <%= element.bind.join(", ") %></p>
-                          <% } %>
-                        </div>
                       </article>
                     <% } %>
                   <% }) %>

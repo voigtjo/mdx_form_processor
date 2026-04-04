@@ -48,6 +48,27 @@ const readLatestInspectionStep = (value: unknown): string => {
   return text && at ? `${text} (${at})` : text || at;
 };
 
+const readLatestProcessStep = (value: unknown): string => {
+  if (!Array.isArray(value) || value.length === 0) {
+    return "";
+  }
+
+  const latestEntry = value[value.length - 1];
+
+  if (!latestEntry || typeof latestEntry !== "object") {
+    return "";
+  }
+
+  const step = "step" in latestEntry ? normalizeText((latestEntry as Record<string, unknown>).step) : "";
+  const result = "result" in latestEntry ? normalizeText((latestEntry as Record<string, unknown>).result) : "";
+
+  if (step && result) {
+    return `${step}: ${result}`;
+  }
+
+  return step || result;
+};
+
 export const findVisibleProductionBatchReferenceByMaterial = async (input: {
   userId: string;
   materialName: string;
@@ -90,7 +111,7 @@ export const findVisibleProductionBatchReferenceByMaterial = async (input: {
     const batchId = normalizeText(row.data_json.batch_id);
     const productName = normalizeText(row.data_json.product_name);
     const fulfillmentFlags = readStringArray(row.data_json.fulfillment_flags).join(", ");
-    const latestInspectionStep = readLatestInspectionStep(row.data_json.inspection_steps);
+    const latestInspectionStep = readLatestProcessStep(row.data_json.process_steps) || readLatestInspectionStep(row.data_json.inspection_steps);
     const title = batchId ? `Batch ${batchId}` : row.template_name;
 
     return {

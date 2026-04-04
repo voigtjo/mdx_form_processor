@@ -60,6 +60,8 @@ Teilupdates muessen alle fachlich betroffenen Bereiche gemeinsam aktualisieren:
 - Formular-Lookups bleiben auf den Formular-/Workflow-Bereich begrenzt
 - Journal- und Attachment-Aktionen aktualisieren ihr eigenes Panel und zusaetzlich nur die wirklich betroffenen Nachbarbereiche
 - Form-Saves, Submits und Lookups sollen den Nutzer im laufenden Formularbereich halten und keine unnoetigen Spruenge in tiefere Seitenbereiche ausloesen
+- lokale Formular-Teilaktionen sollen nur den fachlich passenden Formularabschnitt als Hauptfragment nachladen und sichtbare Statusleisten darueber nur gezielt OOB aktualisieren
+- die normale Arbeits-UI bleibt dabei ruhig: kurze Statuszeilen statt grosser Hinweisbloecke, keine wiederholten Metaerklaerungen, kein dauerhafter Readonly-Erklaertext
 
 ---
 
@@ -86,6 +88,19 @@ Die Flows des MVP gliedern sich in fünf Gruppen:
 3. Bearbeitungs- und Freigabeflows
 4. Integrationsflows
 5. Archivierungs- und Versionsflows
+
+Ein neuer sichtbarer Integrationsfluss ist jetzt zusaetzlich vorhanden:
+
+- API-Katalog oeffnen
+- Operationen lesen
+- Formulardaten als JSON oder CSV abrufen
+- Customers oder Products per CSV importieren
+
+Ein zweiter produktiver Dokumentfluss neben dem Handwerker-Auftrag ist jetzt ausdruecklich vorgesehen:
+
+- Produktionsdokumentation mit Batch-/Serienbezug
+- tabellarischen Produktions- oder Pruefschritten
+- produktzentriert statt kundenauftragszentriert
 
 ---
 
@@ -376,7 +391,10 @@ Ein Editor bearbeitet das Formular und speichert Zwischenstände.
 - der Workflowstatus bleibt oder wechselt gemäß Workflowregel, z. B. nach `progressed`
 - sichtbare Pflichtmarkierungen und Readonly-Zustaende bleiben am aktuellen Schritt und Submit-Gate ausgerichtet
 - lookup-vorbefuellte Felder duerfen editierbar bleiben, ohne dadurch automatisch Pflichtfelder zu werden
+- HTML-/Rich-Text-Felder muessen ihren gespeicherten Inhalt nach Save wieder im Formularkontext zeigen und spaeter readonly sauber anzeigen
+- kleine Signatur-Controls duerfen im offenen Formular signiert werden und werden nach Submit oder spaeterem readonly Status gesperrt
 - readonly Referenzen auf andere Formulare duerfen im laufenden Document sichtbar werden, wenn sie sich fachlich aus den aktuellen Formularwerten ergeben
+- Formularheader, Feldabstaende und Nebenbereiche sollen auf hohe Informationsdichte ohne visuelle Unruhe optimiert bleiben
 
 ---
 
@@ -775,7 +793,43 @@ Der User soll seine tägliche Arbeit vom Workspace aus verstehen und beginnen k�
 
 ---
 
-## 26. Nicht Bestandteil der führenden User Flows
+## 26. Flow: Qualification Record mit mehreren Beteiligten
+
+## 26.1 Ziel
+
+Ein Qualifikations- oder Nachweisdokument wird mehreren Users zugewiesen, wobei jeder Beteiligte seinen persoenlichen Stand speichert, signiert und submitted.
+
+## 26.2 Beteiligte Rolle
+
+- Owner / Verantwortlicher
+- mehrere Teilnehmende
+- spaeter im Flow ein Reviewer oder Approver
+
+## 26.3 Ausgangslage
+
+- ein `Qualification Record` ist gestartet
+- Owner und Teilnehmende sind im Document gebunden
+- der Workflow nutzt fuer `submit` einen sichtbaren `AND`-Modus
+
+## 26.4 Ablauf
+
+1. Owner oeffnet das Document und pflegt die globalen Kopfdaten
+2. Teilnehmende oeffnen dasselbe Document und sehen ihren eigenen Formularstand
+3. jeder Beteiligte speichert und signiert fuer sich
+4. ein erster Beteiligter submitted
+5. die UI zeigt kompakt, wer bereits fertig ist und wer noch offen ist
+6. erst wenn alle erforderlichen Beteiligten submitted haben, wechselt das Document nach `submitted`
+7. danach kann der zustaendige Approver freigeben oder ablehnen
+
+## 26.5 Ergebnis
+
+- mehrere Users arbeiten im normalen Produktpfad am selben Document
+- Save, Submit und Signatur bleiben pro User nachvollziehbar
+- Rollen und `AND`/`OR` werden im Live-Workflow sichtbar ausgewertet
+
+---
+
+## 27. Nicht Bestandteil der führenden User Flows
 
 Nicht Bestandteil der führenden MVP-Flows sind:
 
@@ -789,7 +843,7 @@ Nicht Bestandteil der führenden MVP-Flows sind:
 
 ---
 
-## 27. Ergebnisregel
+## 28. Ergebnisregel
 
 Die in diesem Dokument beschriebenen User Flows sind die führenden fachlichen Kernabläufe des MVP.
 

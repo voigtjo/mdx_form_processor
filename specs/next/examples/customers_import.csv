@@ -1,0 +1,3 @@
+entity_key,display_name,status,customer_number,order_number,order_status,order_created_at,service_location,city
+customer-baukontor,Baukontor Nord,active,CU-1007,KD-2026-1007,in_bearbeitung,2026-04-02T08:15:00.000Z,Lagerhalle 2 Bremen,Bremen
+customer-feldmann,Feldmann Immobilien,active,CU-1042,KD-2026-1042,offen,2026-04-01T10:20:00.000Z,Objekt A Hannover,Hannover

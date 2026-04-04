@@ -9,25 +9,56 @@ import {
 } from "../next-form/index.js";
 import { isNextFormReferenceTemplate, mapDocumentDataToNextFormValues, mergeNextFormValuesIntoDocumentData } from "../next-form/document-bridge.js";
 import { getReferenceNextFormEditState } from "../next-form/document-ui.js";
+import { sanitizeRichTextHtml } from "../next-form/rich-text.js";
+import {
+  getQualificationCurrentUserState,
+  synchronizeQualificationAssignments,
+  writeQualificationParticipantState,
+} from "../qualification/progress.js";
 
 const normalizeFieldValues = (values: Record<string, unknown>): NextFormFieldValues => {
-  return {
-    order_number: typeof values.order_number === "string" ? values.order_number : "",
-    customer: typeof values.customer === "string" ? values.customer : "",
-    service_location: typeof values.service_location === "string" ? values.service_location : "",
-    customer_master_id: typeof values.customer_master_id === "string" ? values.customer_master_id : "",
-    customer_master_status: typeof values.customer_master_status === "string" ? values.customer_master_status : "",
-    customer_order_status: typeof values.customer_order_status === "string" ? values.customer_order_status : "",
-    customer_order_created_at: typeof values.customer_order_created_at === "string" ? values.customer_order_created_at : "",
-    work_description: typeof values.work_description === "string" ? values.work_description : "",
-    material: typeof values.material === "string" ? values.material : "",
-    product_master_id: typeof values.product_master_id === "string" ? values.product_master_id : "",
-    product_master_type: typeof values.product_master_type === "string" ? values.product_master_type : "",
-    product_master_status: typeof values.product_master_status === "string" ? values.product_master_status : "",
-    labor_hours: typeof values.labor_hours === "string" ? values.labor_hours : "",
-    travel_hours: typeof values.travel_hours === "string" ? values.travel_hours : "",
-    break_minutes: typeof values.break_minutes === "string" ? values.break_minutes : "",
+  const normalized: NextFormFieldValues = {};
+
+  const candidateValues = {
+    order_number: values.order_number,
+    customer: values.customer,
+    service_location: values.service_location,
+    customer_master_id: values.customer_master_id,
+    customer_master_status: values.customer_master_status,
+    customer_order_status: values.customer_order_status,
+    customer_order_created_at: values.customer_order_created_at,
+    work_description: typeof values.work_description === "string" ? sanitizeRichTextHtml(values.work_description) : values.work_description,
+    material: values.material,
+    product_master_id: values.product_master_id,
+    product_master_type: values.product_master_type,
+    product_master_status: values.product_master_status,
+    work_signature: values.work_signature,
+    work_signature_at: values.work_signature_at,
+    batch_id: values.batch_id,
+    serial_number: values.serial_number,
+    product_name: values.product_name,
+    production_line: values.production_line,
+    process_steps: values.process_steps,
+    qualification_record_number: values.qualification_record_number,
+    qualification_title: values.qualification_title,
+    owner_user_id: values.owner_user_id,
+    attendee_user_ids: values.attendee_user_ids,
+    valid_until: values.valid_until,
+    qualification_result: values.qualification_result,
+    qualification_topics: values.qualification_topics,
+    approval_status: values.approval_status,
+    labor_hours: values.labor_hours,
+    travel_hours: values.travel_hours,
+    break_minutes: values.break_minutes,
   };
+
+  for (const [key, value] of Object.entries(candidateValues)) {
+    if (typeof value === "string") {
+      normalized[key] = value;
+    }
+  }
+
+  return normalized;
 };
 
 type NextFormDocumentFailureReason =
@@ -52,6 +83,7 @@ type NextFormDocumentSaveSuccess = {
   ok: true;
   documentId: string;
   savedFieldNames: string[];
+  signatureApplied: boolean;
 };
 
 export type RunDocumentNextFormActionResult = NextFormDocumentActionSuccess | NextFormDocumentFailure;
@@ -125,8 +157,10 @@ export const runDocumentNextFormActionForUser = async (input: {
     };
   }
 
-  const baseFieldValues = {
-    ...mapDocumentDataToNextFormValues(visible.context.templateKey, visible.context.dataJson),
+  const baseFieldValues: NextFormFieldValues = {
+    ...mapDocumentDataToNextFormValues(visible.context.templateKey, visible.context.dataJson, {
+      currentUserId: input.userId,
+    }),
     ...normalizeFieldValues(input.submittedValues),
   };
 
@@ -150,6 +184,7 @@ export const runDocumentNextFormActionForUser = async (input: {
 export const saveDocumentNextFormValuesForUser = async (input: {
   documentId: string;
   userId: string;
+  activeUserDisplayName: string;
   submittedValues: Record<string, unknown>;
 }): Promise<SaveDocumentNextFormResult> => {
   const visible = await getVisibleNextFormDocumentContext(input.documentId, input.userId);
@@ -172,11 +207,52 @@ export const saveDocumentNextFormValuesForUser = async (input: {
     };
   }
 
-  const fieldValues = {
-    ...mapDocumentDataToNextFormValues(visible.context.templateKey, visible.context.dataJson),
+  const signatureRequested = typeof input.submittedValues.work_signature_requested === "string"
+    ? input.submittedValues.work_signature_requested === "sign"
+    : false;
+
+  const fieldValues: NextFormFieldValues = {
+    ...mapDocumentDataToNextFormValues(visible.context.templateKey, visible.context.dataJson, {
+      currentUserId: input.userId,
+    }),
     ...normalizeFieldValues(input.submittedValues),
   };
-  const mergedDocumentData = mergeNextFormValuesIntoDocumentData(visible.context.templateKey, visible.context.dataJson, fieldValues);
+  const effectiveFieldValues: NextFormFieldValues = signatureRequested
+    ? {
+        ...fieldValues,
+        work_signature: input.activeUserDisplayName,
+        work_signature_at: new Date().toISOString(),
+      }
+    : fieldValues;
+  const mergedDocumentDataBase = mergeNextFormValuesIntoDocumentData(
+    visible.context.templateKey,
+    visible.context.dataJson,
+    effectiveFieldValues,
+    { currentUserId: input.userId },
+  );
+  const mergedDocumentData = visible.context.templateKey === "qualification-record"
+    ? writeQualificationParticipantState({
+        data: mergedDocumentDataBase,
+        userId: input.userId,
+        patch: {
+          savedAt: new Date().toISOString(),
+          ...(signatureRequested
+            ? {
+                signature: input.activeUserDisplayName,
+                signatureAt: effectiveFieldValues.work_signature_at,
+              }
+            : {}),
+          fieldValues: {
+            ...(getQualificationCurrentUserState(mergedDocumentDataBase, input.userId).fieldValues ?? {}),
+            qualification_result: effectiveFieldValues.qualification_result ?? "",
+            qualification_topics: (effectiveFieldValues.qualification_topics ?? "")
+              .split(",")
+              .map((entry) => entry.trim())
+              .filter((entry) => entry.length > 0),
+          },
+        },
+      })
+    : mergedDocumentDataBase;
 
   return withDbTransaction(async (client) => {
     await client.query(
@@ -188,6 +264,17 @@ export const saveDocumentNextFormValuesForUser = async (input: {
       `,
       [input.documentId, JSON.stringify(mergedDocumentData)],
     );
+
+    if (visible.context.templateKey === "qualification-record") {
+      await synchronizeQualificationAssignments({
+        client,
+        documentId: input.documentId,
+        actorUserId: input.userId,
+        documentTitle: visible.context.title,
+        documentStatus: visible.context.status,
+        data: mergedDocumentData,
+      });
+    }
 
     await client.query(
       `
@@ -213,6 +300,19 @@ export const saveDocumentNextFormValuesForUser = async (input: {
             "product_master_id",
             "product_master_type",
             "product_master_status",
+            "qualification_record_number",
+            "qualification_title",
+            "owner_user_id",
+            "attendee_user_ids",
+            "valid_until",
+            "batch_id",
+            "serial_number",
+            "product_name",
+            "production_line",
+            "process_steps",
+            "approval_status",
+            "work_signature",
+            "work_signature_at",
             "labor_hours",
             "travel_hours",
             "break_minutes",
@@ -230,6 +330,19 @@ export const saveDocumentNextFormValuesForUser = async (input: {
             product_master_id: mergedDocumentData.product_master_id,
             product_master_type: mergedDocumentData.product_master_type,
             product_master_status: mergedDocumentData.product_master_status,
+            qualification_record_number: mergedDocumentData.qualification_record_number,
+            qualification_title: mergedDocumentData.qualification_title,
+            owner_user_id: mergedDocumentData.owner_user_id,
+            attendee_user_ids: mergedDocumentData.attendee_user_ids,
+            valid_until: mergedDocumentData.valid_until,
+            batch_id: mergedDocumentData.batch_id,
+            serial_number: mergedDocumentData.serial_number,
+            product_name: mergedDocumentData.product_name,
+            production_line: mergedDocumentData.production_line,
+            process_steps: mergedDocumentData.process_steps,
+            approval_status: mergedDocumentData.approval_status,
+            work_signature: effectiveFieldValues.work_signature,
+            work_signature_at: effectiveFieldValues.work_signature_at,
             labor_hours: mergedDocumentData.labor_hours,
             travel_hours: mergedDocumentData.travel_hours,
             break_minutes: mergedDocumentData.break_minutes,
@@ -254,10 +367,24 @@ export const saveDocumentNextFormValuesForUser = async (input: {
         "product_master_id",
         "product_master_type",
         "product_master_status",
+        "qualification_record_number",
+        "qualification_title",
+        "owner_user_id",
+        "attendee_user_ids",
+        "valid_until",
+        "batch_id",
+        "serial_number",
+        "product_name",
+        "production_line",
+        "process_steps",
+        "approval_status",
+        "work_signature",
+        "work_signature_at",
         "labor_hours",
         "travel_hours",
         "break_minutes",
       ],
+      signatureApplied: signatureRequested,
     };
   });
 };

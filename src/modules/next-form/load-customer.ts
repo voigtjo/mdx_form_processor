@@ -1,4 +1,4 @@
-import { env } from "../../config/env.js";
+import { findActiveReferenceEntityByDataField } from "../entities/read.js";
 import type { NextFormElement } from "./types.js";
 
 export type NextFormFieldValues = Record<string, string>;
@@ -10,52 +10,7 @@ export type NextFormActionState = {
   actionName: string;
 };
 
-type ErpCustomer = {
-  id: string;
-  name: string;
-  valid: boolean;
-};
-
-type ErpCustomerOrder = {
-  id: string;
-  customer_id: string;
-  order_number: string;
-  status: string;
-  created_at: string;
-};
-
 const normalizeText = (value: string | undefined): string => value?.trim() ?? "";
-
-const fetchJson = async <T>(url: string): Promise<T> => {
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`ERP-SIM antwortete mit ${response.status}.`);
-  }
-
-  return (await response.json()) as T;
-};
-
-const lookupCustomerByOrderNumber = async (orderNumber: string): Promise<{ customer: ErpCustomer; order: ErpCustomerOrder } | undefined> => {
-  const customersResponse = await fetchJson<{ items: ErpCustomer[] }>(`${env.erpSimBaseUrl}/api/customers?valid=true`);
-  const normalizedOrderNumber = normalizeText(orderNumber).toUpperCase();
-
-  const customerOrders = await Promise.all(
-    customersResponse.items.map(async (customer) => {
-      const ordersResponse = await fetchJson<{ items: ErpCustomerOrder[] }>(
-        `${env.erpSimBaseUrl}/api/customer-orders?customer_id=${encodeURIComponent(customer.id)}`,
-      );
-
-      return {
-        customer,
-        order: ordersResponse.items.find((item) => normalizeText(item.order_number).toUpperCase() === normalizedOrderNumber),
-      };
-    }),
-  );
-
-  const matched = customerOrders.find((entry) => entry.order);
-  return matched?.order ? { customer: matched.customer, order: matched.order } : undefined;
-};
 
 export const executeLoadCustomerAction = async (input: {
   action: NextFormElement;
@@ -88,59 +43,52 @@ export const executeLoadCustomerAction = async (input: {
     };
   }
 
-  try {
-    const matched = await lookupCustomerByOrderNumber(orderNumber);
+  const matchedCustomer = await findActiveReferenceEntityByDataField({
+    entityType: "customer",
+    field: "order_number",
+    value: orderNumber,
+  });
 
-    if (!matched) {
-      return {
-        fieldValues: input.fieldValues,
-        actionState: {
-          type: "info",
-          title: "Kein ERP-SIM-Treffer",
-          message: `Im laufenden ERP-SIM wurde kein Auftrag mit der Nummer ${orderNumber} gefunden.`,
-          actionName: input.action.name,
-        },
-      };
-    }
-
-    const nextFieldValues: NextFormFieldValues = { ...input.fieldValues };
-
-    for (const bindTarget of input.action.bind ?? []) {
-      if (bindTarget === "customer") {
-        nextFieldValues.customer = matched.customer.name;
-        continue;
-      }
-
-      if (bindTarget === "service_location") {
-        nextFieldValues.service_location = "Nicht im ERP-SIM vorhanden";
-      }
-    }
-
-    nextFieldValues.customer_master_id = matched.customer.id;
-    nextFieldValues.customer_master_status = matched.customer.valid ? "Aktiv" : "Inaktiv";
-    nextFieldValues.customer_order_status = matched.order.status;
-    nextFieldValues.customer_order_created_at = matched.order.created_at;
-
-    return {
-      fieldValues: nextFieldValues,
-      actionState: {
-        type: "info",
-        title: "Kundendaten geladen",
-        message: `Kundendaten fuer ${orderNumber} geladen: ${matched.customer.name}.`,
-        actionName: input.action.name,
-      },
-    };
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Der ERP-SIM-Call ist fehlgeschlagen.";
-
+  if (!matchedCustomer) {
     return {
       fieldValues: input.fieldValues,
       actionState: {
-        type: "error",
-        title: "ERP-SIM nicht erreichbar",
-        message,
+        type: "info",
+        title: "Kein Kundentreffer",
+        message: `In den internen Stammdaten wurde kein Kundenauftrag mit der Nummer ${orderNumber} gefunden.`,
         actionName: input.action.name,
       },
     };
   }
+
+  const nextFieldValues: NextFormFieldValues = { ...input.fieldValues };
+
+  for (const bindTarget of input.action.bind ?? []) {
+    if (bindTarget === "customer") {
+      nextFieldValues.customer = matchedCustomer.displayName;
+      continue;
+    }
+
+    if (bindTarget === "service_location") {
+      nextFieldValues.service_location =
+        typeof matchedCustomer.dataJson.service_location === "string" ? matchedCustomer.dataJson.service_location : "";
+    }
+  }
+
+  nextFieldValues.customer_master_id = matchedCustomer.entityKey;
+  nextFieldValues.customer_master_status = matchedCustomer.status === "active" ? "Aktiv" : "Inaktiv";
+  nextFieldValues.customer_order_status =
+    typeof matchedCustomer.dataJson.order_status === "string" ? matchedCustomer.dataJson.order_status : "offen";
+  nextFieldValues.customer_order_created_at =
+    typeof matchedCustomer.dataJson.order_created_at === "string" ? matchedCustomer.dataJson.order_created_at : "";
+
+  return {
+    fieldValues: nextFieldValues,
+    actionState: {
+      type: "info",
+      title: "Kundendaten geladen",
+      message: `Kundendaten fuer ${orderNumber} geladen: ${matchedCustomer.displayName}.`,
+      actionName: input.action.name,
+    },
+  };
 };

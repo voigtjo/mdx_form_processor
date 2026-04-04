@@ -1,0 +1,4 @@
+entity_key,display_name,status,product_type,match_terms
+product-heating-maintenance-kit,Wartungsset Heizung,active,Wartungsset,"wartung heizung filter service"
+product-seal-kit,Dichtungssatz Ventil,active,Ersatzteil,"ventil dichtung montage service"
+product-control-box-s2,Steuerkasten Serie S2,active,Baugruppe,"produktion steuerkasten serie s2 batch"

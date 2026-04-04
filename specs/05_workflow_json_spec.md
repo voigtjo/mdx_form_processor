@@ -2,18 +2,18 @@
 
 ## 1. Ziel dieses Dokuments
 
-Dieses Dokument definiert das führende JSON-Format für Workflow Templates im MVP.
+Dieses Dokument definiert das technische JSON-Format fuer Workflow Templates im MVP.
 
 Es legt verbindlich fest:
 
-- welche Aufgaben das Workflow-JSON übernimmt
-- welche Aufgaben das Workflow-JSON nicht übernimmt
+- welche Aufgaben das Workflow-JSON uebernimmt
+- welche Aufgaben das Workflow-JSON nicht uebernimmt
 - wie Status, Actions, Rollen, Feldregeln und Hooks beschrieben werden
 - wie Workflow und Formular zusammenwirken
 - wie Workflow und TypeScript-Operationen zusammenwirken
 - wie Workflow Templates in Konfigurations- und Admin-Bereichen gepflegt werden
 
-Dieses Dokument ist die führende Wahrheit für die Workflow-Beschreibung.
+Dieses Dokument ist die fuehrende Wahrheit fuer das technische Speicher- und Editierformat des Workflows.
 
 ---
 
@@ -21,11 +21,24 @@ Dieses Dokument ist die führende Wahrheit für die Workflow-Beschreibung.
 
 Für das MVP gilt:
 
-- **Workflows werden in JSON beschrieben**
+- **Workflows werden technisch in JSON beschrieben**
 - **Form Templates werden in MDX beschrieben**
 - **Integrationen und Operationen werden in TypeScript beschrieben**
 
-Das Workflow-JSON ist das führende menschenlesbare Format für:
+Fachlich fuehrend ist das einfache Transition-Modell eines Workflows:
+
+- Status
+- Actions
+- `from`
+- `to`
+- Rollen
+- Modus `OR` / `AND`
+- optionale API
+- optionale Condition
+
+Das Workflow-JSON ist dafuer das technische Speicher- und Editierformat.
+
+Das Workflow-JSON ist damit das fuehrende technische Format fuer:
 
 - Statusmodell
 - Initialstatus
@@ -36,7 +49,11 @@ Das Workflow-JSON ist das führende menschenlesbare Format für:
 - Mehrfach-Editor-/Approver-Verhalten
 - Hooks mit `operationRef`
 
-Das Workflow-JSON ist **nicht** das führende Format für:
+Das Workflow-JSON ist **nicht** das fuehrende Denkmodell fuer:
+
+- die fachliche Leserichtung eines Workflows
+
+Das Workflow-JSON ist ausserdem **nicht** das fuehrende Format fuer:
 
 - Formularlayout
 - Felddefinitionen im Detail
@@ -44,6 +61,21 @@ Das Workflow-JSON ist **nicht** das führende Format für:
 - technische Implementierung von TypeScript-Operationen
 - Authentifizierungsimplementierung
 - konkrete UI-Komponenten
+
+## 2.1 Fachliches Primaermodell
+
+Die fuehrende fachliche Leserichtung fuer Workflows ist:
+
+- Action
+- From
+- To
+- Roles
+- Mode
+- optionale API
+- optionale Condition
+
+Konfigurations- und Review-UI muessen Workflows primär in dieser Leserichtung zeigen.
+JSON bleibt die technische Quelle, nicht die bessere fachliche Erklaerung.
 
 ---
 

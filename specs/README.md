@@ -1,182 +1,133 @@
-# Digitale Dokumentation und Nachweise — MVP Spezifikationsprojekt
+# Schlanke Formular-Prozess-Plattform — Spezifikationspaket
 
-## Ziel dieses Verzeichnisses
+## Zweck dieses Verzeichnisses
 
-Dieses Verzeichnis ist die führende Produktspezifikation für das MVP.
+Dieses Verzeichnis ist die fuehrende Produktspezifikation fuer das aktuelle Zwischenziel:
 
-Es definiert:
+- eine schlanke Formular-Prozess-Plattform
+- mit einer ersten konkreten kommerziellen Ziel-App
+- fuer digitale Dokumentation und Nachweise in der Handwerkerwelt
 
-- Produktziel und Scope
-- Fachbegriffe
-- Domain Model
-- Form-Modell
-- Workflow-Modell
-- Operations-/Integrationsmodell
-- Rechte und Sichtbarkeit
-- Versionierung
-- Navigation
-- Screens
-- Wireframes
-- User Flows
-- Referenzdaten
-- Validierungsregeln
-- Nicht-Ziele und Zukunftsthemen
-- Seed-/Rebuild-Zielbestand
-- konkrete Beispieldateien
+Die Plattform wird bewusst nicht als allgemeiner Builder beschrieben.
+Sie wird nur so weit modelliert, wie es fuer die Handwerker-App und die naechsten nahen Testwelten sinnvoll ist.
 
-Diese Spezifikation ist die führende Wahrheit für die spätere Umsetzung.
+## Aktuelles Zwischenziel
 
----
+Der naechste Meilenstein ist:
 
-## Status
+- **plattformfaehig fuer die Handwerker-App**
 
-Für dieses Projekt gilt:
+Dafuer muessen drei Kernbausteine gemeinsam tragfaehig sein:
 
-- **Keine Implementierung vor Review und Freigabe dieser Spezifikation**
-- Der aktuelle Code ist **nicht** die führende Wahrheit
-- Führend sind die Spezifikationsdateien in diesem Paket
+1. **Forms**
+2. **Workflows**
+3. **TypeScript APIs**
 
----
+Diese drei Bausteine werden spaeter entlang echter Produktfaelle nachgeschaerft.
 
-## Führende Definitionsformate
+## Produktlogik des Zwischenziels
 
-Für das MVP gilt genau eine führende Wahrheit pro Bereich:
+Die Plattform stellt den Rahmen.
+Die erste App liefert die produktive Zielschärfe.
 
-- **Form = MDX**
-- **Workflow = JSON**
-- **Operation / Integration = TypeScript**
-- **Persistierte Laufzeitdaten = Postgres + definierte JSON-Felder**
+### Plattform-Kern
 
-Es dürfen keine konkurrierenden Führungsmodelle entstehen.
+- versionierte Formulare
+- versionierte Workflows
+- TypeScript-APIs fuer Lookup, Actions, Hooks, Import und Export
+- Dokumentstart aus publizierten Template-/Workflow-Staenden
+- laufende Dokumente auf fester Version
+- Journal, Attachments, History
+- einfache Rechte- und Zuweisungslogik
 
----
+### Erste Ziel-App
 
-## Führende Technologieentscheidungen
+- digitale Auftragsdokumentation und Nachweise fuer Handwerker
+- Kunde, Auftrag, Material/Produkt, Einsatzort, Nachweise, Freigabe
 
-- Datenbank: Postgres
-- Backend: Node.js
-- Web-Framework: Fastify
-- Sprache: TypeScript
-- Server Rendering: EJS
-- UI-Stil: Material Design
-- Startmodus: mono-tenant, ohne Authentifizierung, mit User-Selektion
+### Spaetere, aber vorbereitete Testwelten
 
----
+- Produktionsdokumentation mit Batch oder Seriennummer
+- Qualifikations- und Nachweisformulare mit Mehrfachzuweisung, Fragen und Signatur
 
-## Struktur der Spezifikation
+## Fuehrende Dokumentgruppen
 
-### Kernspezifikation
+### Produktnahe Kernspezifikation unter `specs/`
+
+Fuehrend bleiben insbesondere:
 
 1. `01_mvp_scope.md`
 2. `02_domain_glossary.md`
 3. `03_domain_model.md`
-4. `04_form_mdx_spec.md`
-5. `05_workflow_json_spec.md`
-6. `06_operations_spec.md`
-7. `07_permissions_visibility_spec.md`
-8. `08_versioning_lifecycle_spec.md`
-9. `09_navigation_information_architecture.md`
-10. `10_screen_spec_workspace.md`
-11. `11_screen_spec_templates.md`
-12. `12_screen_spec_workflows.md`
-13. `13_screen_spec_documents.md`
-14. `14_screen_spec_admin.md`
-15. `15_ascii_wireframes.md`
-16. `16_user_flows.md`
-17. `17_reference_data_spec.md`
-18. `18_validation_and_rules.md`
-19. `19_non_goals_and_future_scope.md`
-20. `20_sample_data_seed.md`
+4. `05_workflow_json_spec.md`
+5. `06_operations_spec.md`
+6. `07_permissions_visibility_spec.md`
+7. `08_versioning_lifecycle_spec.md`
+8. `09_navigation_information_architecture.md`
+9. `10_screen_spec_workspace.md`
+10. `11_screen_spec_templates.md`
+11. `12_screen_spec_workflows.md`
+12. `13_screen_spec_documents.md`
+13. `14_screen_spec_admin.md`
+14. `16_user_flows.md`
+15. `17_reference_data_spec.md`
+16. `18_validation_and_rules.md`
+17. `19_non_goals_and_future_scope.md`
+18. `20_sample_data_seed.md`
+19. `25_screen_spec_apis.md`
 
-### Beispieldateien
+### Ziel- und Ausbauspezifikation unter `specs/next/`
 
-21. `21_example_form_template.mdx`
-22. `22_example_workflow_template.json`
-23. `23_example_operation_customer_order.ts`
+Fuehrend fuer die naechste Plattformphase sind:
 
----
+- `01_form_model_target_spec.md`
+- `02_api_action_binding_target_spec.md`
+- `07_implementation_roadmap.md`
+- `08_platform_target_for_craftsman_app.md`
+- `09_controls_catalog_target_spec.md`
+- `10_template_grid_and_data_exchange_target_spec.md`
+- `11_reference_and_related_records_target_spec.md`
+- `12_test_strategy_target_spec.md`
 
-## Lesereihenfolge
+### Hintergrund- und Uebergangsdokumente
 
-Empfohlene Review-Reihenfolge:
+Die folgenden Dokumente bleiben nuetzlich, sind aber nicht mehr der fuehrende Produktweg:
 
-1. Scope und Begriffe
-2. Domain Model
-3. Form / Workflow / Operations
-4. Rechte / Versionierung
-5. Navigation / Screens / Wireframes
-6. User Flows
-7. Referenzdaten / Validation / Non-Goals / Seed
-8. Beispieldateien
+- `04_form_mdx_spec.md`
+- `15_ascii_wireframes.md`
+- `21_example_form_template.mdx`
+- `22_example_workflow_template.json`
+- `23_example_operation_customer_order.ts`
+- `specs/next/05_reference_example_craftsman_order_spec.md`
+- `specs/next/06_transition_migration_target_spec.md`
 
-Praktisch bedeutet das:
+Sie dienen als Kontext, Beispiel oder Historie, nicht als primaere Steuerung des naechsten Plattformschritts.
 
-- zuerst `01` bis `08`
-- dann `09` bis `15`
-- dann `16` bis `20`
-- danach `21` bis `23`
+## Leitlinien fuer neue Spezifikationen
 
----
+Neue Specs sollen:
 
-## Bedeutung der Beispieldateien
+- produktnah bleiben
+- klare Modellgrenzen ziehen
+- keine doppelte Alt-/Neu-Erzaehlung mitfuehren
+- Preview- oder Umbaupfade nicht als Hauptproduktweg behandeln
+- direkte Ableitung fuer kleine Implementierungsschritte ermoeglichen
 
-Die Beispieldateien sind keine zweite Spezifikation.
+## Nicht das Ziel dieses Pakets
 
-Sie dienen dazu:
+Dieses Spezifikationspaket beschreibt nicht:
 
-- die führenden Modelle konkret zu illustrieren
-- Codex später eine eindeutige Richtung zu geben
-- Form, Workflow und Operation an einem konsistenten Beispiel zu zeigen
-
-Führend bleiben trotzdem die eigentlichen Spezifikationsdateien `01` bis `20`.
-
----
-
-## Wichtige Produktgrenzen
-
-Das MVP ist:
-
-- eine fokussierte App für digitale Dokumentation und Nachweise
-- dokumentzentriert
-- workflowzentriert
-- auf produktive Nutzbarkeit ausgerichtet
-- anschlussfähig für Brown-field-Umgebungen
-
-Das MVP ist nicht:
-
-- eine generische Low-Code-Plattform
-- eine Builder-zentrierte Plattform
-- ein allgemeines DMS
-- ein separater Integration-Service
-- eine Multi-Tenant-Enterprise-Plattform
-
----
-
-## Leitregel für die spätere Umsetzung
-
-Bei jeder späteren Umsetzung gilt:
-
-1. Erst Spezifikation prüfen
-2. Dann Implementierung ableiten
-3. Keine stillen Architektur- oder UI-Abweichungen
-4. Keine Rückkehr zu konkurrierenden Modellen
-5. Neue Abweichungen nur nach Anpassung der Spezifikation
-
----
-
-## Leitregel für Codex
-
-Wenn Codex später auf Basis dieses Pakets arbeitet, gilt:
-
-- nicht vom aktuellen Altzustand der App ausgehen
-- nicht implizit Legacy-Strukturen fortführen
-- die Spezifikation ist führend
-- die Beispieldateien konkretisieren die Spezifikation, ersetzen sie aber nicht
-
----
+- eine allgemeine Low-Code-Plattform
+- einen visuellen Builder als Produktkern
+- eine frei modellierbare Meta-Plattform fuer beliebige Domänen
+- eine voll ausgebaute Integrations- oder Testplattform in dieser Phase
 
 ## Ergebnisregel
 
-Dieses README ist der Einstieg in die führende MVP-Spezifikation.
+Die fuehrende Leserichtung ist jetzt:
 
-Die Dateien in diesem Paket bilden zusammen die verbindliche Grundlage für Review, Planung, Seed-Definition und spätere Umsetzung.
+1. Plattform-Zwischenziel verstehen
+2. Kernbausteine Forms / Workflows / TypeScript APIs verstehen
+3. Handwerker-App als erste Ziel-App verstehen
+4. naechste Plattformluecken aus `specs/next/` schliessen
+5. erst danach Implementierung ableiten

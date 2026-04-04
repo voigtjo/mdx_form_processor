@@ -1,5 +1,5 @@
 ---
-title: Auftragsdokumentation fuer Handwerker
+title: Kundenauftrag fuer Serviceeinsatz
 key: craftsman-order
 version: 1
 ---
@@ -16,10 +16,11 @@ version: 1
 
 ## Leistung
 
-- Taetigkeitsbeschreibung: textarea(work_description, required)
+- Taetigkeitsbeschreibung: html-editor(work_description, required)
 - Material: textarea(material) | Materialvorschlag holen: lookup(suggest_material, ref="products.suggest", args="work_description", bind="material")
 - Arbeitszeit (Std.): number(labor_hours) | Fahrtzeit (Std.): number(travel_hours) | Pause (Min.): number(break_minutes)
 
 ## Freigabe
 
 - Status / Freigabe: select(approval_status, options="offen,pruefung,freigegeben")
+- Signatur: signature(work_signature)

@@ -1,606 +1,87 @@
-# 13 — Screen Specification: Documents
+# 13 — Screen Spec Documents
 
-## 1. Ziel dieses Dokuments
+## Ziel
 
-Dieses Dokument definiert die führende Spezifikation für den Bereich **Documents** im MVP.
+Die Document-UI ist formularzentriert und bildet im normalen Produktpfad drei Familien ab:
 
-Es legt verbindlich fest:
+- Kundenauftrag
+- Produktionsdokumentation
+- Qualifikationsnachweis
 
-- welche Screens der Documents-Bereich besitzt
-- wie Documents gefunden, gefiltert, geöffnet und bearbeitet werden
-- welche Informationen im Document Detail sichtbar sind
-- wie Work Summary, Formular, Attachments, Journal, History und Actions zusammenwirken
-- wie sich Documents von Templates, Workflows und Admin-Flächen abgrenzen
-- welche Informationen standardmäßig sichtbar sind
-- welche Informationen nicht Teil der normalen Arbeits-UI sind
+## Grundstruktur
 
-Dieses Dokument ist die führende Wahrheit für den Documents-Bereich.
+Die Seite besteht kompakt aus:
 
----
+1. eingeklapptem Dokumentheader
+2. kompakter Assignment-/Task-Sicht
+3. Formularcontainer als HTMX-Hauptkomponente
+4. History, Journal und Attachments als platzsparende Nebenbereiche
 
-## 2. Rolle des Documents-Bereichs im Produkt
+## Dokumentheader
 
-Der Bereich Documents ist die führende **Arbeits-UI** des MVP.
+Der Header zeigt nur einmal klar:
 
-Er dient dazu:
+- Formular / Template mit Version
+- Workflow mit Version
+- aktuellen Status
+- nächsten Schritt für den aktuellen User
 
-- Documents zu finden
-- Documents zu filtern
-- Documents zu öffnen
-- Documents zu bearbeiten
-- Workflow Actions auszuführen
-- Form Actions auszuführen
-- Attachments zu verwalten
-- Journaldaten zu erfassen
-- History und Nachvollziehbarkeit einzusehen
+## Formularbereich
 
-Documents ist **nicht**:
-- Konfigurations-UI
-- Template-Editor
-- Workflow-Editor
-- Admin-UI
-- technische Debug-Oberfläche
+Der Formularbereich ist der führende Arbeitsraum.
 
----
+Teilaktionen wie:
 
-## 3. Führende Screens im Documents-Bereich
+- Kundendaten laden
+- Produktvorschlag holen
+- Speichern
+- Signieren
 
-Der Documents-Bereich besteht im MVP aus genau diesen Screens:
+laufen lokal im Formularcontainer und halten die Position im Lesefluss.
 
-1. Documents List
-2. Document Detail
+## Kundenauftrag
 
-Diese zwei Screens sind führend.
+Kundenauftrag zeigt im normalen Pfad:
 
----
+- Auftragsnummer
+- internen Customer-Lookup
+- Einsatzort
+- Rich-Text-Beschreibung
+- internen Product-Vorschlag
+- readonly Customer-/Product-Stammdaten
 
-## 4. Documents List
+Keine ERP-SIM-Abhängigkeit ist Teil der führenden Produkt-UI.
 
-## 4.1 Zweck
+## Produktionsdokumentation
 
-Die Documents List zeigt sichtbare Documents im aktuellen Arbeitskontext.
+Produktionsdokumentation zeigt:
 
-Sie dient dazu:
+- Batch-ID
+- Seriennummer
+- Produkt
+- Produktionslinie
+- `grid` für Produktions- und Prüfschritte
 
-- Documents zu finden
-- Documents nach Status oder Template zu filtern
-- Documents gezielt zu öffnen
-- laufende Arbeit und offene Vorgänge zu überblicken
+Der Grid ist im offenen Zustand editierbar und im readonly Zustand als kompakte Tabelle lesbar.
 
-## 4.2 Varianten der Documents List
+## Qualifikationsnachweis
 
-Im MVP gibt es zwei führende Varianten:
+Qualifikationsnachweis zeigt:
 
-- **My Documents**
-- **Documents by Template**
+- Owner per `user-select`
+- Teilnehmende per `user-multiselect`
+- Fragen per `radio-group` und `checkbox-group`
+- per-User Save/Submit/Signatur
+- kompakte Beteiligten-/Fortschrittssicht
 
-## 4.3 Dokumentstart
+## Readonly / Pflicht
 
-Der normale Dokumentstart erfolgt aus startbaren Template-Staenden.
+- Pflicht bleibt nur über `*` sichtbar
+- readonly erklärt sich über Darstellung, nicht über Hilfstexte
+- fehlende Pflichtwerte werden nicht breit ausgeschrieben
 
-Startbar sind:
+## Nicht Ziel
 
-- publizierte Templates
-- nicht archivierte Templates
-- nur zusammen mit einer publizierten Workflow-Version
-
-Ein gestartetes Document wird danach fest an genau diese Template- und Workflow-Version gebunden.
-
-### My Documents
-Zeigt alle für den aktuellen User sichtbaren und relevanten Documents.
-
-### Documents by Template
-Zeigt Documents eines konkreten Templates innerhalb des Template-Kontexts.
-
----
-
-## 5. Filter und Suche in Documents List
-
-## 5.1 Pflichtfilter
-
-Die Documents List besitzt mindestens:
-
-- Statusfilter
-- Templatefilter, sofern nicht bereits im Template-Kontext
-- offen/archiviert
-- Freitextsuche
-
-## 5.2 Standardfilter
-
-Standardmäßig werden gezeigt:
-
-- sichtbare Documents
-- nicht archivierte Documents
-
-Archivierte Documents werden erst sichtbar, wenn ein Archivfilter aktiv ist.
-
----
-
-## 6. Sichtbare Spalten in Documents List
-
-Mindestens sichtbar:
-
-- fachlich verständliche Dokumentanzeige
-- Template
-- Status
-- Assigned Users oder rollennahe Zuordnung, soweit fachlich sinnvoll
-- Updated At
-- definierte Tabellenfelder des Templates, falls im Kontext sinnvoll
-- Open-Aktion
-
-## 6.1 Dokumentanzeige
-
-Es gibt kein führendes Business-Key-Konzept.
-
-Die sichtbare Dokumentanzeige wird aus fachlich geeigneten Feldern gebildet, insbesondere aus:
-- Document Keys
-- Template Keys
-- weiteren anzeigerelevanten Feldern
-
-Diese Anzeige ist eine UI-Darstellung, kein eigenes Domänenobjekt.
-
----
-
-## 7. Zweck der Documents List
-
-Die Documents List ist ein Arbeitsfinder.
-
-Sie dient nicht dazu:
-
-- Templates zu konfigurieren
-- Workflows zu konfigurieren
-- rohe JSON-Daten zu zeigen
-- technische Integrationszustände zu debuggen
-
----
-
-## 8. Document Detail
-
-## 8.1 Zweck
-
-Document Detail ist die zentrale Arbeitsseite für ein einzelnes Document.
-
-Hier findet die fachliche Arbeit am konkreten Vorgang statt.
-
-Document Detail dient dazu:
-
-- den aktuellen Arbeitskontext zu verstehen
-- das Formular zu bearbeiten
-- Workflow Actions auszuführen
-- Form Actions auszuführen
-- Attachments zu verwalten
-- Journaldaten zu pflegen
-- History/Audit zu prüfen
-
-Document Detail ist die führende **Arbeitsfläche** des MVP.
-
----
-
-## 9. Hauptbereiche des Document Detail
-
-Document Detail besitzt im MVP mindestens diese Hauptbereiche:
-
-1. Header
-2. Work Summary
-3. Form
-4. Attachments
-5. Journal
-6. History
-7. Assignment-/Task-Information
-
-Diese Bereiche sind führend.
-
----
-
-## 10. Header des Document Detail
-
-## 10.1 Zweck
-
-Der Header zeigt den aktuellen Vorgang in kompakter Form und stellt die relevanten Actions bereit.
-
-## 10.2 Sichtbare Inhalte im Header
-
-Mindestens sichtbar:
-
-- fachlich verständliche Dokumentanzeige
-- aktueller Status
-- primäre Workflow Actions
-- relevante Form Actions, wenn sie in diesem Kontext sichtbar sind
-
-## 10.3 Regeln für Actions im Header
-
-Im Header werden nur Actions angezeigt, die:
-- für den aktuellen User sichtbar sind
-- im aktuellen Status zulässig sind
-- fachlich relevant sind
-
-Nicht sichtbare oder nicht zulässige Actions erscheinen nicht als primäre Aktion.
-
----
-
-## 11. Work Summary
-
-## 11.1 Zweck
-
-Die Work Summary erklärt dem User auf einen Blick, woran er gerade arbeitet.
-
-## 11.2 Sichtbare Inhalte
-
-Mindestens sichtbar:
-
-- Template-Name
-- Workflow-Name
-- Template-Version
-- Workflow-Version
-- aktueller Status
-- zugewiesene Editors
-- zugewiesene Approvers
-- optional nächster sinnvoller Handlungshinweis
-
-## 11.3 Ziel
-
-Die Work Summary ist die fachliche Einordnung des Dokuments.
-Sie ersetzt keine Detail-History und kein Formular, aber sie macht den Vorgang verständlich.
-
----
-
-## 12. Form-Bereich
-
-## 12.1 Zweck
-
-Der Form-Bereich zeigt das aus dem Template gerenderte Formular des Documents.
-
-## 12.2 Regeln
-
-- das Formular wird aus der gebundenen Template-Version gerendert
-- Felder sind entsprechend Workflowstatus und Rechtemodell editierbar oder readonly
-- sichtbare Pflichtmarkierungen muessen zum aktuellen Submit-Gate passen
-- nur Felder, die fuer den aktuellen Schritt wirklich erforderlich sind, tragen `*`
-- Lookup-Eingaben, Lookup-Ergebnisse, vorbefuellbare Felder und reine readonly Statusfelder sollen im Rendering klar unterscheidbar sein
-- kleine Lookup-Aktionen sitzen direkt am fachlich passenden Feldkontext
-- readonly Stammdaten duerfen im Formularkontext als eigene ruhige Sektionen erscheinen, z. B. fuer Kunde und Produkt
-- erste readonly Referenzen auf andere Formulare duerfen im normalen Document-Pfad als ruhige Nebensektion erscheinen, wenn sie aus dem aktuellen Formularkontext fachlich eindeutig ableitbar sind
-- normale Nutzer sehen kein MDX
-- normale Nutzer sehen kein Template-JSON
-- normale Nutzer sehen keine technischen Konfigurationsstrukturen
-
-## 12.3 Bearbeitung
-
-Im Form-Bereich dürfen Users nur die Felder bearbeiten, die:
-- sichtbar sind
-- im aktuellen Status editierbar sind
-- für ihre Rolle zulässig sind
-- nach Rechtemodell bearbeitbar sind
-
-Readonly-Felder bleiben sichtbar, sollen aber ohne unechte Edit-Affordanzen erscheinen.
-Hilfetexte bleiben knapp und werden nur gezeigt, wenn sie fuer die aktuelle Bedienung wirklich helfen.
-Save- und Submit-Teilupdates sollen den Nutzer im relevanten Formularkontext halten und keine unnoetigen Spruenge nach unten ausloesen.
-Ein lookup-vorbefuelltes Feld darf editierbar sein und bleibt nur dann Pflichtfeld, wenn das aktuelle Submit-Gate es wirklich verlangt.
-Readonly Werte aus einem anderen Formular duerfen nur angezeigt werden; sie werden im aktuellen Formular nicht direkt bearbeitet.
-
-## 12.4 Nicht Ziel des Form-Bereichs
-
-Der Form-Bereich ist nicht:
-- eine Template-Konfigurationsfläche
-- eine Builder-Oberfläche
-- eine technische Debug-Sicht
-
----
-
-## 13. Attachments-Bereich
-
-## 13.1 Zweck
-
-Der Attachments-Bereich zeigt und verwaltet Dateien des Documents.
-
-## 13.2 Sichtbare Inhalte
-
-Mindestens sichtbar:
-
-- Upload-Aktion, sofern zulässig
-- Liste vorhandener Attachments
-- Dateiname
-- optional Dateityp, Größe, Upload-Zeit
-- kompakte Summary mit letztem sichtbaren Attachment und Zähler
-- klare Verfügbarkeitsaussage, ob Upload im aktuellen Kontext erlaubt ist
-
-## 13.3 Regeln
-
-- Attachments gehören zum Document
-- Attachments werden nicht als normale Formularfelder gespeichert
-- der Bereich ist arbeitsrelevant und Teil der Standard-UI
-- Upload ist nur mit aktiver Editor-Zuweisung, aktivierter Template-Freigabe und vor den Status `submitted`, `approved`, `rejected` und `archived` erlaubt
-- wenn Upload nicht erlaubt ist, zeigt der Bereich den Grund ruhig und direkt im Panel
-
-## 13.4 Nicht Ziel des Attachments-Bereichs
-
-Nicht sichtbar im Standardfall:
-- Storage-Keys
-- technische Dateipfade
-- interne Speicherimplementierung
-
----
-
-## 14. Journal-Bereich
-
-## 14.1 Zweck
-
-Der Journal-Bereich zeigt und bearbeitet strukturierte wiederholbare Inhalte des Documents.
-
-## 14.2 Sichtbare Inhalte
-
-Mindestens sichtbar:
-
-- Journal-Name
-- vorhandene Zeilen als Tabelle
-- Reihenfolge neuester Eintrag oben
-- Spalten fuer Zeitpunkt, Benutzer und Eintrag
-- Möglichkeit zum Hinzufügen, Bearbeiten oder Anzeigen, sofern zulässig
-- gekürzte Vorschau des Journaltexts in der Tabellenansicht
-- Journal nutzt die verfügbare Breite des Dokumentcontainers als vollbreiter Bereich
-- per Klick erreichbare Vollansicht eines Eintrags in einem ruhigen modalen Dialog
-
-## 14.3 Regeln
-
-- Journal gehört zum normalen Arbeitskontext
-- Journal ist kein Admin-/Template-Konzept, sondern Document-Laufzeitinhalt
-- die Bearbeitbarkeit folgt Workflowstatus, Feldregel und Berechtigungsmodell
-- die Tabellenansicht bleibt kompakt; voller Text wird nur im modalen Dialog gezeigt
-
----
-
-## 15. History-Bereich
-
-## 15.1 Zweck
-
-Der History-Bereich zeigt die nachvollziehbare Ereignisfolge des Documents.
-
-## 15.2 Sichtbare Inhalte
-
-Mindestens sichtbar:
-
-- Zeitstempel
-- Actor
-- Ereignistyp
-- kurze Beschreibung
-
-## 15.3 Standardereignisse
-
-Mindestens sichtbar:
-
-- created
-- assigned
-- re_assigned
-- started
-- saved
-- submitted
-- approved
-- rejected
-- archived
-- attachment_uploaded
-- action_executed
-- workflow_hook_executed
-
-## 15.4 Regel
-
-History ist eine fachliche Nachvollziehbarkeitssicht, kein technisches Logdump.
-
----
-
-## 16. Assignment-/Task-Information
-
-## 16.1 Zweck
-
-Dieser Bereich zeigt, wer aktuell mit dem Document arbeitet oder arbeiten soll.
-
-## 16.2 Sichtbare Inhalte
-
-Mindestens sichtbar:
-
-- Editors
-- Approvers
-- optional offene Tasks oder Task-Hinweise
-
-## 16.3 Ziel
-
-Der Bereich unterstützt die Arbeitskoordination, ohne zu einer eigenen Task-Management-Oberfläche auszuwachsen.
-
----
-
-## 17. Workflow Actions im Document Detail
-
-## 17.1 Sichtbarkeit
-
-Workflow Actions sind sichtbar, wenn:
-- der Status sie zulässt
-- die Rolle sie zulässt
-- der User sie sehen darf
-- `x` vorhanden ist
-
-## 17.2 Ausführbarkeit
-
-Workflow Actions sind ausführbar, wenn zusätzlich:
-- Validierungen erfüllt sind
-- keine fachlichen Blocker bestehen
-- das Document nicht archiviert ist
-
-## 17.3 Typische Workflow Actions
-
-Im MVP relevant:
-- create
-- assign
-- start
-- save
-- submit
-- approve
-- reject
-- reAssign
-- archive
-
-Nicht jeder Workflow muss alle dieser Actions verwenden.
-
----
-
-## 18. Form Actions im Document Detail
-
-## 18.1 Zweck
-
-Form Actions sind fachliche Formularaktionen, die im Kontext des konkreten Documents ausgeführt werden.
-
-## 18.2 Beispiele
-
-- create_customer_order
-- create_batch
-
-## 18.3 Regeln
-
-- Form Actions erscheinen nur, wenn sie im aktuellen Kontext sichtbar sind
-- sie verwenden `operationRef`
-- sie dürfen nicht das Workflow-Modell ersetzen
-- sie dürfen Daten aus Formular und Kontext lesen und in definierte Zielbereiche schreiben
-
-## 18.4 SSR- und HTMX-Update-Regeln im Document Detail
-
-Die Document-Detail-Seite bleibt vollständig serverseitig renderbar.
-Wenn HTMX eingesetzt wird, gelten für konsistente Teilupdates diese Regeln:
-
-- Workflow Actions aktualisieren Formular-/Workflow-Bereich sowie Header und History
-- Save Next Form Values aktualisiert Formular-/Workflow-Bereich sowie Header und History
-- Form Lookups aktualisieren nur den Formular-/Workflow-Bereich
-- Journal aktualisiert sein eigenes Panel sowie Header und History, wenn ein Eintrag gespeichert wurde
-- Attachments aktualisieren ihr eigenes Panel sowie die History, wenn ein Upload gespeichert wurde
-
-Ziel ist, dass nach einer Aktion keine fachlich veralteten Nachbarbereiche sichtbar bleiben.
-
----
-
-## 19. Sichtbarkeitsregeln im Document Detail
-
-Ein User darf ein Document Detail nur öffnen, wenn das Document für ihn sichtbar ist.
-
-Innerhalb des Document Detail gilt:
-
-- Felder nur sichtbar, wenn Sichtbarkeit und Rolle es erlauben
-- Felder nur editierbar, wenn Status, Rolle und Rechte es erlauben
-- Actions nur sichtbar, wenn Status, Rolle und Rechte es erlauben
-- technische Integrationszustände sind nicht Teil der Standard-Arbeitssicht
-
----
-
-## 20. Beziehung zu Templates und Workflows
-
-## 20.1 Beziehung zu Templates
-
-Document Detail nutzt ein Template, bearbeitet es aber nicht.
-
-Das heißt:
-- keine Template-Bearbeitung im Document Detail
-- keine MDX-Bearbeitung
-- keine Group-Zuweisung
-- keine Tabellenfeld-Konfiguration
-
-## 20.2 Beziehung zu Workflows
-
-Document Detail zeigt den Workflowkontext in arbeitsrelevanter Form, bearbeitet den Workflow aber nicht.
-
-Das heißt:
-- keine Workflow-JSON-Bearbeitung
-- keine Hook-Konfiguration
-- keine Action-Modellierung
-
----
-
-## 21. Umgang mit archivierten Documents
-
-## 21.1 Standardregel
-
-Archivierte Documents sind nicht Teil des normalen aktiven Arbeitskontexts.
-
-## 21.2 Sichtbarkeit
-
-Archivierte Documents können sichtbar werden, wenn:
-- ein entsprechender Filter aktiv ist
-- der User das Document grundsätzlich sehen darf
-
-## 21.3 Bearbeitbarkeit
-
-Archivierte Documents sind readonly.
-Workflow Actions und normale Bearbeitungsfunktionen stehen nicht mehr zur Verfügung, außer eine spätere Spezifikation definiert ausdrücklich Ausnahmen.
-
----
-
-## 22. Leere Zustände und Fehlersituationen
-
-## 22.1 Keine Attachments
-
-Der Attachments-Bereich zeigt einen ruhigen leeren Zustand statt einer leeren technischen Liste.
-
-## 22.2 Kein Journal-Inhalt
-
-Der Journal-Bereich zeigt eine leere, fachlich verständliche Ausgangssicht.
-
-## 22.3 Keine sichtbaren Actions
-
-Wenn keine Actions verfügbar sind, bleibt der Header verständlich und ruhig.
-Es wird keine technische Begründung in der Standard-UI angezeigt.
-
-## 22.4 Nicht sichtbares Document
-
-Wenn ein Document nicht sichtbar ist, darf der Detailscreen nicht regulär geöffnet werden.
-
----
-
-## 23. Layoutprinzipien
-
-## 23.1 Grundsatz
-
-Document Detail ist eine Arbeitsseite.
-
-Das Layout muss:
-- ruhig
-- fachlich verständlich
-- handlungsorientiert
-sein.
-
-## 23.2 Bereichsreihenfolge
-
-Empfohlene fachliche Reihenfolge:
-
-1. Header
-2. Work Summary
-3. Form
-4. Attachments
-5. Journal
-6. History
-7. Assignment-/Task-Information
-
-Die visuelle Umsetzung darf variieren, die fachliche Priorität bleibt.
-
-## 23.3 Nicht zulässig in der Standard-Arbeitssicht
-
-- Workflow-JSON
-- MDX-Rohtext
-- technische Registry-Informationen
-- Bridge-/Legacy-Integrationsübersichten
-- Debug-Panels
-
----
-
-## 24. Nicht Bestandteil des Documents-Bereichs im MVP
-
-Nicht Bestandteil des führenden Documents-Bereichs sind:
-
-- Builder-UI
-- Template-Konfigurationslogik
-- Workflow-Konfigurationslogik
-- technische Integrationsadministration
-- globale Monitoring-/Retry-Sichten
-- generische Admin-Steuerung
-
----
-
-## 25. Ergebnisregel
-
-Der in diesem Dokument beschriebene Documents-Bereich ist das führende Arbeitsmodell des MVP.
-
-Spätere UI-Implementierungen dürfen davon abweichen **nur**, wenn dieses Dokument zuerst angepasst wird.
+- Builder-Oberfläche
+- SPA-Interaktion
+- überladene Erklärungstexte im Dokumentpfad

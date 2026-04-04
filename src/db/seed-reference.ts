@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { pathToFileURL } from "node:url";
 import { closePool, withDbTransaction } from "./pool.js";
 import { getReferenceSeedData } from "./reference-data.js";
+import { importReferenceEntitiesFromCsv } from "../modules/entities/import.js";
 
 const upsertUser = async (client: PoolClient, row: Awaited<ReturnType<typeof getReferenceSeedData>>["users"][number]): Promise<void> => {
   await client.query(
@@ -53,17 +54,29 @@ const upsertOperation = async (
   row: Awaited<ReturnType<typeof getReferenceSeedData>>["operations"][number],
 ): Promise<void> => {
   await client.query(
-    `insert into operations (operation_ref, name, connector, module_path, auth_strategy, description, tags)
-     values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+    `insert into operations (operation_ref, name, connector, module_path, auth_strategy, description, input_schema, output_schema, tags)
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb)
      on conflict (operation_ref) do update
        set name = excluded.name,
            connector = excluded.connector,
            module_path = excluded.module_path,
            auth_strategy = excluded.auth_strategy,
            description = excluded.description,
+           input_schema = excluded.input_schema,
+           output_schema = excluded.output_schema,
            tags = excluded.tags,
            updated_at = now()`,
-    [row.operationRef, row.name, row.connector, row.modulePath, row.authStrategy, row.description, JSON.stringify(row.tags)],
+    [
+      row.operationRef,
+      row.name,
+      row.connector,
+      row.modulePath,
+      row.authStrategy,
+      row.description,
+      JSON.stringify(row.inputSchema ?? null),
+      JSON.stringify(row.outputSchema ?? null),
+      JSON.stringify(row.tags),
+    ],
   );
 };
 
@@ -273,6 +286,13 @@ export const seedReferenceData = async (): Promise<void> => {
     for (const row of data.attachments) await upsertAttachment(client, row);
     for (const row of data.auditEvents) await upsertAuditEvent(client, row);
   });
+
+  for (const row of data.entityImports) {
+    await importReferenceEntitiesFromCsv({
+      entityType: row.entityType,
+      csvText: row.csvText,
+    });
+  }
 };
 
 const main = async (): Promise<void> => {

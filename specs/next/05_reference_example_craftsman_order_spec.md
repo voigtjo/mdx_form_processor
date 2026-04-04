@@ -1,8 +1,9 @@
-# Ziel-Spec: Referenzbeispiel Auftragsdokumentation fuer Handwerker
+# Hintergrund-Spec: Referenzbeispiel Auftragsdokumentation fuer Handwerker
 
 ## Zweck
 
 Dieses Dokument definiert den fachlichen Referenzfall fuer die neue vereinfachte Richtung.
+Es bleibt als Hintergrund fuer die erste Ziel-App nuetzlich, ist aber nicht mehr die fuehrende Roadmap-Spec.
 
 ## Fachlicher Zweck
 

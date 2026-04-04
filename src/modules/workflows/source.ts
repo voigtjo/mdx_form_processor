@@ -28,6 +28,23 @@ type ParsedWorkflowSource = {
   transitionRows: ParsedWorkflowAction[];
 };
 
+type WorkflowTableRowInput = {
+  actionName: string;
+  fromText: string;
+  to: string;
+  rolesText: string;
+  mode: string;
+  api: string;
+  condition: string;
+};
+
+type WorkflowTableInput = {
+  baselineSourceText?: string;
+  initialStatus: string;
+  statusesText: string;
+  rows: WorkflowTableRowInput[];
+};
+
 const allowedRoles = new Set(["editor", "approver"]);
 
 const normalizeMode = (value: unknown): string => {
@@ -77,6 +94,60 @@ const extractHooks = (workflowJson: Record<string, unknown>) => {
       operationRef,
     }];
   });
+};
+
+const parseStatusList = (value: string): string[] => {
+  return value
+    .split(/[,\n]/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+};
+
+const parseRoles = (value: string): string[] => {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+};
+
+const parseConditionInput = (value: string): Record<string, unknown> | undefined => {
+  const normalized = value.trim();
+
+  if (!normalized || normalized === "—") {
+    return undefined;
+  }
+
+  if (normalized.startsWith("requiredFields:")) {
+    const requiredFields = normalized
+      .slice("requiredFields:".length)
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+    if (requiredFields.length === 0) {
+      throw new Error("Condition requiredFields braucht mindestens ein Feld.");
+    }
+
+    return {
+      requiredFields,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(normalized) as unknown;
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Condition muss ein JSON-Objekt sein.");
+    }
+
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof Error && error.message === "Condition muss ein JSON-Objekt sein.") {
+      throw error;
+    }
+
+    throw new Error("Condition muss leer, requiredFields: ... oder ein JSON-Objekt sein.");
+  }
 };
 
 const validateWorkflowJson = (workflowJson: Record<string, unknown>): string[] => {
@@ -187,6 +258,123 @@ export const parseWorkflowSourceText = (sourceText: string): ParsedWorkflowSourc
 };
 
 export const serializeWorkflowSource = (workflowJson: Record<string, unknown>): string => JSON.stringify(workflowJson, null, 2);
+
+export const buildWorkflowSourceTextFromTableInput = (input: WorkflowTableInput): string => {
+  let workflowJson: Record<string, unknown> = {};
+
+  if (input.baselineSourceText?.trim()) {
+    try {
+      workflowJson = JSON.parse(input.baselineSourceText) as Record<string, unknown>;
+    } catch {
+      workflowJson = {};
+    }
+  }
+
+  const statuses = parseStatusList(input.statusesText);
+  const initialStatus = input.initialStatus.trim();
+
+  if (!initialStatus) {
+    throw new Error("Initialstatus darf nicht leer sein.");
+  }
+
+  if (statuses.length === 0) {
+    throw new Error("Statusfolge darf nicht leer sein.");
+  }
+
+  const normalizedRows = input.rows
+    .map((row) => ({
+      actionName: row.actionName.trim(),
+      from: parseStatusList(row.fromText),
+      to: row.to.trim(),
+      roles: parseRoles(row.rolesText),
+      mode: row.mode.trim().toUpperCase() === "AND" ? "all" : "single",
+      api: row.api.trim(),
+      condition: row.condition.trim(),
+    }))
+    .filter((row) => row.actionName.length > 0 || row.to.length > 0 || row.from.length > 0 || row.roles.length > 0 || row.api.length > 0 || row.condition.length > 0);
+
+  if (!statuses.includes(initialStatus)) {
+    throw new Error("Initialstatus muss in der Statusfolge enthalten sein.");
+  }
+
+  if (normalizedRows.length === 0) {
+    throw new Error("Mindestens eine Workflow-Action ist erforderlich.");
+  }
+
+  const existingHooks = Array.isArray(workflowJson.hooks)
+    ? workflowJson.hooks.filter((hook): hook is Record<string, unknown> => Boolean(hook) && typeof hook === "object" && !Array.isArray(hook))
+    : [];
+  const hookEntries = existingHooks.flatMap((hook) => {
+    const trigger = typeof hook.trigger === "string" ? hook.trigger : "";
+    return trigger.length > 0 ? [[trigger, hook] as const] : [];
+  });
+  const hooksByTrigger = new Map<string, Record<string, unknown>>(hookEntries);
+  const updatedHooks = existingHooks.filter((hook) => {
+    const trigger = typeof hook.trigger === "string" ? hook.trigger : "";
+    return !normalizedRows.some((row) => row.actionName === trigger);
+  });
+  const actions: Record<string, Record<string, unknown>> = {};
+
+  for (const row of normalizedRows) {
+    if (!row.actionName) {
+      throw new Error("Jede gepflegte Workflow-Zeile braucht einen Action-Namen.");
+    }
+
+    if (row.from.length === 0) {
+      throw new Error(`Action ${row.actionName} braucht mindestens einen From-Status.`);
+    }
+
+    if (!row.to) {
+      throw new Error(`Action ${row.actionName} braucht einen To-Status.`);
+    }
+
+    if (row.roles.length === 0) {
+      throw new Error(`Action ${row.actionName} braucht mindestens eine Rolle.`);
+    }
+
+    if (row.from.some((status) => !statuses.includes(status)) || !statuses.includes(row.to)) {
+      throw new Error(`Action ${row.actionName} referenziert unbekannte Status.`);
+    }
+
+    if (row.roles.some((role) => !allowedRoles.has(role))) {
+      throw new Error(`Action ${row.actionName} enthaelt ungueltige Rollen.`);
+    }
+
+    const actionRecord: Record<string, unknown> = {
+      from: row.from,
+      to: row.to,
+      allowedRoles: row.roles,
+      completionMode: row.mode,
+    };
+    const condition = parseConditionInput(row.condition);
+
+    if (condition) {
+      actionRecord.validation = condition;
+    }
+
+    actions[row.actionName] = actionRecord;
+
+    if (row.api) {
+      const existingHook = hooksByTrigger.get(row.actionName);
+      updatedHooks.push({
+        ...(existingHook ?? {}),
+        trigger: row.actionName,
+        operationRef: row.api,
+      });
+    }
+  }
+
+  workflowJson = {
+    ...workflowJson,
+    initialStatus,
+    statuses,
+    actions,
+    hooks: updatedHooks,
+  };
+
+  parseWorkflowSourceText(JSON.stringify(workflowJson));
+  return serializeWorkflowSource(workflowJson);
+};
 
 const loadWorkflowBase = async (
   client: Parameters<Parameters<typeof withDbTransaction>[0]>[0],

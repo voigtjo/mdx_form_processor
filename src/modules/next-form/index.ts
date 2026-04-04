@@ -7,6 +7,13 @@ export { executeLoadCustomerAction } from "./load-customer.js";
 export { executeSuggestMaterialAction } from "./suggest-material.js";
 export { loadNextFormState, nextFormSavedStatePath, saveNextFormState } from "./state-store.js";
 export {
+  hasVisibleNextFormGridRows,
+  parseNextFormGridColumns,
+  parseNextFormGridRows,
+  readNextFormGridMinRows,
+  serializeNextFormGridRows,
+} from "./grid.js";
+export {
   isNextFormReferenceTemplate,
   mapDocumentDataToNextFormValues,
   mergeNextFormValuesIntoDocumentData,
@@ -19,6 +26,7 @@ export {
 } from "./read.js";
 export type { NextFormActionState, NextFormFieldValues } from "./load-customer.js";
 export type { NextFormSavedState } from "./state-store.js";
+export type { NextFormGridColumn, NextFormGridRow } from "./grid.js";
 export type {
   NextFormControlType,
   NextFormElement,

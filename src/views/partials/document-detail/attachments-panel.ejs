@@ -8,34 +8,33 @@
     <% if (latestAttachment) { %>
       Letztes Attachment: <strong><%= latestAttachment.filename %></strong> · <%= latestAttachment.createdAt %>
     <% } else { %>
-      Noch kein Attachment vorhanden.
+      Keine Attachments.
     <% } %>
   </p>
   <% if (uploadStatus) { %>
-    <div class="notice-card notice-success">
-      <strong>Upload erfolgreich</strong>
+    <div class="notice-card notice-success notice-inline">
+      <strong>Upload</strong>
       <p><%= uploadStatus %></p>
     </div>
   <% } %>
   <% if (uploadError) { %>
-    <div class="notice-card notice-error">
-      <strong>Upload nicht moeglich</strong>
+    <div class="notice-card notice-error notice-inline">
+      <strong>Upload blockiert</strong>
       <p><%= uploadError %></p>
     </div>
   <% } %>
-  <div class="notice-card notice-muted">
+  <div class="notice-card notice-muted notice-inline">
     <% if (documentDetail.attachmentUploadState.isAvailable) { %>
-      <strong>Upload aktuell erlaubt</strong>
-      <p>Upload ist mit aktiver Editor-Zuweisung, aktivierter Template-Freigabe und solange das Dokument noch nicht submitted, approved, rejected oder archived ist verfuegbar.</p>
+      <strong>Upload erlaubt</strong>
+      <p>Aktive Editor-Zuweisung und offener Status.</p>
     <% } else { %>
-      <strong>Upload aktuell nicht verfuegbar</strong>
+      <strong>Upload gesperrt</strong>
       <p><%= documentDetail.attachmentUploadState.reason ?? "Upload ist fuer dieses Dokument derzeit nicht freigeschaltet." %></p>
-      <p>Upload ist nur mit aktiver Editor-Zuweisung, aktivierter Template-Freigabe und vor den gesperrten Status submitted, approved, rejected oder archived moeglich.</p>
     <% } %>
   </div>
   <div class="subpanel">
     <div class="panel-header">
-      <h4>Upload Attachment</h4>
+      <h4>Upload</h4>
       <span class="chip"><%= documentDetail.attachmentUploadState.isAvailable ? "erlaubt" : "gesperrt" %></span>
     </div>
     <% if (documentDetail.attachmentUploadState.isAvailable) { %>
@@ -50,16 +49,15 @@
         hx-encoding="multipart/form-data"
       >
         <input type="file" name="attachment" />
-        <p class="field-help">In diesem ersten MVP-Schnitt sind einzelne Dateien, auch Bilder, bis 3 MB vorgesehen.</p>
-        <button class="button-secondary" type="submit">Upload Attachment</button>
+        <button class="button-secondary" type="submit">Datei hochladen</button>
       </form>
     <% } else { %>
-      <p><%= documentDetail.attachmentUploadState.reason %></p>
+      <p class="field-help"><%= documentDetail.attachmentUploadState.reason %></p>
     <% } %>
   </div>
   <div class="panel-divider"></div>
   <% if (documentDetail.attachments.length === 0) { %>
-    <p>Keine Attachments vorhanden.</p>
+    <p>Keine Attachments.</p>
   <% } else { %>
     <div class="table-wrap">
       <table>

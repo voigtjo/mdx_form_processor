@@ -39,6 +39,7 @@ Die Anwendung besitzt im MVP genau diese Hauptbereiche:
 - My Workspace
 - Templates
 - Workflows
+- APIs
 - Documents
 - Admin
 
@@ -112,7 +113,21 @@ Documents ist Arbeits-UI.
 
 ---
 
-## 4.5 Admin
+## 4.5 APIs
+
+Der Bereich APIs dient dazu:
+
+- TypeScript-Operationen zu sehen
+- Request-/Response-Felder zu verstehen
+- Nutzung in Formularen und Workflows nachzuvollziehen
+- Formulardaten als JSON oder CSV abzurufen
+- CSV-Importe fuer einfache Entitaeten auszufuehren
+
+APIs ist produktive Plattform- und Konfigurations-UI, aber keine normale Arbeits-UI.
+
+---
+
+## 4.6 Admin
 
 Der Bereich Admin dient dazu:
 
@@ -146,6 +161,7 @@ Der Template-/Prozessverantwortliche arbeitet primär über:
 
 - Templates
 - Workflows
+- APIs
 
 Er benötigt:
 - Konfiguration

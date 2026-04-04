@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { withDbTransaction } from "../../db/pool.js";
 import { parseNextFormSource } from "../next-form/read.js";
 import { isNextFormReferenceTemplate } from "../next-form/document-bridge.js";
+import { publishWorkflowVersion } from "../workflows/lifecycle.js";
 import { setTemplateSourceFrontmatterValue } from "./source.js";
 
 type TemplateLifecycleResult = {
@@ -28,6 +29,13 @@ type TemplateAssignmentRow = {
   group_id: string;
   status: string;
   assigned_at: Date;
+};
+
+type WorkflowTemplateRow = {
+  id: string;
+  key: string;
+  version: number;
+  status: "draft" | "published" | "inactive" | "archived";
 };
 
 const loadTemplateBase = async (client: Parameters<Parameters<typeof withDbTransaction>[0]>[0], templateId: string) => {
@@ -67,6 +75,21 @@ const loadTemplateAssignments = async (
   return result.rows;
 };
 
+const loadWorkflowBase = async (
+  client: Parameters<Parameters<typeof withDbTransaction>[0]>[0],
+  workflowId: string,
+) => {
+  const result = await client.query<WorkflowTemplateRow>(
+    `select id, key, version, status
+     from workflow_templates
+     where id = $1
+     limit 1`,
+    [workflowId],
+  );
+
+  return result.rows[0] ?? null;
+};
+
 const copyTemplateAssignments = async (
   client: Parameters<Parameters<typeof withDbTransaction>[0]>[0],
   sourceTemplateId: string,
@@ -100,12 +123,48 @@ const normalizeReferenceSource = (sourceText: string, version: number): string =
   return setTemplateSourceFrontmatterValue(sourceText, "version", String(version));
 };
 
+const resolveTemplateWorkflowVersion = async (
+  client: Parameters<Parameters<typeof withDbTransaction>[0]>[0],
+  workflowTemplateId: string,
+  cascadePublishWorkflow: boolean,
+) => {
+  const workflow = await loadWorkflowBase(client, workflowTemplateId);
+
+  if (!workflow) {
+    throw new Error("Der zugeordnete Workflow wurde nicht gefunden.");
+  }
+
+  if (workflow.status === "archived") {
+    throw new Error("Archivierte Workflow-Versionen koennen Templates nicht zugeordnet werden.");
+  }
+
+  if (workflow.status === "published") {
+    return workflow.id;
+  }
+
+  if (!cascadePublishWorkflow) {
+    throw new Error("Das Template kann nur publiziert werden, wenn die zugeordnete Workflow-Version publiziert ist oder Cascade Publish aktiv ist.");
+  }
+
+  const publishedWorkflow = await publishWorkflowVersion({
+    workflowId: workflow.id,
+  });
+
+  return publishedWorkflow.id;
+};
+
 export const saveReferenceTemplateDraft = async (input: {
   templateId: string;
   sourceText: string;
+  workflowTemplateId: string;
 }): Promise<TemplateLifecycleResult> => {
   return withDbTransaction(async (client) => {
     const template = ensureReferenceTemplate(await loadTemplateBase(client, input.templateId));
+    const workflow = await loadWorkflowBase(client, input.workflowTemplateId);
+
+    if (!workflow || workflow.status === "archived") {
+      throw new Error("Bitte ordne dem Template eine aktive Workflow-Version zu.");
+    }
 
     if (template.status === "draft") {
       const normalizedSource = normalizeReferenceSource(input.sourceText, template.version);
@@ -113,9 +172,10 @@ export const saveReferenceTemplateDraft = async (input: {
       await client.query(
         `update form_templates
          set mdx_body = $2,
+             workflow_template_id = $3,
              updated_at = now()
          where id = $1`,
-        [template.id, normalizedSource],
+        [template.id, normalizedSource, input.workflowTemplateId],
       );
 
       return {
@@ -142,9 +202,10 @@ export const saveReferenceTemplateDraft = async (input: {
       await client.query(
         `update form_templates
          set mdx_body = $2,
+             workflow_template_id = $3,
              updated_at = now()
          where id = $1`,
-        [existingDraft.id, normalizedSource],
+        [existingDraft.id, normalizedSource, input.workflowTemplateId],
       );
 
       return {
@@ -176,7 +237,7 @@ export const saveReferenceTemplateDraft = async (input: {
         template.name,
         template.description,
         nextVersion,
-        template.workflow_template_id,
+        input.workflowTemplateId,
         normalizedSource,
         JSON.stringify(template.template_keys ?? []),
         JSON.stringify(template.document_keys ?? []),
@@ -197,12 +258,19 @@ export const saveReferenceTemplateDraft = async (input: {
 export const publishReferenceTemplateVersion = async (input: {
   templateId: string;
   sourceText: string;
+  workflowTemplateId: string;
+  cascadePublishWorkflow: boolean;
 }): Promise<TemplateLifecycleResult> => {
   return withDbTransaction(async (client) => {
     const template = ensureReferenceTemplate(await loadTemplateBase(client, input.templateId));
 
     if (template.status === "draft") {
       const normalizedSource = normalizeReferenceSource(input.sourceText, template.version);
+      const targetWorkflowTemplateId = await resolveTemplateWorkflowVersion(
+        client,
+        input.workflowTemplateId,
+        input.cascadePublishWorkflow,
+      );
 
       await client.query(
         `update form_templates
@@ -216,11 +284,12 @@ export const publishReferenceTemplateVersion = async (input: {
       await client.query(
         `update form_templates
          set mdx_body = $2,
+             workflow_template_id = $3,
              status = 'published',
              published_at = now(),
              updated_at = now()
          where id = $1`,
-        [template.id, normalizedSource],
+        [template.id, normalizedSource, targetWorkflowTemplateId],
       );
 
       return {
@@ -238,6 +307,11 @@ export const publishReferenceTemplateVersion = async (input: {
     );
     const nextVersion = Number(versionResult.rows[0]?.next_version ?? template.version + 1);
     const normalizedSource = normalizeReferenceSource(input.sourceText, nextVersion);
+    const targetWorkflowTemplateId = await resolveTemplateWorkflowVersion(
+      client,
+      input.workflowTemplateId,
+      input.cascadePublishWorkflow,
+    );
     const publishedId = randomUUID();
 
     await client.query(
@@ -261,7 +335,7 @@ export const publishReferenceTemplateVersion = async (input: {
         template.name,
         template.description,
         nextVersion,
-        template.workflow_template_id,
+        targetWorkflowTemplateId,
         normalizedSource,
         JSON.stringify(template.template_keys ?? []),
         JSON.stringify(template.document_keys ?? []),

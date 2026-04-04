@@ -1,20 +1,53 @@
-# 01 — MVP Scope
+# 01 — Plattform-Zwischenziel und MVP Scope
 
 ## 1. Produktname
 
-Digitale Dokumentation und Nachweise
+Schlanke Formular-Prozess-Plattform
 
-Interner Arbeitstitel:
-Form-/Workflow-App für dokumentations- und freigabebasierte Prozesse in Brown-field-Umgebungen
+Erste konkrete Ziel-App:
+Digitale Dokumentation und Nachweise fuer Handwerker
 
 ---
 
 ## 2. Produktziel
 
-Das MVP stellt eine produktiv nutzbare Anwendung bereit, mit der Teams strukturierte Dokumentation und Nachweise erfassen, bearbeiten, zuweisen, weiterreichen, freigeben und archivieren können.
+Das aktuelle Zwischenziel ist eine schlanke Plattform fuer:
+
+- versionierte Formulare
+- versionierte Workflows
+- TypeScript-APIs fuer Lookup, Actions, Hooks sowie spaeter Import und Export
+
+Auf dieser Plattform soll als erste konkrete kommerzielle Anwendung eine digitale Dokumentations- und Nachweisplattform fuer Handwerker produktiv gebaut werden.
 
 Das Produkt ist keine generische Low-Code-Plattform.
-Es ist eine fokussierte Form-/Workflow-Anwendung mit klaren Templates, klaren Workflows und anschlussfähigen Integrationen.
+Es ist eine fokussierte Formular-Prozess-Plattform mit klaren Templates, klaren Workflows und anschlussfaehigen TypeScript-APIs.
+
+## 2.1 Plattform-Kern
+
+Zum Plattform-Kern gehoeren:
+
+- Forms
+- Workflows
+- TypeScript APIs
+- Versionierung und Lifecycle fuer Templates und Workflows
+- Dokumentstart aus publizierten Staenden
+- feste Bindung laufender Documents an ihre Startversion
+- Journal, Attachments und Audit
+
+## 2.2 Erste produktive Ziel-App
+
+Die erste Ziel-App fokussiert:
+
+- Auftragsdokumentation bei Kunden
+- Nachweise, Bilder und Freigaben
+- ruhige mobile und desktop-faehige Arbeitsoberflaechen fuer Handwerker und Pruefer
+
+## 2.3 Spaetere, aber vorbereitete Testwelten
+
+Spaeter sinnvoll vorzubereiten sind:
+
+- Produktionsdokumentation mit Batch oder Seriennummer
+- Qualifikations- und Nachweisformulare mit Mehrfachzuweisung, Schulungsmaterial, Fragen und Signatur
 
 ---
 
@@ -103,11 +136,12 @@ Enthalten sind:
 - Form-Template-Metadaten
 - MDX-basierte Formularbeschreibung
 - Formfelder
+- explizite Controls
 - Template Keys
 - Document Keys
 - Lookup-Felder
-- CheckboxGroup
-- RadioGroup
+- Referenzen auf Stammdaten
+- erste Referenzen auf andere Formulare
 - Journal-Bereiche
 - Attachment-Bereiche
 - Tabellenfelder für Dokumentlisten
@@ -117,8 +151,9 @@ Enthalten sind:
 Enthalten sind:
 - Statusliste
 - Actions
-- erlaubte Übergänge
-- Rollen für Actions
+- einfache Transitionen `from -> to`
+- Rollen fuer Actions
+- Modus `OR` / `AND`
 - Feldregeln je Status
 - Mehrfach-Editoren
 - Mehrfach-Approver
@@ -165,7 +200,7 @@ Enthalten sind:
 - Publish einer neuen Version unpublisht bzw. archiviert die alte produktive Version
 - laufende Documents bleiben auf ihrer Startversion
 
-### 7.8 Integrationen
+### 7.8 TypeScript APIs
 
 Enthalten sind:
 - TypeScript-Operationen
@@ -174,6 +209,8 @@ Enthalten sind:
 - Aufruf aus Workflow-Hooks
 - Input-/Output-Mapping
 - persistierter Integrationskontext
+- CSV-Import und CSV-Export als vorbereitete Ausbaurichtung
+- Formulare als API-Datenquelle
 
 ### 7.9 Audit / Historie
 
