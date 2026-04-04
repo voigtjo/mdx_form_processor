@@ -2,7 +2,7 @@
 <details class="panel panel-collapsible page-header-collapsible" open>
   <summary class="collapsible-summary">
     <div class="collapsible-summary-copy">
-      <strong><%= operation ? operation.title : "New API" %></strong>
+      <strong><%= operation ? operation.title : "Neue API" %></strong>
       <span><%= operation ? `${operation.key} · ${operation.status} · ${operation.connector}` : "Draft" %></span>
     </div>
     <div class="collapsible-summary-meta">
@@ -11,9 +11,9 @@
   </summary>
   <div class="collapsible-body">
     <span class="eyebrow">TypeScript API</span>
-    <h2><%= operation ? operation.title : "New API" %></h2>
+    <h2><%= operation ? operation.title : "Neue API" %></h2>
     <div class="hero-actions">
-      <a class="button-secondary" href="/apis?user=<%= activeUser.key %>">Back to APIs</a>
+      <a class="button-secondary" href="/apis?user=<%= activeUser.key %>">Zur API-Liste</a>
     </div>
   </div>
 </details>
@@ -99,7 +99,7 @@
   <section class="panel">
     <div class="panel-header">
       <h3>Usage</h3>
-      <span><%= apiDetail.usage.documentCount %> Documents</span>
+      <span><%= apiDetail.usage.documentCount %> Vorgaenge</span>
     </div>
     <div class="grid two-up detail-grid">
       <div>

@@ -4,7 +4,7 @@
 
 Die Document-UI ist formularzentriert und bildet im normalen Produktpfad vier Familien ab:
 
-- Kundenauftrag
+- Kundenservice-Dokumentation
 - Produktionsdokumentation
 - Qualifikationsnachweis
 - Generisches Formular
@@ -53,18 +53,22 @@ Teilaktionen wie:
 
 laufen lokal im Formularcontainer und halten die Position im Lesefluss.
 
-## Kundenauftrag
+## Kundenservice-Dokumentation
 
-Kundenauftrag zeigt im normalen Pfad:
+Kundenservice-Dokumentation zeigt im normalen Pfad:
 
-- Auftragsnummer
+- Einsatz- / Auftragsnummer
 - internen Customer-Lookup
 - Einsatzort
-- Rich-Text-Beschreibung
+- Rich-Text-Beschreibung fuer Taetigkeit / Befund
 - internen Product-Vorschlag
+- Arbeitszeit, Fahrzeit und Pause
+- Techniker / Monteur
 - readonly Customer-/Product-Stammdaten
 
 Die Dokumentliste und Suche duerfen dabei `order_number` als fachliche Leitkennung nutzen, statt nur auf Titelstrings zu vertrauen.
+
+Der sichtbare Produktpfad wirkt dabei wie Serviceeinsatz- und Monteursdokumentation, nicht wie eine generische Formularprobe.
 
 Keine ERP-SIM-Abhängigkeit ist Teil der führenden Produkt-UI.
 

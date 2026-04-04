@@ -1,12 +1,12 @@
 ---
-title: Kundenauftrag fuer Serviceeinsatz
+title: Kundenservice-Dokumentation fuer Serviceeinsatz
 key: customer-order
 version: 1
 ---
 
-## Auftrag
+## Einsatz
 
-- Auftragsnummer: text(order_number, required) | Kundendaten laden: action(load_customer, ref="customers.lookup", args="order_number", bind="customer,service_location")
+- Einsatz- / Auftragsnummer: text(order_number, required) | Kundendaten laden: action(load_customer, ref="customers.lookup", args="order_number", bind="customer,service_location")
 - Datum: date(service_date) | Techniker / Monteur: text(technician)
 
 ## Kunde
@@ -16,7 +16,7 @@ version: 1
 
 ## Leistung
 
-- Taetigkeitsbeschreibung: html-editor(work_description, required)
+- Taetigkeitsbeschreibung / Befund: html-editor(work_description, required)
 - Material: textarea(material) | Materialvorschlag holen: lookup(suggest_material, ref="products.suggest", args="work_description", bind="material")
 - Arbeitszeit (Std.): number(labor_hours) | Fahrtzeit (Std.): number(travel_hours) | Pause (Min.): number(break_minutes)
 

@@ -1254,6 +1254,7 @@ th {
 
 .button-primary,
 .button-secondary {
+  min-height: 44px;
   padding: 11px 16px;
   border: 0;
   border-radius: 999px;
@@ -1318,6 +1319,59 @@ th {
   margin-bottom: 8px;
 }
 
+@media (max-width: 1180px) {
+  .two-up,
+  .form-runtime-columns-2,
+  .form-runtime-columns-3,
+  .form-runtime-live-grid,
+  .workflow-table-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-card {
+    align-items: stretch;
+  }
+
+  .hero-actions,
+  .form-runtime-field-side,
+  .workflow-action-strip {
+    justify-content: flex-start;
+  }
+
+  .collapsible-summary {
+    align-items: start;
+  }
+
+  .collapsible-summary-meta {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .form-runtime-field-head,
+  .action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workflow-action-strip .button-primary,
+  .workflow-action-strip .button-secondary {
+    flex: 1 1 200px;
+  }
+
+  .form-runtime-grid-input {
+    min-width: 96px;
+  }
+
+  .journal-entry-cell {
+    min-width: 320px;
+  }
+
+  th,
+  td {
+    padding: 12px 10px;
+  }
+}
+
 @media (max-width: 960px) {
   .topbar,
   .hero-card,
@@ -1331,7 +1385,8 @@ th {
   .four-up,
   .form-runtime-columns-2,
   .form-runtime-columns-3,
-  .form-runtime-live-grid {
+  .form-runtime-live-grid,
+  .workflow-table-meta {
     grid-template-columns: 1fr;
   }
 
@@ -1352,6 +1407,11 @@ th {
   .action-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .workflow-action-strip .button-primary,
+  .workflow-action-strip .button-secondary {
+    width: 100%;
   }
 
   .filter-grid {

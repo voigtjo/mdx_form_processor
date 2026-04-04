@@ -7,6 +7,9 @@ create table if not exists customer_orders (
   customer_name text,
   service_location text,
   material text,
+  labor_hours text,
+  travel_hours text,
+  break_minutes text,
   work_description_html text,
   work_signature_at timestamptz,
   approval_status text,
@@ -64,6 +67,9 @@ create table if not exists generic_form_records (
 alter table customer_orders add column if not exists work_description_html text;
 alter table customer_orders add column if not exists work_signature_at timestamptz;
 alter table customer_orders add column if not exists status text;
+alter table customer_orders add column if not exists labor_hours text;
+alter table customer_orders add column if not exists travel_hours text;
+alter table customer_orders add column if not exists break_minutes text;
 alter table production_records add column if not exists process_steps_json jsonb not null default '[]'::jsonb;
 alter table production_records add column if not exists work_signature_at timestamptz;
 alter table production_records add column if not exists status text;

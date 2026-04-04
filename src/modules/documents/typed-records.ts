@@ -14,6 +14,17 @@ const normalizeText = (value: unknown): string | null => {
 
 const normalizePayload = (value: Record<string, unknown>): Record<string, unknown> => value;
 const normalizeTimestamp = (value: unknown): string | null => normalizeText(value);
+const firstText = (...values: unknown[]): string | null => {
+  for (const value of values) {
+    const normalized = normalizeText(value);
+
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+};
 
 const normalizeJsonValue = (value: unknown): unknown => {
   if (value === null || value === undefined) {
@@ -134,6 +145,9 @@ export const syncTypedRecordForDocument = async (client: PoolClient, input: {
          customer_name,
          service_location,
          material,
+         labor_hours,
+         travel_hours,
+         break_minutes,
          work_description_html,
          work_signature_at,
          approval_status,
@@ -141,12 +155,15 @@ export const syncTypedRecordForDocument = async (client: PoolClient, input: {
          service_date,
          technician
        )
-       values ($1, $2, $3, $4, $5, $6, $7::timestamptz, $8, $9, $10, $11)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, $11, $12, $13, $14)
        on conflict (document_id) do update
          set order_number = excluded.order_number,
              customer_name = excluded.customer_name,
              service_location = excluded.service_location,
              material = excluded.material,
+             labor_hours = excluded.labor_hours,
+             travel_hours = excluded.travel_hours,
+             break_minutes = excluded.break_minutes,
              work_description_html = excluded.work_description_html,
              work_signature_at = excluded.work_signature_at,
              approval_status = excluded.approval_status,
@@ -156,10 +173,13 @@ export const syncTypedRecordForDocument = async (client: PoolClient, input: {
              updated_at = now()`,
       [
         input.documentId,
-        normalizeText(input.dataJson.customer_order_number),
-        normalizeText(input.dataJson.customer_name),
+        firstText(input.dataJson.order_number, input.dataJson.customer_order_number),
+        firstText(input.dataJson.customer, input.dataJson.customer_name),
         normalizeText(input.dataJson.service_location),
         normalizeText(input.dataJson.material),
+        normalizeText(input.dataJson.labor_hours),
+        normalizeText(input.dataJson.travel_hours),
+        normalizeText(input.dataJson.break_minutes),
         normalizeText(input.dataJson.work_description),
         normalizeTimestamp(input.dataJson.work_signature_at),
         approvalStatus,

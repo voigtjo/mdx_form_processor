@@ -6,7 +6,7 @@ Dieses Dokument beschreibt den aktuellen technischen Zuschnitt passend zum berei
 Es ist keine zweite Produktspezifikation, sondern die technische Lesebrille auf das Zwischenziel:
 
 - schlanke Formular-Prozess-Plattform
-- erste Ziel-App: digitale Dokumentation und Nachweise fuer Handwerker
+- erste Ziel-App: Handwerker-App fuer Serviceeinsaetze, Produktion und Nachweise
 
 ## Drei Kernbausteine
 
@@ -97,6 +97,9 @@ Neu ist dabei:
 - typed tables tragen die fachlich wichtigen Leitfelder pro Familie
 - die Plattform liest typed records gezielt pro Dokument und pro Familie
 - die Dokumentliste und Suche duerfen typed Leitkennungen verwenden
+
+Im sichtbaren Phase-2-Produktpfad ist dabei die Kundenservice-Dokumentation der erste Leitfall.
+Intern bleibt dafuer die typed Tabelle `customer_orders` bestehen, waehrend die Produktsprache als Serviceeinsatz- und Kundenservice-Dokumentation auftritt.
 
 Die aktuelle Leseschicht umfasst damit nicht nur:
 

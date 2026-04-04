@@ -4,7 +4,7 @@
 
 Der führende `reference`-Seed bildet jetzt genau vier Produktfamilien ab:
 
-- `Kundenauftrag`
+- `Kundenservice-Dokumentation`
 - `Produktionsdokumentation`
 - `Qualifikationsnachweis`
 - `Generisches Formular`
@@ -46,19 +46,20 @@ Der führende Seed enthält diese Gruppen:
 
 Zuordnung:
 
-- Kundenauftrag gehört zu `Kundenservice`
+- Kundenservice-Dokumentation gehört zu `Kundenservice`
 - Produktionsdokumentation gehört zu `Produktion`
 - Qualifikationsnachweis wird beiden Gruppen zugewiesen
 
 ## Templates und Workflows
 
-### Kundenauftrag
+### Kundenservice-Dokumentation
 
-- Template: `Kundenauftrag`
+- Template: `Kundenservice-Dokumentation`
 - `form_type`: `customer_order`
-- Workflow: `Kundenauftrag Freigabe`
+- Workflow: `Kundenservice-Dokumentation Freigabe`
 - Stammdatenbasis: interne `Customers` und `Products`
 - Leitkennung: `order_number`
+- fachlicher Kern: Einsatznummer, Kunde, Einsatzort, Taetigkeit / Befund, Material, Arbeitszeit, Fahrzeit, Pause, Techniker und Signatur
 
 ### Produktionsdokumentation
 

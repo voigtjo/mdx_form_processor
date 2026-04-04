@@ -81,7 +81,7 @@ const main = async (): Promise<void> => {
     ]);
 
   assert.equal(adminDocuments.length, 4, "Admin should see the four reference documents.");
-  assert.ok(serviceDocuments.some((document) => document.title.includes("Kundenauftrag")));
+  assert.ok(serviceDocuments.some((document) => document.title.includes("Serviceeinsatz")));
   assert.ok(productionDocuments.some((document) => document.title.includes("Produktion")));
   assert.ok(qualificationAsService);
   assert.ok(qualificationAsProduction);
@@ -102,6 +102,9 @@ const main = async (): Promise<void> => {
   assert.ok(qualificationRecord, "Expected qualification_record typed record.");
   assert.ok(genericFormRecord, "Expected generic_form typed record.");
   assert.equal(customerRecord.orderNumber, "KD-2026-1007");
+  assert.equal(customerRecord.laborHours, "2.50");
+  assert.equal(customerRecord.travelHours, "0.75");
+  assert.equal(customerRecord.breakMinutes, "15");
   assert.equal(customerRecord.status, "progressed");
   assert.match(customerRecord.workDescriptionHtml ?? "", /heizung/i);
   assert.equal(productionRecord.batchId, "PB-2026-0042");
@@ -194,21 +197,23 @@ const main = async (): Promise<void> => {
     assert.equal(qualificationProductionPage.statusCode, 200);
     assert.equal(genericDocumentPage.statusCode, 200);
 
-    assert.match(workspacePage.body, /Kundenauftrag/);
+    assert.match(workspacePage.body, /Arbeitsstart/);
+    assert.match(workspacePage.body, /Kundenservice-Dokumentation/);
     assert.match(workspacePage.body, /Produktionsdokumentation/);
     assert.match(workspacePage.body, /Qualifikationsnachweis/);
     assert.match(workspacePage.body, /Generisches Formular/);
-    assert.match(templatesPage.body, /Kundenauftrag/);
+    assert.match(templatesPage.body, /Kundenservice-Dokumentation/);
     assert.match(templatesPage.body, /Produktionsdokumentation/);
     assert.match(templatesPage.body, /Qualifikationsnachweis/);
     assert.match(templatesPage.body, /Generisches Formular/);
     assert.doesNotMatch(templatesPage.body, /Evidence Basic/);
     assert.doesNotMatch(templatesPage.body, /ERP-SIM/);
-    assert.match(workflowsPage.body, /Kundenauftrag Freigabe/);
+    assert.match(workflowsPage.body, /Kundenservice-Dokumentation Freigabe/);
     assert.match(workflowsPage.body, /Produktionsdokumentation Freigabe/);
     assert.match(workflowsPage.body, /Qualifikationsnachweis Review/);
     assert.match(workflowsPage.body, /Generisches Formular Freigabe/);
-    assert.match(documentsPage.body, /Kundenauftrag KD-2026-1007/);
+    assert.match(documentsPage.body, /Serviceeinsatz KD-2026-1007/);
+    assert.match(documentsPage.body, /Einsatznummer: KD-2026-1007/);
     assert.match(documentsPage.body, /Produktion PB-2026-0042/);
     assert.match(documentsPage.body, /Qualifikationsnachweis QN-2026-001/);
     assert.match(documentsPage.body, /Generisches Formular GF-2026-001/);
@@ -218,12 +223,12 @@ const main = async (): Promise<void> => {
 
     assert.match(apiPage.body, /customers\.lookup/);
     assert.match(apiPage.body, /products\.suggest/);
-    assert.match(apiPage.body, /New API/);
-    assert.match(apiPage.body, /Open/);
+    assert.match(apiPage.body, /Neue API/);
+    assert.match(apiPage.body, /API-Liste/);
     assert.match(apiPage.body, /Stammdaten APIs/);
     assert.match(apiPage.body, /Typed Record APIs/);
     assert.match(apiPage.body, /customer-orders/);
-    assert.match(apiPage.body, /CSV Import Customers/);
+    assert.match(apiPage.body, /CSV Import Kunden/);
     assert.match(customerLookupApiPage.body, /Handler Source/);
     assert.match(customerLookupApiPage.body, /Customer Lookup/);
     assert.match(customerLookupApiPage.body, /customers\.lookup/);
@@ -238,6 +243,9 @@ const main = async (): Promise<void> => {
 
     assert.match(customerDocumentPage.body, /Kundendaten laden/);
     assert.match(customerDocumentPage.body, /Materialvorschlag holen/);
+    assert.match(customerDocumentPage.body, /Kundenservice-Dokumentation/);
+    assert.match(customerDocumentPage.body, /Einsatz- \/ Auftragsnummer/);
+    assert.match(customerDocumentPage.body, /Taetigkeitsbeschreibung \/ Befund/);
     assert.match(customerDocumentPage.body, /customer_order/);
     assert.match(customerDocumentPage.body, /Typed Record API/);
     assert.match(customerDocumentPage.body, /\/api\/typed-records\/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1\?user=service-durchfuehrung-dokumentation/);
@@ -276,10 +284,10 @@ const main = async (): Promise<void> => {
       method: "GET",
       url: "/documents?user=admin&q=GF-2026-001",
     });
-    assert.match(searchedCustomerDocuments.body, /Kundenauftrag KD-2026-1007/);
+    assert.match(searchedCustomerDocuments.body, /Serviceeinsatz KD-2026-1007/);
     assert.doesNotMatch(searchedCustomerDocuments.body, /Produktion PB-2026-0042/);
     assert.match(searchedProductionDocuments.body, /Produktion PB-2026-0042/);
-    assert.doesNotMatch(searchedProductionDocuments.body, /Kundenauftrag KD-2026-1007/);
+    assert.doesNotMatch(searchedProductionDocuments.body, /Serviceeinsatz KD-2026-1007/);
     assert.match(searchedQualificationDocuments.body, /Qualifikationsnachweis QN-2026-001/);
     assert.match(searchedGenericDocuments.body, /Generisches Formular GF-2026-001/);
 
@@ -523,6 +531,9 @@ const main = async (): Promise<void> => {
     assert.equal(genericRecordDetailApi.statusCode, 200);
     assert.match(customerRecordListApi.body, /customer_orders/);
     assert.match(customerRecordDetailApi.body, /workDescriptionHtml/);
+    assert.match(customerRecordDetailApi.body, /laborHours/);
+    assert.match(customerRecordDetailApi.body, /travelHours/);
+    assert.match(customerRecordDetailApi.body, /breakMinutes/);
     assert.match(customerRecordCsvApi.body, /documentId,orderNumber,customerName/);
     assert.match(productionRecordListApi.body, /production_records/);
     assert.match(productionRecordDetailApi.body, /processStepsJson/);

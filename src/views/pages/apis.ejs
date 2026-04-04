@@ -5,20 +5,20 @@
       <span><%= apiCatalog.operations.length %> APIs · <%= apiCatalog.visibleTemplateFamilies.length %> Formfamilien · <%= apiCatalog.importedCustomers.length + apiCatalog.importedProducts.length %> Stammdaten</span>
     </div>
     <div class="collapsible-summary-meta">
-      <span>Core Platform</span>
+      <span>Handwerker-Plattform</span>
     </div>
   </summary>
   <div class="collapsible-body">
     <h2>APIs</h2>
     <div class="hero-actions">
-      <a class="button-primary" href="/apis/new?user=<%= activeUser.key %>">New API</a>
+      <a class="button-primary" href="/apis/new?user=<%= activeUser.key %>">Neue API</a>
     </div>
   </div>
 </details>
 
 <section class="panel">
   <div class="panel-header">
-    <h3>API List</h3>
+    <h3>API-Liste</h3>
     <span><%= apiCatalog.operations.length %> APIs</span>
   </div>
 
@@ -28,9 +28,9 @@
         <div>
           <strong><a class="text-link" href="/apis/<%= operation.id %>?user=<%= activeUser.key %>"><%= operation.title %></a></strong>
           <p><%= operation.key %> · <%= operation.status %> · <%= operation.connector %> · <%= operation.authMode %></p>
-          <p class="table-meta"><%= requestFields.length %> Request · <%= responseFields.length %> Response · <%= documentCount %> Documents · <%= templateUsages.length %> Templates · <%= workflowUsages.length %> Workflows</p>
+          <p class="table-meta"><%= requestFields.length %> Request · <%= responseFields.length %> Response · <%= documentCount %> Vorgaenge · <%= templateUsages.length %> Templates · <%= workflowUsages.length %> Workflows</p>
         </div>
-        <a class="text-link action-link" href="/apis/<%= operation.id %>?user=<%= activeUser.key %>">Open</a>
+        <a class="text-link action-link" href="/apis/<%= operation.id %>?user=<%= activeUser.key %>">Oeffnen</a>
       </div>
     <% }) %>
   </div>
@@ -38,7 +38,7 @@
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Form Data APIs</h3>
+    <h3>Formulardaten APIs</h3>
     <span>JSON + CSV</span>
   </div>
   <div class="table-wrap">
@@ -47,7 +47,7 @@
         <tr>
           <th>Template</th>
           <th>Datensaetze</th>
-          <th>JSON</th>
+          <th>JSON Liste</th>
           <th>CSV</th>
         </tr>
       </thead>
@@ -102,7 +102,7 @@
 <section class="panel">
   <div class="panel-header">
     <h3>Stammdaten APIs</h3>
-    <span>Customers + Products</span>
+    <span>Kunden + Produkte</span>
   </div>
   <div class="table-wrap">
     <table>
@@ -116,7 +116,7 @@
       </thead>
       <tbody>
         <tr>
-          <td><strong>Customers</strong></td>
+          <td><strong>Kunden</strong></td>
           <td><%= apiCatalog.importedCustomers.length %></td>
           <td><a class="text-link" href="/api/entities/customers?user=<%= activeUser.key %>">JSON</a></td>
           <td>
@@ -128,7 +128,7 @@
           </td>
         </tr>
         <tr>
-          <td><strong>Products</strong></td>
+          <td><strong>Produkte</strong></td>
           <td><%= apiCatalog.importedProducts.length %></td>
           <td><a class="text-link" href="/api/entities/products?user=<%= activeUser.key %>">JSON</a></td>
           <td>
@@ -147,23 +147,23 @@
 <section class="grid two-up">
   <section class="panel">
   <div class="panel-header">
-    <h3>CSV Import Customers</h3>
-    <span><%= apiCatalog.importedCustomers.length %> Records</span>
+    <h3>CSV Import Kunden</h3>
+    <span><%= apiCatalog.importedCustomers.length %> Datensaetze</span>
   </div>
     <form method="post" action="/apis/import/customers?user=<%= activeUser.key %>" class="stack-list">
       <textarea name="csvText" rows="8" class="form-runtime-source-editor" placeholder="entity_key,display_name,status,customer_number,order_number,order_status,order_created_at,service_location,city&#10;customer-baukontor,Baukontor Nord,active,CU-1007,KD-2026-1007,in_bearbeitung,2026-04-02T08:15:00.000Z,Lagerhalle 2 Bremen,Bremen"></textarea>
-      <button class="button-primary" type="submit">Customers importieren</button>
+      <button class="button-primary" type="submit">Kunden importieren</button>
     </form>
   </section>
 
   <section class="panel">
   <div class="panel-header">
-    <h3>CSV Import Products</h3>
-    <span><%= apiCatalog.importedProducts.length %> Records</span>
+    <h3>CSV Import Produkte</h3>
+    <span><%= apiCatalog.importedProducts.length %> Datensaetze</span>
   </div>
     <form method="post" action="/apis/import/products?user=<%= activeUser.key %>" class="stack-list">
       <textarea name="csvText" rows="8" class="form-runtime-source-editor" placeholder="entity_key,display_name,status,product_type,match_terms&#10;product-heating-maintenance-kit,Wartungsset Heizung,active,Wartungsset,&quot;wartung heizung filter service&quot;"></textarea>
-      <button class="button-primary" type="submit">Products importieren</button>
+      <button class="button-primary" type="submit">Produkte importieren</button>
     </form>
   </section>
 </section>

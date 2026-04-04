@@ -6,6 +6,9 @@ export type CustomerOrderRecord = {
   customerName?: string;
   serviceLocation?: string;
   material?: string;
+  laborHours?: string;
+  travelHours?: string;
+  breakMinutes?: string;
   workDescriptionHtml?: string;
   workSignatureAt?: string;
   approvalStatus?: string;
@@ -64,6 +67,9 @@ const mapCustomerOrderRecord = (row: {
   customer_name: string | null;
   service_location: string | null;
   material: string | null;
+  labor_hours: string | null;
+  travel_hours: string | null;
+  break_minutes: string | null;
   work_description_html: string | null;
   work_signature_at: Date | null;
   approval_status: string | null;
@@ -76,6 +82,9 @@ const mapCustomerOrderRecord = (row: {
   ...(row.customer_name ? { customerName: row.customer_name } : {}),
   ...(row.service_location ? { serviceLocation: row.service_location } : {}),
   ...(row.material ? { material: row.material } : {}),
+  ...(row.labor_hours ? { laborHours: row.labor_hours } : {}),
+  ...(row.travel_hours ? { travelHours: row.travel_hours } : {}),
+  ...(row.break_minutes ? { breakMinutes: row.break_minutes } : {}),
   ...(row.work_description_html ? { workDescriptionHtml: row.work_description_html } : {}),
   ...(row.work_signature_at ? { workSignatureAt: row.work_signature_at.toISOString() } : {}),
   ...(row.approval_status ? { approvalStatus: row.approval_status } : {}),
@@ -162,6 +171,9 @@ export const findCustomerOrderRecord = async (documentId: string): Promise<Custo
       customer_name: string | null;
       service_location: string | null;
       material: string | null;
+      labor_hours: string | null;
+      travel_hours: string | null;
+      break_minutes: string | null;
       work_description_html: string | null;
       work_signature_at: Date | null;
       approval_status: string | null;
@@ -169,7 +181,7 @@ export const findCustomerOrderRecord = async (documentId: string): Promise<Custo
       service_date: string | null;
       technician: string | null;
     }>(
-      `select document_id, order_number, customer_name, service_location, material, work_description_html, work_signature_at, approval_status, status, service_date, technician
+      `select document_id, order_number, customer_name, service_location, material, labor_hours, travel_hours, break_minutes, work_description_html, work_signature_at, approval_status, status, service_date, technician
        from customer_orders
        where document_id = $1
        limit 1`,
@@ -188,6 +200,9 @@ export const listCustomerOrderRecordsVisibleToUser = async (userId: string): Pro
       customer_name: string | null;
       service_location: string | null;
       material: string | null;
+      labor_hours: string | null;
+      travel_hours: string | null;
+      break_minutes: string | null;
       work_description_html: string | null;
       work_signature_at: Date | null;
       approval_status: string | null;
@@ -195,7 +210,7 @@ export const listCustomerOrderRecordsVisibleToUser = async (userId: string): Pro
       service_date: string | null;
       technician: string | null;
     }>(
-      `select distinct co.document_id, co.order_number, co.customer_name, co.service_location, co.material, co.work_description_html, co.work_signature_at, co.approval_status, co.status, co.service_date, co.technician
+      `select distinct co.document_id, co.order_number, co.customer_name, co.service_location, co.material, co.labor_hours, co.travel_hours, co.break_minutes, co.work_description_html, co.work_signature_at, co.approval_status, co.status, co.service_date, co.technician
        from customer_orders co
        inner join documents d on d.id = co.document_id
        inner join template_assignments ta on ta.template_id = d.template_id and ta.status = 'active'

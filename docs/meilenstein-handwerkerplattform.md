@@ -18,7 +18,7 @@
 | interne Stammdaten via CSV + lesende APIs | erfuellt | Customers und Products werden per CSV importiert und gelesen | spaeter Delta-/Validierungslogik erweitern |
 | Lookup-/Action-Bindings | erfuellt | Templates und Workflows referenzieren zentrale APIs | noch keine breite Bibliothek |
 | Grid | erfuellt | produktiv im Produktionsnachweis | Aggregationen noch offen |
-| html-editor | erfuellt | produktiv im Kundenauftrag | WYSIWYG bleibt bewusst klein |
+| html-editor | erfuellt | produktiv in der Kundenservice-Dokumentation | WYSIWYG bleibt bewusst klein |
 | signature | erfuellt | global und per User im Qualifikationsfall | keine Bild-/Canvas-Signatur |
 | user-select / user-multiselect | erfuellt | produktiv im Qualifikationsnachweis | noch kein grosser People-Picker |
 | radio-group / checkbox-group | erfuellt | produktiv im Qualifikationsnachweis | Auswertung spaeter fachlich vertiefen |
@@ -27,7 +27,7 @@
 | typed entity tables | erfuellt | Tabellen werden synchron befuellt, tragen fachliche Kernfelder und sind ueber Detail-, Listen- und CSV-Schnitte lesbar | Schreibseite bleibt vorerst an `documents.data_json` gekoppelt |
 | generisches Formular | erfuellt | `generic_form` ist Template, Workflow, Dokument und typed Record im normalen Produktpfad | Typ bleibt bewusst minimal |
 | Journal / Attachments | erfuellt | vorhanden und verdichtet | Medienausbau spaeter |
-| Start-to-End-Tests fuer 4 Familien | erfuellt | `e2e:reference` prueft Kundenauftrag, Produktion, Qualifikation und generic_form | derzeit noch referenzdatengestuetzt, nicht browsergetrieben |
+| Start-to-End-Tests fuer 4 Familien | erfuellt | `e2e:reference` prueft Kundenservice-Dokumentation, Produktion, Qualifikation und generic_form | derzeit noch referenzdatengestuetzt, nicht browsergetrieben |
 
 ## Fazit
 

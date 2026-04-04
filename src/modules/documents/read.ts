@@ -108,7 +108,7 @@ const readTypedLeadValue = (row: DocumentRow): string | undefined => {
 export const formatDocumentTitle = (templateKey: string, dataJson: Record<string, unknown>, templateName: string): string => {
   if (templateKey === "customer-order-test") {
     const orderNumber = dataJson.customer_order_number;
-    return typeof orderNumber === "string" ? `Kundenauftrag ${orderNumber}` : templateName;
+    return typeof orderNumber === "string" ? `Serviceeinsatz ${orderNumber}` : templateName;
   }
 
   if (templateKey === "production-batch") {

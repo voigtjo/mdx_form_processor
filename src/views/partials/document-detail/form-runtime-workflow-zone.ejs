@@ -14,7 +14,7 @@
 
 <% if (submitStatus) { %>
   <div class="notice-card notice-success notice-inline">
-    <strong>Submitted</strong>
+    <strong>Eingereicht</strong>
     <p><%= submitStatus %></p>
   </div>
 <% } %>
@@ -28,7 +28,7 @@
 
 <% if (approveStatus) { %>
   <div class="notice-card notice-success notice-inline">
-    <strong>Approved</strong>
+    <strong>Freigegeben</strong>
     <p><%= approveStatus %></p>
   </div>
 <% } %>
@@ -42,7 +42,7 @@
 
 <% if (rejectStatus) { %>
   <div class="notice-card notice-success notice-inline">
-    <strong>Rejected</strong>
+    <strong>Zurueckgewiesen</strong>
     <p><%= rejectStatus %></p>
   </div>
 <% } %>
@@ -90,7 +90,7 @@
       hx-target="#document-form-body-fragment"
       hx-swap="outerHTML"
       <%= formRuntimeEditState.isAvailable ? "" : "disabled" %>
-    >Werte speichern</button>
+    >Speichern</button>
     <% if (documentDetail.submitState.isAvailable) { %>
       <button
         class="button-secondary"
@@ -100,9 +100,9 @@
         hx-target="#document-form-body-fragment"
         hx-swap="outerHTML"
         data-preserve-form-position="true"
-      >Submit</button>
+      >Einreichen</button>
     <% } else if (documentDetail.document.status === "created") { %>
-      <button class="button-secondary" type="button" disabled>Submit</button>
+      <button class="button-secondary" type="button" disabled>Einreichen</button>
     <% } %>
     <% if (documentDetail.approveState.isAvailable) { %>
       <button
@@ -113,7 +113,7 @@
         hx-target="#document-form-body-fragment"
         hx-swap="outerHTML"
         data-preserve-form-position="true"
-      >Approve</button>
+      >Freigeben</button>
     <% } %>
     <% if (documentDetail.rejectState.isAvailable) { %>
       <button
@@ -124,7 +124,7 @@
         hx-target="#document-form-body-fragment"
         hx-swap="outerHTML"
         data-preserve-form-position="true"
-      >Reject</button>
+      >Zurueckweisen</button>
     <% } %>
   </div>
 </div>

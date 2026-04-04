@@ -45,7 +45,7 @@ Fachlich bereits sinnvoll tragfaehig:
 - form_type plus typed entity tables als erster echter Fach-Slice
 - Qualification Pages plus erste Auswertung
 - `generic_form` als vierter produktiver Formulartyp
-- Start-to-End-Tests fuer Kundenauftrag, Produktion, Qualifikation und generic_form
+- Start-to-End-Tests fuer Kundenservice-Dokumentation, Produktion, Qualifikation und generic_form
 
 ## Fuer den Meilenstein noch teilweise oder offen
 
@@ -85,4 +85,4 @@ Neue Implementierungsschritte sollen sich jetzt primär an der produktnahen Plat
 2. Workflows
 3. TypeScript APIs
 4. Handwerker-App als erste Ziel-App
-5. weitere Testwelten nur soweit vorbereiten, wie sie die Plattform fuer die Handwerker-App staerken
+5. Kundenservice-Dokumentation als erster sichtbarer Leitfall im Produkt

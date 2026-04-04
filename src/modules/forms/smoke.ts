@@ -23,7 +23,7 @@ const main = async (): Promise<void> => {
   const parsedProduction = parseFormRuntimeSource(productionSource);
   const parsedGeneric = parseFormRuntimeSource(genericSource);
 
-  assert.equal(parsed.meta.title, "Kundenauftrag fuer Serviceeinsatz");
+  assert.equal(parsed.meta.title, "Kundenservice-Dokumentation fuer Serviceeinsatz");
   assert.equal(parsed.meta.key, "customer-order");
   assert.equal(parsed.meta.version, "1");
   assert.equal(parsed.sections.length, 4);
@@ -80,7 +80,7 @@ const main = async (): Promise<void> => {
     assert.equal(removedPreview.statusCode, 404);
 
     assert.equal(customerDocument.statusCode, 200);
-    assert.match(customerDocument.body, /Kundenauftrag/);
+    assert.match(customerDocument.body, /Kundenservice-Dokumentation/);
     assert.match(customerDocument.body, /Kundendaten laden/);
     assert.equal(genericDocument.statusCode, 200);
     assert.match(genericDocument.body, /Generisches Formular GF-2026-001/);

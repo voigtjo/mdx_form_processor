@@ -12,7 +12,7 @@ const toNumber = (value: string | undefined, fallback: number): number => {
 };
 
 export const env = {
-  appName: process.env.APP_NAME ?? "Digitale Dokumentation und Nachweise",
+  appName: process.env.APP_NAME ?? "Handwerker Service und Nachweise",
   host: process.env.HOST ?? "127.0.0.1",
   port: toNumber(process.env.PORT, 3000),
   databaseUrl: process.env.DATABASE_URL ?? "",

@@ -1,20 +1,20 @@
 <section class="hero-card">
   <div>
-    <h2>My Workspace</h2>
-    <p>Persoenliche Startseite fuer Aufgaben, Templates und Documents.</p>
+    <h2>Arbeitsstart</h2>
+    <p>Offene Serviceeinsaetze, Freigaben und startbare Formulare im aktuellen Einsatzkontext.</p>
   </div>
   <div class="hero-metrics">
     <article>
       <strong><%= workspaceSummary.groups.length %></strong>
-      <span>Groups</span>
+      <span>Teams</span>
     </article>
     <article>
       <strong><%= workspaceSummary.tasks.length %></strong>
-      <span>Open Tasks</span>
+      <span>Offene Schritte</span>
     </article>
     <article>
       <strong><%= workspaceSummary.documents.length %></strong>
-      <span>My Documents</span>
+      <span>Meine Vorgaenge</span>
     </article>
   </div>
 </section>
@@ -22,13 +22,13 @@
 <section class="grid two-up">
   <article class="panel">
     <div class="panel-header">
-      <h3>My Groups</h3>
+      <h3>Meine Teams</h3>
       <span class="chip"><%= activeUser.displayName %></span>
     </div>
     <% if (workspaceSummary.groups.length === 0) { %>
       <div class="empty-state">
-        <strong>Keine Groups sichtbar.</strong>
-        <p>Der aktuelle User ist keiner sichtbaren Group zugeordnet.</p>
+        <strong>Keine Teams sichtbar.</strong>
+        <p>Der aktuelle User ist keinem sichtbaren Team zugeordnet.</p>
       </div>
     <% } else { %>
       <ul class="stack-list">
@@ -44,12 +44,12 @@
 
   <article class="panel">
     <div class="panel-header">
-      <h3>My Tasks</h3>
-      <a class="text-link" href="/documents?user=<%= activeUser.key %>">Zu Documents</a>
+      <h3>Naechste Schritte</h3>
+      <a class="text-link" href="/documents?user=<%= activeUser.key %>">Zu Einsaetzen</a>
     </div>
     <% if (workspaceSummary.tasks.length === 0) { %>
       <div class="empty-state">
-        <strong>Keine offenen Tasks.</strong>
+        <strong>Keine offenen Schritte.</strong>
         <p>Im aktuellen Arbeitskontext gibt es keine persoenlichen Aufgaben.</p>
       </div>
     <% } else { %>
@@ -62,15 +62,15 @@
               <div>
                 <strong><%= task.title %></strong>
                 <p>
-                  <%= taskDocument?.title ?? "Document" %>
+                  <%= taskDocument?.title ?? "Vorgang" %>
                   <% if (taskTemplate) { %>
                     · <%= taskTemplate.name %>
                   <% } %>
                 </p>
-                <p>Action: <%= task.action %> · Rolle: <%= task.role %> · Aktualisiert: <%= task.updatedAt %></p>
+                <p><%= task.action %> · Rolle: <%= task.role %> · Aktualisiert: <%= task.updatedAt %></p>
               </div>
               <% if (taskDocument) { %>
-                <a class="button-secondary action-link" href="/documents/<%= task.documentId %>?user=<%= activeUser.key %>">Open Document</a>
+                <a class="button-secondary action-link" href="/documents/<%= task.documentId %>?user=<%= activeUser.key %>">Oeffnen</a>
               <% } %>
             </div>
           </li>
@@ -83,7 +83,7 @@
 <section class="grid two-up">
   <article class="panel">
     <div class="panel-header">
-      <h3>My Templates</h3>
+      <h3>Startbare Formulare</h3>
       <a class="text-link" href="/templates?user=<%= activeUser.key %>">Alle Templates</a>
     </div>
     <% if (workspaceSummary.templates.length === 0) { %>
@@ -109,7 +109,7 @@
               <% if (template.status === "published") { %>
                 <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form compact">
                   <input type="hidden" name="templateId" value="<%= template.id %>" />
-                  <button class="button-secondary" type="submit">Start Document</button>
+                  <button class="button-secondary" type="submit">Starten</button>
                 </form>
               <% } %>
             </div>
@@ -121,13 +121,13 @@
 
   <article class="panel">
     <div class="panel-header">
-      <h3>My Documents</h3>
-      <a class="text-link" href="/documents?user=<%= activeUser.key %>">Zu Documents</a>
+      <h3>Meine Vorgaenge</h3>
+      <a class="text-link" href="/documents?user=<%= activeUser.key %>">Zu Einsaetzen</a>
     </div>
     <% if (workspaceSummary.documents.length === 0) { %>
       <div class="empty-state">
-        <strong>Keine relevanten Documents.</strong>
-        <p>Es gibt keine sichtbaren, nicht archivierten Documents.</p>
+        <strong>Keine relevanten Vorgaenge.</strong>
+        <p>Es gibt keine sichtbaren, nicht archivierten Vorgaenge.</p>
       </div>
     <% } else { %>
       <ul class="stack-list compact">
@@ -140,7 +140,7 @@
                 <p><%= template?.name ?? "Unbekanntes Template" %></p>
                 <p><span class="status-pill"><%= document.status %></span> · Aktualisiert: <%= document.updatedAt %></p>
               </div>
-              <a class="button-secondary action-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>">Open</a>
+              <a class="button-secondary action-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>">Oeffnen</a>
             </div>
           </li>
         <% }) %>

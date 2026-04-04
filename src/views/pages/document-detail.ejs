@@ -7,9 +7,9 @@
   .map((assignment) => users.find((entry) => entry.id === assignment.userId)?.displayName ?? assignment.userId); %>
 <% const workflowStepsForHeader = ["created", "submitted", "approved"]; %>
 <% let nextStepLabel = "Kein weiterer direkter Schritt fuer den aktuellen User."; %>
-<% if (documentDetail.submitState.isAvailable) { nextStepLabel = "Naechster Schritt: Submit"; } %>
-<% if (documentDetail.approveState.isAvailable || documentDetail.rejectState.isAvailable) { nextStepLabel = "Naechster Schritt: Approve oder Reject"; } %>
-<% if (!documentDetail.approveState.isAvailable && !documentDetail.rejectState.isAvailable && documentDetail.document.status === "submitted" && activeApproverNamesForHeader.length > 0) { nextStepLabel = `Naechster Schritt: Approve oder Reject durch ${activeApproverNamesForHeader.join(", ")}`; } %>
+<% if (documentDetail.submitState.isAvailable) { nextStepLabel = "Naechster Schritt: Einreichen"; } %>
+<% if (documentDetail.approveState.isAvailable || documentDetail.rejectState.isAvailable) { nextStepLabel = "Naechster Schritt: Freigeben oder Zurueckweisen"; } %>
+<% if (!documentDetail.approveState.isAvailable && !documentDetail.rejectState.isAvailable && documentDetail.document.status === "submitted" && activeApproverNamesForHeader.length > 0) { nextStepLabel = `Naechster Schritt: Freigabe oder Rueckfrage durch ${activeApproverNamesForHeader.join(", ")}`; } %>
 <% const latestAuditEvent = documentDetail.auditEvents[documentDetail.auditEvents.length - 1]; %>
 
 <section id="document-header-fragment" data-fragment="document-header">

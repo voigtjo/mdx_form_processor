@@ -35,6 +35,8 @@ const main = async (): Promise<void> => {
       url: `/documents/${customerDocumentId}?user=service-durchfuehrung-dokumentation`,
     });
     assert.equal(customerOpen.statusCode, 200);
+    assert.match(customerOpen.body, /Kundenservice-Dokumentation/);
+    assert.match(customerOpen.body, /Einsatz- \/ Auftragsnummer/);
     assert.match(customerOpen.body, /Kundendaten laden/);
 
     const customerLookup = await postForm(app, {
@@ -88,6 +90,9 @@ const main = async (): Promise<void> => {
     assert.equal(customerRecord.orderNumber, "KD-2026-1007");
     assert.equal(customerRecord.customerName, "Baukontor Nord");
     assert.equal(customerRecord.serviceDate, "2026-04-04");
+    assert.equal(customerRecord.laborHours, "3.00");
+    assert.equal(customerRecord.travelHours, "1.00");
+    assert.equal(customerRecord.breakMinutes, "20");
     assert.equal(customerRecord.status, "approved");
     const customerRecordApi = await app.inject({
       method: "GET",
@@ -95,6 +100,9 @@ const main = async (): Promise<void> => {
     });
     assert.equal(customerRecordApi.statusCode, 200);
     assert.match(customerRecordApi.body, /approved/);
+    assert.match(customerRecordApi.body, /laborHours/);
+    assert.match(customerRecordApi.body, /travelHours/);
+    assert.match(customerRecordApi.body, /breakMinutes/);
 
     const productionOpen = await app.inject({
       method: "GET",

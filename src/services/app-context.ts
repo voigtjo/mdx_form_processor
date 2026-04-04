@@ -82,10 +82,10 @@ export const getActiveUser = async (userKey: string | undefined, users: User[]):
 
 export const getNavigation = (section: SectionKey, activeUserKey: string): NavItem[] => {
   const items = [
-    { key: "workspace" as const, label: "My Workspace", path: "/workspace" },
+    { key: "workspace" as const, label: "Start", path: "/workspace" },
     { key: "templates" as const, label: "Templates", path: "/templates" },
     { key: "workflows" as const, label: "Workflows", path: "/workflows" },
-    { key: "documents" as const, label: "Documents", path: "/documents" },
+    { key: "documents" as const, label: "Einsaetze", path: "/documents" },
     { key: "apis" as const, label: "APIs", path: "/apis" },
     { key: "admin" as const, label: "Admin", path: "/admin" },
   ];
@@ -249,10 +249,10 @@ export const createTemplateNewViewModel = async (userKey: string | undefined) =>
     pageSection: "templates" as const,
     availableWorkflows: workflows,
     availableFormTypes: [
-      { value: "customer_order", label: "customer_order" },
-      { value: "production_record", label: "production_record" },
-      { value: "qualification_record", label: "qualification_record" },
-      { value: "generic_form", label: "generic_form" },
+      { value: "customer_order", label: "customer_order · Kundenservice-Dokumentation" },
+      { value: "production_record", label: "production_record · Produktionsdokumentation" },
+      { value: "qualification_record", label: "qualification_record · Qualifikationsnachweis" },
+      { value: "generic_form", label: "generic_form · Generisches Formular" },
     ],
   };
 };
@@ -490,7 +490,7 @@ export const createApiCatalogViewModel = async (userKey: string | undefined) => 
     }));
   const typedRecordApis = [
     {
-      label: "Customer Orders",
+      label: "Kundenservice-Dokumentation",
       familyKey: "customer-orders",
       tableName: "customer_orders",
       count: usageData.documents.filter((document) => document.formType === "customer_order").length,
