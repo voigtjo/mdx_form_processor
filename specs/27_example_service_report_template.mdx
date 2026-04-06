@@ -1,0 +1,23 @@
+---
+title: Service-Report
+key: service-report
+version: 1
+attachments_enabled: true
+journal_enabled: true
+---
+
+## Dokumentkopf
+
+- Einsatznummer: select(order_number, required, ref="service-report.erp-orders") | Auftragsstatus: text(customer_order_status, readonly) | Auftragsdaten laden: action(load_service_order, ref="service-report.erp-orders", args="order_number", bind="customer,customer_order_status,customer_master_status")
+- Kunde: text(customer, required, readonly) | Kunde gueltig: text(customer_master_status, readonly)
+
+## Inhalt
+
+- Sachverhalt / Beschreibung: textarea(work_description, required)
+- Kundeninformationen: checkbox-group(customer_information_flags, options="Kunde informiert,Kunde vor Ort,Objekt zugaenglich,Nacharbeit erforderlich") | Statusmeldung: radio-group(service_result_status, required, options="offen,teilweise erledigt,erledigt,nicht moeglich")
+- Folgetermin: date(follow_up_date)
+
+## Fusszeile
+
+- Einsatzdatum: date(service_date) | Techniker / Monteur: text(technician)
+- Arbeitszeit (Std.): number(labor_hours) | Fahrzeit (Std.): number(travel_hours) | Pause (Min.): number(break_minutes)

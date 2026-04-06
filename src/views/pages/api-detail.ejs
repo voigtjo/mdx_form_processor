@@ -3,7 +3,7 @@
   <summary class="collapsible-summary">
     <div class="collapsible-summary-copy">
       <strong><%= operation ? operation.title : "Neue API" %></strong>
-      <span><%= operation ? `${operation.key} · ${operation.status} · ${operation.connector}` : "Draft" %></span>
+      <span><%= operation ? `${operation.key} · ${operation.status}` : "Draft" %></span>
     </div>
     <div class="collapsible-summary-meta">
       <span>API</span>
@@ -31,7 +31,7 @@
       </div>
       <div class="template-lifecycle-actions">
         <button class="button-secondary" type="submit" name="intent" value="save_draft">Save Draft</button>
-        <button class="button-primary" type="submit" name="intent" value="publish">Publish</button>
+        <button class="button-primary" type="submit" name="intent" value="publish" <%= apiDetail.canPublishVersion ? "" : "disabled" %>>Publish</button>
         <% if (operation) { %>
           <button class="button-secondary" type="submit" name="intent" value="unpublish" <%= operation.status === "published" ? "" : "disabled" %>>Unpublish</button>
           <button class="button-secondary" type="submit" name="intent" value="archive" <%= operation.status !== "archived" ? "" : "disabled" %>>Archive</button>
@@ -49,19 +49,6 @@
           <label class="field-label" for="api-title">Title</label>
           <input id="api-title" name="title" class="text-input" value="<%= apiDetail.editor.title %>" />
         </div>
-        <div class="field-block">
-          <label class="field-label" for="api-connector">Connector</label>
-          <input id="api-connector" name="connector" class="text-input" value="<%= apiDetail.editor.connector %>" />
-        </div>
-        <div class="field-block">
-          <label class="field-label" for="api-auth-mode">Auth Mode</label>
-          <input id="api-auth-mode" name="authMode" class="text-input" value="<%= apiDetail.editor.authMode %>" />
-        </div>
-      </div>
-
-      <div class="field-block">
-        <label class="field-label" for="api-tags">Tags</label>
-        <input id="api-tags" name="tagsText" class="text-input" value="<%= apiDetail.editor.tagsText %>" />
       </div>
 
       <div class="field-block">
@@ -74,7 +61,13 @@
       <div class="panel-header">
         <h4>Handler Source</h4>
       </div>
-      <textarea id="api-handler-source" name="handlerTsSource" rows="20" class="form-runtime-source-editor"><%= apiDetail.editor.handlerTsSource %></textarea>
+      <textarea
+        id="api-handler-source"
+        name="handlerTsSource"
+        rows="20"
+        class="form-runtime-source-editor"
+        data-code-editor="typescript"
+      ><%= apiDetail.editor.handlerTsSource %></textarea>
     </article>
 
     <article class="subpanel">

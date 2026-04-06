@@ -1,9 +1,15 @@
 <section class="panel panel-primary-slice">
   <div class="panel-header">
-    <h3><%= documentDetail.document.formType === "customer_order" ? "Kundenservice-Dokumentation" : "Formular" %></h3>
+    <h3><%= documentDetail.document.templateKey === "service-report" ? "Service-Report" : documentDetail.document.formType === "customer_order" ? "Kundenservice-Dokumentation" : "Formular" %></h3>
   </div>
 
-  <form class="form-stack" method="post" action="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>">
+  <form
+    class="form-stack"
+    method="post"
+    action="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>"
+    data-document-form="true"
+    data-document-id="<%= documentDetail.document.id %>"
+  >
     <% const activeApproverNames = documentDetail.assignments
       .filter((assignment) => assignment.active && assignment.role === "approver")
       .map((assignment) => users.find((entry) => entry.id === assignment.userId)?.displayName ?? assignment.userId); %>
@@ -16,12 +22,16 @@
           activeUser,
           formRuntimeStatus,
           formRuntimeError,
+          assignStatus,
+          assignError,
           submitStatus,
           submitError,
           approveStatus,
           approveError,
           rejectStatus,
           rejectError,
+          reassignStatus,
+          reassignError,
           archiveStatus,
           archiveError,
           activeApproverNames

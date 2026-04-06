@@ -158,6 +158,123 @@ const customerOrderFieldSemantics = {
   },
 } as const satisfies Record<string, ReferenceFormRuntimeFieldSemantic>;
 
+const serviceReportFieldSemantics = {
+  order_number: {
+    controlType: "select",
+    runtimeRole: "lookup_input",
+    lookupRole: "input",
+    isSubmitRequired: true,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Bitte einen Auftrag aus ERP-SIM waehlen",
+  },
+  customer_order_status: {
+    controlType: "text",
+    runtimeRole: "derived_readonly",
+    lookupRole: "result",
+    isSubmitRequired: false,
+    isEditableWhenOpen: false,
+    emptyValueLabel: "Wird durch Auftragsdaten laden gefuellt",
+  },
+  customer: {
+    controlType: "text",
+    runtimeRole: "derived_readonly",
+    lookupRole: "result",
+    isSubmitRequired: true,
+    isEditableWhenOpen: false,
+    emptyValueLabel: "Wird durch Auftragsdaten laden gefuellt",
+  },
+  customer_master_status: {
+    controlType: "text",
+    runtimeRole: "derived_readonly",
+    lookupRole: "result",
+    isSubmitRequired: false,
+    isEditableWhenOpen: false,
+    emptyValueLabel: "Wird durch Auftragsdaten laden gefuellt",
+  },
+  service_date: {
+    controlType: "date",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+  },
+  technician: {
+    controlType: "text",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+  },
+  work_description: {
+    controlType: "textarea",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: true,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Sachverhalt, Befund und getroffene Massnahmen",
+  },
+  customer_information_flags: {
+    controlType: "checkbox-group",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Keine zusaetzlichen Kundeninformationen gewaehlt",
+  },
+  service_result_status: {
+    controlType: "radio-group",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: true,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Bitte einen Status waehlen",
+  },
+  follow_up_date: {
+    controlType: "date",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Kein Folgetermin gesetzt",
+  },
+  labor_hours: {
+    controlType: "number",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+  },
+  travel_hours: {
+    controlType: "number",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+  },
+  break_minutes: {
+    controlType: "number",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+  },
+  approval_status: {
+    controlType: "select",
+    runtimeRole: "workflow_readonly",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: false,
+  },
+  work_signature: {
+    controlType: "signature",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Noch nicht signiert",
+  },
+} as const satisfies Record<string, ReferenceFormRuntimeFieldSemantic>;
+
 const qualificationFieldSemantics = {
   qualification_record_number: {
     controlType: "text",
@@ -342,6 +459,17 @@ export const referenceFormRuntimeActionSemantics = {
   },
 } as const satisfies Record<string, ReferenceFormRuntimeActionSemantic>;
 
+const serviceReportActionSemantics = {
+  load_service_order: {
+    controlType: "action",
+    runtimeRole: "lookup_trigger",
+    lookupRole: "trigger",
+    args: ["order_number"],
+    bind: ["customer", "customer_order_status", "customer_master_status"],
+    hint: "Laedt Auftragsstatus und Kundendaten aus ERP-SIM.",
+  },
+} as const satisfies Record<string, ReferenceFormRuntimeActionSemantic>;
+
 const formRuntimeTemplateConfigs = {
   "customer-order-test": {
     fieldSemantics: customerOrderFieldSemantics,
@@ -411,6 +539,11 @@ const formRuntimeTemplateConfigs = {
         },
       ];
     },
+  },
+  "service-report": {
+    fieldSemantics: serviceReportFieldSemantics,
+    actionSemantics: serviceReportActionSemantics,
+    hiddenFieldNames: ["service_order_options_json"],
   },
   "qualification-record": {
     fieldSemantics: qualificationFieldSemantics,
@@ -482,6 +615,43 @@ export type ReferenceFormRuntimeMasterDataSection = {
   entries: ReferenceFormRuntimeMasterDataEntry[];
 };
 
+const parseDynamicOptionItems = (value: string | undefined): ReferenceFormRuntimeOptionItem[] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (!Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    const items = parsed.flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        return [];
+      }
+
+      const option = entry as Record<string, unknown>;
+      const itemValue = typeof option.value === "string" ? option.value.trim() : "";
+      const itemLabel = typeof option.label === "string" ? option.label.trim() : itemValue;
+
+      if (!itemValue || !itemLabel) {
+        return [];
+      }
+
+      return [{
+        value: itemValue,
+        label: itemLabel,
+      }];
+    });
+
+    return items.length > 0 ? items : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const getTemplateConfig = (templateKey: string): ReferenceFormRuntimeTemplateConfig | null => {
   return formRuntimeTemplateConfigs[templateKey as keyof typeof formRuntimeTemplateConfigs] ?? null;
 };
@@ -551,7 +721,9 @@ export const buildReferenceFormRuntimeFieldUi = (input: {
       const helpText = "helpText" in definition ? definition.helpText : undefined;
       const optionItems = definition.controlType === "user-select" || definition.controlType === "user-multiselect"
         ? userOptionItems
-        : undefined;
+        : templateKey === "service-report" && name === "order_number"
+          ? parseDynamicOptionItems(fieldValues.service_order_options_json)
+          : undefined;
       const displayValue = definition.controlType === "user-select"
         ? resolveSingleUserDisplayValue(fieldValue, userOptionItems)
         : definition.controlType === "user-multiselect"

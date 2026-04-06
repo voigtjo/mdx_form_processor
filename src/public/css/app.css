@@ -415,6 +415,19 @@ table {
   font-size: 0.9rem;
 }
 
+.checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-weight: 700;
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
 .form-stack input[type="text"],
 .form-stack select,
 .form-stack textarea,
@@ -741,6 +754,14 @@ tr.is-selected-row td {
   color: #f7efe3;
   font: 0.95rem/1.55 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   resize: vertical;
+}
+
+.code-editor-source {
+  display: none;
+}
+
+.code-editor-host {
+  width: 100%;
 }
 
 .api-description-input {
@@ -1321,8 +1342,6 @@ th {
 
 @media (max-width: 1180px) {
   .two-up,
-  .form-runtime-columns-2,
-  .form-runtime-columns-3,
   .form-runtime-live-grid,
   .workflow-table-meta {
     grid-template-columns: 1fr;

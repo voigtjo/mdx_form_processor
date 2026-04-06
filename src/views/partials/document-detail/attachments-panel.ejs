@@ -1,6 +1,6 @@
 <section class="panel">
   <div class="panel-header">
-    <h3>Attachments</h3>
+    <h3>Anhang</h3>
     <span><%= documentDetail.attachments.length %></span>
   </div>
   <% if (uploadStatus) { %>
@@ -25,9 +25,11 @@
         action="/documents/<%= documentDetail.document.id %>/attachments?user=<%= activeUser.key %>"
         enctype="multipart/form-data"
         hx-post="/documents/<%= documentDetail.document.id %>/attachments?user=<%= activeUser.key %>"
+        hx-encoding="multipart/form-data"
         hx-target="#document-attachments-fragment"
         hx-swap="outerHTML"
-        hx-encoding="multipart/form-data"
+        data-preserve-document-draft="true"
+        data-document-id="<%= documentDetail.document.id %>"
       >
         <input type="file" name="attachment" />
         <button class="button-secondary" type="submit">Datei hochladen</button>

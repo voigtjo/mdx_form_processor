@@ -89,9 +89,11 @@ const getReferenceFormRuntimeMissingFieldLabels = (document: DocumentAccessConte
     ...(userId ? { currentUserId: userId } : {}),
   });
   const fieldLabels: Record<string, string> = {
-    order_number: "Auftragsnummer",
+    order_number: "Einsatznummer",
     customer: "Kunde",
+    customer_order_status: "Auftragsstatus",
     work_description: "Taetigkeitsbeschreibung",
+    service_result_status: "Statusmeldung",
     material: "Material",
     qualification_record_number: "Nachweisnummer",
     qualification_title: "Qualifikation / Schulung",
@@ -161,10 +163,10 @@ export const getDocumentSubmitStateForUser = async (documentId: string, userId: 
     };
   }
 
-  if (!document.canExecute) {
+  if (!document.canWrite) {
     return {
       isAvailable: false,
-      reason: "Submit setzt Membership-Recht x voraus.",
+      reason: "Submit setzt Membership-Recht w voraus.",
     };
   }
 
@@ -239,11 +241,11 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
     };
   }
 
-  if (!document.canExecute) {
+  if (!document.canWrite) {
     return {
       ok: false,
       reason: "submit_not_allowed",
-      details: "Submit setzt Membership-Recht x voraus.",
+      details: "Submit setzt Membership-Recht w voraus.",
     };
   }
 
@@ -402,6 +404,16 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
     );
 
     if (isFormRuntimeReferenceTemplate(document.templateKey)) {
+      await client.query(
+        `
+        update document_assignments
+        set active = false
+        where document_id = $1
+          and role = 'approver'
+        `,
+        [documentId],
+      );
+
       const approverUsers = await client.query<{ user_id: string }>(
         `
         select distinct m.user_id
@@ -410,6 +422,7 @@ export const submitDocumentForUser = async ({ documentId, userId }: SubmitDocume
         where ta.template_id = $1
           and ta.status = 'active'
           and position('x' in m.rights) > 0
+          and position('w' in m.rights) = 0
           and m.user_id <> $2
         `,
         [document.templateId, userId],

@@ -5,12 +5,13 @@
 <% const activeApproverNamesForHeader = documentDetail.assignments
   .filter((assignment) => assignment.active && assignment.role === "approver")
   .map((assignment) => users.find((entry) => entry.id === assignment.userId)?.displayName ?? assignment.userId); %>
-<% const workflowStepsForHeader = ["created", "submitted", "approved"]; %>
+<% const workflowStepsForHeader = ["draft", "assigned", "submitted", "approved"].includes(documentDetail.document.status) ? ["draft", "assigned", "submitted", "approved"] : ["created", "submitted", "approved"]; %>
 <% let nextStepLabel = "Kein weiterer direkter Schritt fuer den aktuellen User."; %>
+<% if (documentDetail.assignState?.isAvailable) { nextStepLabel = "Naechster Schritt: Zuweisen"; } %>
 <% if (documentDetail.submitState.isAvailable) { nextStepLabel = "Naechster Schritt: Einreichen"; } %>
-<% if (documentDetail.approveState.isAvailable || documentDetail.rejectState.isAvailable) { nextStepLabel = "Naechster Schritt: Freigeben oder Zurueckweisen"; } %>
-<% if (!documentDetail.approveState.isAvailable && !documentDetail.rejectState.isAvailable && documentDetail.document.status === "submitted" && activeApproverNamesForHeader.length > 0) { nextStepLabel = `Naechster Schritt: Freigabe oder Rueckfrage durch ${activeApproverNamesForHeader.join(", ")}`; } %>
-<% const latestAuditEvent = documentDetail.auditEvents[documentDetail.auditEvents.length - 1]; %>
+<% if (documentDetail.approveState.isAvailable || documentDetail.reassignState?.isAvailable) { nextStepLabel = "Naechster Schritt: Freigeben oder neu zuweisen"; } %>
+<% if (!documentDetail.approveState.isAvailable && !documentDetail.reassignState?.isAvailable && !documentDetail.rejectState.isAvailable && documentDetail.document.status === "submitted" && activeApproverNamesForHeader.length > 0) { nextStepLabel = `Naechster Schritt: Freigabe oder Rueckgabe durch ${activeApproverNamesForHeader.join(", ")}`; } %>
+<% const latestAuditEvent = documentDetail.auditEvents[0]; %>
 
 <section id="document-header-fragment" data-fragment="document-header">
   <%- include("../partials/document-detail/document-header", {
@@ -44,12 +45,16 @@
       users,
       formRuntimeStatus,
       formRuntimeError,
+      assignStatus,
+      assignError,
       submitStatus,
       submitError,
       approveStatus,
       approveError,
       rejectStatus,
       rejectError,
+      reassignStatus,
+      reassignError,
       archiveStatus,
       archiveError
     }) %>
@@ -92,6 +97,7 @@
     <%- include("../partials/document-detail/journal-panel", {
       documentDetail,
       activeUser,
+      users,
       journalStatus,
       journalError
     }) %>

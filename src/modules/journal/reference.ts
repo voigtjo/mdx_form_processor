@@ -24,8 +24,8 @@ export const buildReferenceFormRuntimeJournalDefinition = (input: {
 }): ReadOnlyJournalDefinition => {
   return {
     name: referenceFormRuntimeJournalFieldName,
-    label: "Journal",
-    helpText: "Separater Dokumentbereich ausserhalb des Formulars. Die Freigabe erfolgt ueber das Template.",
+    label: "Nachrichten",
+    helpText: "Separater Dokumentbereich ausserhalb des Formulars. Abgesendete Nachrichten bleiben unveraenderlich bestehen.",
     columns: [
       { key: "at", label: "At", type: "text" },
       { key: "text", label: "Entry", type: "text" },

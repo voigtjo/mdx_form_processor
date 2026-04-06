@@ -27,9 +27,11 @@ import { createGroup } from "../modules/groups/create.js";
 import { updateGroup } from "../modules/groups/update.js";
 import { createMembership } from "../modules/memberships/create.js";
 import { removeMembership } from "../modules/memberships/remove.js";
+import { assignDocumentForUser } from "../modules/documents/assign.js";
 import { approveDocumentForUser } from "../modules/documents/approve.js";
 import { archiveDocumentForUser } from "../modules/documents/archive.js";
 import { runDocumentFormRuntimeActionForUser, saveDocumentFormRuntimeValuesForUser } from "../modules/documents/form-runtime.js";
+import { reassignDocumentForUser } from "../modules/documents/reassign.js";
 import { rejectDocumentForUser } from "../modules/documents/reject.js";
 import { findDocumentDetailVisibleToUser } from "../modules/documents/read.js";
 import { saveDocumentValuesForUser } from "../modules/documents/save.js";
@@ -54,6 +56,7 @@ import { findReferenceEntityByKey, listReferenceEntities } from "../modules/enti
 import { findTemplateFormDataRecordVisibleToUser, listTemplateFormDataRecordsVisibleToUser } from "../modules/form-data/read.js";
 import { createTemplateDraft } from "../modules/templates/create.js";
 import { applyFormRuntimeApiBindings } from "../modules/forms/api-bindings.js";
+import { isFormRuntimeReferenceTemplate } from "../modules/forms/document-bridge.js";
 import { archiveOperation, saveOperationDraft, unpublishOperation } from "../modules/operations/write.js";
 import { createTemplateAssignment, removeTemplateAssignment } from "../modules/templates/assign.js";
 import {
@@ -62,6 +65,7 @@ import {
   saveReferenceTemplateDraft,
   unpublishReferenceTemplateVersion,
 } from "../modules/templates/lifecycle.js";
+import { setTemplateSourceFrontmatterValue } from "../modules/templates/source.js";
 import { createUser } from "../modules/users/create.js";
 import { listUsers } from "../modules/users/read.js";
 import { updateUser } from "../modules/users/update.js";
@@ -86,12 +90,16 @@ type UserQuery = {
   saveStatus?: string;
   journalError?: string;
   journalStatus?: string;
+  assignError?: string;
+  assignStatus?: string;
   submitError?: string;
   submitStatus?: string;
   approveError?: string;
   approveStatus?: string;
   rejectError?: string;
   rejectStatus?: string;
+  reassignError: string | undefined;
+  reassignStatus: string | undefined;
   archiveError?: string;
   archiveStatus?: string;
   formRuntimeError?: string;
@@ -101,6 +109,7 @@ type UserQuery = {
   dialogType?: "error" | "info";
   dialogTitle?: string;
   dialogMessage?: string;
+  dialogAnchor?: string;
   intent?: string;
   actionName?: string;
   page?: string;
@@ -117,12 +126,16 @@ const saveErrorValue = (request: FastifyRequest): string | undefined => query(re
 const saveStatusValue = (request: FastifyRequest): string | undefined => query(request).saveStatus;
 const journalErrorValue = (request: FastifyRequest): string | undefined => query(request).journalError;
 const journalStatusValue = (request: FastifyRequest): string | undefined => query(request).journalStatus;
+const assignErrorValue = (request: FastifyRequest): string | undefined => query(request).assignError;
+const assignStatusValue = (request: FastifyRequest): string | undefined => query(request).assignStatus;
 const submitErrorValue = (request: FastifyRequest): string | undefined => query(request).submitError;
 const submitStatusValue = (request: FastifyRequest): string | undefined => query(request).submitStatus;
 const approveErrorValue = (request: FastifyRequest): string | undefined => query(request).approveError;
 const approveStatusValue = (request: FastifyRequest): string | undefined => query(request).approveStatus;
 const rejectErrorValue = (request: FastifyRequest): string | undefined => query(request).rejectError;
 const rejectStatusValue = (request: FastifyRequest): string | undefined => query(request).rejectStatus;
+const reassignErrorValue = (request: FastifyRequest): string | undefined => query(request).reassignError;
+const reassignStatusValue = (request: FastifyRequest): string | undefined => query(request).reassignStatus;
 const archiveErrorValue = (request: FastifyRequest): string | undefined => query(request).archiveError;
 const archiveStatusValue = (request: FastifyRequest): string | undefined => query(request).archiveStatus;
 const formRuntimeErrorValue = (request: FastifyRequest): string | undefined => query(request).formRuntimeError;
@@ -132,6 +145,7 @@ const uploadStatusValue = (request: FastifyRequest): string | undefined => query
 const dialogTypeValue = (request: FastifyRequest): UserQuery["dialogType"] => query(request).dialogType;
 const dialogTitleValue = (request: FastifyRequest): string | undefined => query(request).dialogTitle;
 const dialogMessageValue = (request: FastifyRequest): string | undefined => query(request).dialogMessage;
+const dialogAnchorValue = (request: FastifyRequest): string | undefined => query(request).dialogAnchor;
 
 const dialogState = (request: FastifyRequest) => {
   const type = dialogTypeValue(request);
@@ -154,12 +168,16 @@ type DocumentFeedbackState = {
   saveStatus: string | undefined;
   journalError: string | undefined;
   journalStatus: string | undefined;
+  assignError: string | undefined;
+  assignStatus: string | undefined;
   submitError: string | undefined;
   submitStatus: string | undefined;
   approveError: string | undefined;
   approveStatus: string | undefined;
   rejectError: string | undefined;
   rejectStatus: string | undefined;
+  reassignError: string | undefined;
+  reassignStatus: string | undefined;
   archiveError: string | undefined;
   archiveStatus: string | undefined;
   formRuntimeError: string | undefined;
@@ -175,12 +193,16 @@ const buildDocumentFeedbackStateFromRequest = (request: FastifyRequest): Documen
   saveStatus: saveStatusValue(request),
   journalError: journalErrorValue(request),
   journalStatus: journalStatusValue(request),
+  assignError: assignErrorValue(request),
+  assignStatus: assignStatusValue(request),
   submitError: submitErrorValue(request),
   submitStatus: submitStatusValue(request),
   approveError: approveErrorValue(request),
   approveStatus: approveStatusValue(request),
   rejectError: rejectErrorValue(request),
   rejectStatus: rejectStatusValue(request),
+  reassignError: reassignErrorValue(request),
+  reassignStatus: reassignStatusValue(request),
   archiveError: archiveErrorValue(request),
   archiveStatus: archiveStatusValue(request),
   formRuntimeError: formRuntimeErrorValue(request),
@@ -205,24 +227,33 @@ const buildDocumentFragmentLocals = (viewModel: NonNullable<DocumentRenderModel>
   const activeApproverNames = viewModel.documentDetail.assignments
     .filter((assignment) => assignment.active && assignment.role === "approver")
     .map((assignment) => viewModel.users.find((entry) => entry.id === assignment.userId)?.displayName ?? assignment.userId);
-  const workflowStepsForHeader = ["created", "submitted", "approved"];
+  const workflowStepsForHeader = ["draft", "assigned", "submitted", "approved"].includes(viewModel.documentDetail.document.status)
+    ? ["draft", "assigned", "submitted", "approved"]
+    : ["created", "submitted", "approved"];
   let nextStepLabel = "Kein weiterer direkter Schritt fuer den aktuellen User.";
 
   if (viewModel.documentDetail.submitState.isAvailable) {
     nextStepLabel = "Naechster Schritt: Submit";
   }
 
-  if (viewModel.documentDetail.approveState.isAvailable || viewModel.documentDetail.rejectState.isAvailable) {
+  if (viewModel.documentDetail.assignState?.isAvailable) {
+    nextStepLabel = "Naechster Schritt: Assign";
+  }
+
+  if (viewModel.documentDetail.approveState.isAvailable || viewModel.documentDetail.reassignState?.isAvailable) {
+    nextStepLabel = "Naechster Schritt: Freigeben oder neu zuweisen";
+  } else if (viewModel.documentDetail.approveState.isAvailable || viewModel.documentDetail.rejectState.isAvailable) {
     nextStepLabel = "Naechster Schritt: Approve oder Reject";
   }
 
   if (
     !viewModel.documentDetail.approveState.isAvailable &&
+    !viewModel.documentDetail.reassignState?.isAvailable &&
     !viewModel.documentDetail.rejectState.isAvailable &&
     viewModel.documentDetail.document.status === "submitted" &&
     activeApproverNames.length > 0
   ) {
-    nextStepLabel = `Naechster Schritt: Approve oder Reject durch ${activeApproverNames.join(", ")}`;
+    nextStepLabel = `Naechster Schritt: Freigabe oder Rueckgabe durch ${activeApproverNames.join(", ")}`;
   }
 
   return {
@@ -232,7 +263,7 @@ const buildDocumentFragmentLocals = (viewModel: NonNullable<DocumentRenderModel>
     activeApproverNames,
     workflowStepsForHeader,
     nextStepLabel,
-    latestAuditEvent: viewModel.documentDetail.auditEvents.at(-1),
+    latestAuditEvent: viewModel.documentDetail.auditEvents[0],
   };
 };
 
@@ -289,12 +320,16 @@ const renderDocumentWorkflowZoneFragment = async (
     activeUser: viewModel.activeUser,
     formRuntimeStatus: viewModel.formRuntimeStatus,
     formRuntimeError: viewModel.formRuntimeError,
+    assignStatus: viewModel.assignStatus,
+    assignError: viewModel.assignError,
     submitStatus: viewModel.submitStatus,
     submitError: viewModel.submitError,
     approveStatus: viewModel.approveStatus,
     approveError: viewModel.approveError,
     rejectStatus: viewModel.rejectStatus,
     rejectError: viewModel.rejectError,
+    reassignStatus: viewModel.reassignStatus,
+    reassignError: viewModel.reassignError,
     archiveStatus: viewModel.archiveStatus,
     archiveError: viewModel.archiveError,
     activeApproverNames: locals.activeApproverNames,
@@ -323,12 +358,16 @@ const renderDocumentWorkspaceFragment = async (
     users: viewModel.users,
     formRuntimeStatus: viewModel.formRuntimeStatus,
     formRuntimeError: viewModel.formRuntimeError,
+    assignStatus: viewModel.assignStatus,
+    assignError: viewModel.assignError,
     submitStatus: viewModel.submitStatus,
     submitError: viewModel.submitError,
     approveStatus: viewModel.approveStatus,
     approveError: viewModel.approveError,
     rejectStatus: viewModel.rejectStatus,
     rejectError: viewModel.rejectError,
+    reassignStatus: viewModel.reassignStatus,
+    reassignError: viewModel.reassignError,
     archiveStatus: viewModel.archiveStatus,
     archiveError: viewModel.archiveError,
     workflowZoneHtml,
@@ -371,6 +410,7 @@ const renderDocumentJournalFragment = async (
   const journalHtml = await renderEjsTemplate("partials/document-detail/journal-panel.ejs", {
     documentDetail: viewModel.documentDetail,
     activeUser: viewModel.activeUser,
+    users: viewModel.users,
     journalStatus: viewModel.journalStatus,
     journalError: viewModel.journalError,
   });
@@ -409,7 +449,25 @@ const renderDocumentAttachmentsFragment = async (
 
 const withDialog = async (request: FastifyRequest, input: Record<string, unknown>) => {
   const appDialog = dialogState(request);
-  return appDialog ? { ...input, appDialog } : input;
+
+  if (!appDialog) {
+    return input;
+  }
+
+  const closeUrl = new URL(request.url, "http://localhost");
+  closeUrl.searchParams.delete("dialogType");
+  closeUrl.searchParams.delete("dialogTitle");
+  closeUrl.searchParams.delete("dialogMessage");
+  const dialogAnchor = dialogAnchorValue(request);
+  closeUrl.searchParams.delete("dialogAnchor");
+
+  return {
+    ...input,
+    appDialog: {
+      ...appDialog,
+      closeHref: `${closeUrl.pathname}${closeUrl.search}${dialogAnchor ? `#${dialogAnchor}` : ""}`,
+    },
+  };
 };
 
 const normalizeSearchTerm = (value: string | undefined): string => value?.trim() ?? "";
@@ -474,11 +532,14 @@ const resolveWorkflowSourceFromRequestBody = (body: Record<string, unknown>) => 
     baselineSourceText: typeof body.source === "string" ? body.source : "",
     initialStatus: typeof body.initialStatus === "string" ? body.initialStatus : "",
     statusesText: typeof body.statusesText === "string" ? body.statusesText : "",
+    statusValues: collectIndexedWorkflowRowKeys(body, "statusValue").map((index) =>
+      typeof body[`statusValue__${index}`] === "string" ? String(body[`statusValue__${index}`]) : "",
+    ),
     rows: collectIndexedWorkflowRowKeys(body, "actionName").map((index) => ({
       actionName: typeof body[`actionName__${index}`] === "string" ? String(body[`actionName__${index}`]) : "",
       fromText: typeof body[`actionFrom__${index}`] === "string" ? String(body[`actionFrom__${index}`]) : "",
       to: typeof body[`actionTo__${index}`] === "string" ? String(body[`actionTo__${index}`]) : "",
-      rolesText: typeof body[`actionRoles__${index}`] === "string" ? String(body[`actionRoles__${index}`]) : "",
+      rolesText: typeof body[`actionRole__${index}`] === "string" ? String(body[`actionRole__${index}`]) : "",
       mode: typeof body[`actionMode__${index}`] === "string" ? String(body[`actionMode__${index}`]) : "",
       api: typeof body[`actionApi__${index}`] === "string" ? String(body[`actionApi__${index}`]) : "",
       condition: typeof body[`actionCondition__${index}`] === "string" ? String(body[`actionCondition__${index}`]) : "",
@@ -558,11 +619,14 @@ const filterDocumentsViewModel = (input: {
   };
 };
 
-const buildDialogRedirect = (targetUrl: string, input: { type?: "error" | "info"; title: string; message: string }) => {
+const buildDialogRedirect = (targetUrl: string, input: { type?: "error" | "info"; title: string; message: string; anchor?: string }) => {
   const nextUrl = new URL(targetUrl, "http://localhost");
   nextUrl.searchParams.set("dialogType", input.type ?? "error");
   nextUrl.searchParams.set("dialogTitle", input.title);
   nextUrl.searchParams.set("dialogMessage", input.message);
+  if (input.anchor) {
+    nextUrl.searchParams.set("dialogAnchor", input.anchor);
+  }
   return `${nextUrl.pathname}${nextUrl.search}`;
 };
 
@@ -699,7 +763,10 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       source?: string;
       intent?: string;
       workflowTemplateId?: string;
-      cascadePublishWorkflow?: string;
+      attachmentsEnabledPresent?: string;
+      attachmentsEnabled?: string;
+      journalEnabledPresent?: string;
+      journalEnabled?: string;
       [key: string]: string | undefined;
     };
   }>("/templates/:id/source", async (request, reply) => {
@@ -709,16 +776,31 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     const requestedSourceText = request.body?.source ?? "";
     const intent = request.body?.intent ?? "save_draft";
     const workflowTemplateId = request.body?.workflowTemplateId ?? "";
-    const cascadePublishWorkflow = request.body?.cascadePublishWorkflow === "on";
     const apiBindingEntries = Object.entries(request.body ?? {})
       .filter(([key]) => key.startsWith("apiBinding."))
       .map(([key, value]) => [key.replace(/^apiBinding\./, ""), value ?? ""] as const);
-    const sourceText = apiBindingEntries.length > 0
+    let sourceText = apiBindingEntries.length > 0
       ? applyFormRuntimeApiBindings({
           sourceText: requestedSourceText,
           bindings: Object.fromEntries(apiBindingEntries),
         })
       : requestedSourceText;
+
+    if (request.body?.attachmentsEnabledPresent) {
+      sourceText = setTemplateSourceFrontmatterValue(
+        sourceText,
+        "attachments_enabled",
+        request.body?.attachmentsEnabled ? "true" : "false",
+      );
+    }
+
+    if (request.body?.journalEnabledPresent) {
+      sourceText = setTemplateSourceFrontmatterValue(
+        sourceText,
+        "journal_enabled",
+        request.body?.journalEnabled ? "true" : "false",
+      );
+    }
 
     try {
       const result = intent === "publish"
@@ -726,7 +808,6 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             templateId: params.id,
             sourceText,
             workflowTemplateId,
-            cascadePublishWorkflow,
           })
         : intent === "unpublish"
           ? await unpublishReferenceTemplateVersion({
@@ -1900,12 +1981,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       saveStatus: saveStatusValue(request),
       journalError: journalErrorValue(request),
       journalStatus: journalStatusValue(request),
+      assignError: assignErrorValue(request),
+      assignStatus: assignStatusValue(request),
       submitError: submitErrorValue(request),
       submitStatus: submitStatusValue(request),
       approveError: approveErrorValue(request),
       approveStatus: approveStatusValue(request),
       rejectError: rejectErrorValue(request),
       rejectStatus: rejectStatusValue(request),
+      reassignError: reassignErrorValue(request),
+      reassignStatus: reassignStatusValue(request),
       archiveError: archiveErrorValue(request),
       archiveStatus: archiveStatusValue(request),
       formRuntimeError: formRuntimeErrorValue(request),
@@ -1929,6 +2014,10 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       customer_master_status?: string;
       customer_order_status?: string;
       customer_order_created_at?: string;
+      customer_information_flags?: string;
+      service_result_status?: string;
+      follow_up_date?: string;
+      service_order_options_json?: string;
       work_description?: string;
       material?: string;
       product_master_id?: string;
@@ -1974,6 +2063,10 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       customer_master_status: request.body.customer_master_status,
       customer_order_status: request.body.customer_order_status,
       customer_order_created_at: request.body.customer_order_created_at,
+      customer_information_flags: request.body.customer_information_flags,
+      service_result_status: request.body.service_result_status,
+      follow_up_date: request.body.follow_up_date,
+      service_order_options_json: request.body.service_order_options_json,
       work_description: request.body.work_description,
       material: request.body.material,
       product_master_id: request.body.product_master_id,
@@ -2041,14 +2134,18 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         saveStatus: saveStatusValue(request),
         journalError: journalErrorValue(request),
         journalStatus: journalStatusValue(request),
+        assignError: assignErrorValue(request),
+        assignStatus: assignStatusValue(request),
         submitError: submitErrorValue(request),
         submitStatus: submitStatusValue(request),
-        approveError: approveErrorValue(request),
-        approveStatus: approveStatusValue(request),
-        rejectError: rejectErrorValue(request),
-        rejectStatus: rejectStatusValue(request),
-        archiveError: archiveErrorValue(request),
-        archiveStatus: archiveStatusValue(request),
+      approveError: approveErrorValue(request),
+      approveStatus: approveStatusValue(request),
+      rejectError: rejectErrorValue(request),
+      rejectStatus: rejectStatusValue(request),
+      reassignError: reassignErrorValue(request),
+      reassignStatus: reassignStatusValue(request),
+      archiveError: archiveErrorValue(request),
+      archiveStatus: archiveStatusValue(request),
         formRuntimeStatus:
           result.ok && result.actionState.type === "info"
             ? `${result.actionState.title}: ${result.actionState.message}`
@@ -2116,12 +2213,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
           saveStatus: saveStatusValue(request),
           journalError: journalErrorValue(request),
           journalStatus: journalStatusValue(request),
+          assignError: assignErrorValue(request),
+          assignStatus: assignStatusValue(request),
           submitError: submitErrorValue(request),
           submitStatus: submitStatusValue(request),
           approveError: approveErrorValue(request),
           approveStatus: approveStatusValue(request),
           rejectError: rejectErrorValue(request),
           rejectStatus: rejectStatusValue(request),
+          reassignError: reassignErrorValue(request),
+          reassignStatus: reassignStatusValue(request),
           archiveError: archiveErrorValue(request),
           archiveStatus: archiveStatusValue(request),
           formRuntimeError: formRuntimeErrorValue(request),
@@ -2181,12 +2282,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             saveStatus: saveStatusValue(request),
             journalError: journalErrorValue(request),
             journalStatus: journalStatusValue(request),
+            assignError: assignErrorValue(request),
+            assignStatus: assignStatusValue(request),
             submitError: submitErrorValue(request),
             submitStatus: submitStatusValue(request),
             approveError: approveErrorValue(request),
             approveStatus: approveStatusValue(request),
             rejectError: rejectErrorValue(request),
             rejectStatus: rejectStatusValue(request),
+            reassignError: reassignErrorValue(request),
+            reassignStatus: reassignStatusValue(request),
             archiveError: archiveErrorValue(request),
             archiveStatus: archiveStatusValue(request),
             formRuntimeError: saveResult.details,
@@ -2222,12 +2327,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         saveStatus: saveStatusValue(request),
         journalError: journalErrorValue(request),
         journalStatus: journalStatusValue(request),
+        assignError: assignErrorValue(request),
+        assignStatus: assignStatusValue(request),
         submitError: submitErrorValue(request),
         submitStatus: submitStatusValue(request),
         approveError: approveErrorValue(request),
         approveStatus: approveStatusValue(request),
         rejectError: rejectErrorValue(request),
         rejectStatus: rejectStatusValue(request),
+        reassignError: reassignErrorValue(request),
+        reassignStatus: reassignStatusValue(request),
         archiveError: archiveErrorValue(request),
         archiveStatus: archiveStatusValue(request),
         formRuntimeError: formRuntimeErrorValue(request),
@@ -2320,14 +2429,18 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             saveStatus: saveStatusValue(request),
             journalError: result.details ?? "Journal-Eintrag konnte nicht hinzugefuegt werden.",
             journalStatus: journalStatusValue(request),
+            assignError: assignErrorValue(request),
+            assignStatus: assignStatusValue(request),
             submitError: submitErrorValue(request),
             submitStatus: submitStatusValue(request),
-            approveError: approveErrorValue(request),
-            approveStatus: approveStatusValue(request),
-            rejectError: rejectErrorValue(request),
-            rejectStatus: rejectStatusValue(request),
-            archiveError: archiveErrorValue(request),
-            archiveStatus: archiveStatusValue(request),
+          approveError: approveErrorValue(request),
+          approveStatus: approveStatusValue(request),
+          rejectError: rejectErrorValue(request),
+          rejectStatus: rejectStatusValue(request),
+          reassignError: reassignErrorValue(request),
+          reassignStatus: reassignStatusValue(request),
+          archiveError: archiveErrorValue(request),
+          archiveStatus: archiveStatusValue(request),
             formRuntimeError: formRuntimeErrorValue(request),
             formRuntimeStatus: formRuntimeStatusValue(request),
             uploadError: uploadErrorValue(request),
@@ -2359,12 +2472,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         saveStatus: saveStatusValue(request),
         journalError: journalErrorValue(request),
         journalStatus: "Journal-Eintrag hinzugefuegt.",
+        assignError: assignErrorValue(request),
+        assignStatus: assignStatusValue(request),
         submitError: submitErrorValue(request),
         submitStatus: submitStatusValue(request),
         approveError: approveErrorValue(request),
         approveStatus: approveStatusValue(request),
         rejectError: rejectErrorValue(request),
         rejectStatus: rejectStatusValue(request),
+        reassignError: reassignErrorValue(request),
+        reassignStatus: reassignStatusValue(request),
         archiveError: archiveErrorValue(request),
         archiveStatus: archiveStatusValue(request),
         formRuntimeError: formRuntimeErrorValue(request),
@@ -2383,9 +2500,166 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     );
   });
 
-  app.post<{ Params: { id: string } }>("/documents/:id/submit", async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: { editorUserIds?: string | string[] } }>("/documents/:id/assign", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
+    const editorUserIds = Array.isArray(request.body?.editorUserIds)
+      ? request.body?.editorUserIds
+      : typeof request.body?.editorUserIds === "string"
+        ? [request.body.editorUserIds]
+        : [];
+    const result = await assignDocumentForUser({
+      documentId: request.params.id,
+      userId: activeUser.id,
+      editorUserIds,
+    });
+
+    if (!result.ok && result.reason === "document_not_visible") {
+      return reply.code(404).view("pages/document-not-found.ejs", {
+        ...(await withDialog(request, {})),
+        title: "Document Not Found",
+        ...(await createBaseViewModel("documents", queryValue(request))),
+        missingDocumentId: request.params.id,
+      });
+    }
+
+    if (!result.ok) {
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply
+          .code(400)
+          .type("text/html")
+          .send(await renderDocumentFormBodyFragment({
+            ...viewModel,
+            ...buildDocumentFeedbackStateFromRequest(request),
+            assignError: result.details ?? "Assign ist aktuell nicht moeglich.",
+            assignStatus: undefined,
+          }, {
+            includeWorkflowZoneOob: true,
+          }));
+      }
+
+      return reply.redirect(
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&assignError=${encodeURIComponent(result.details ?? "Assign ist aktuell nicht moeglich.")}`,
+        303,
+      );
+    }
+
+    if (isHtmxRequest(request)) {
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: result.documentId,
+        });
+      }
+
+      return reply.type("text/html").send(await renderDocumentFormBodyFragment({
+        ...viewModel,
+        ...buildDocumentFeedbackStateFromRequest(request),
+        assignError: undefined,
+        assignStatus: `Dokument wurde nach ${result.nextStatus} ueberfuehrt.`,
+      }, {
+        includeWorkflowZoneOob: true,
+        includeHeaderOob: true,
+        includeHistoryOob: true,
+      }));
+    }
+
+    return reply.redirect(
+      `/documents/${encodeURIComponent(result.documentId)}?user=${encodeURIComponent(activeUser.key)}&assignStatus=${encodeURIComponent(`Dokument wurde nach ${result.nextStatus} ueberfuehrt.`)}`,
+      303,
+    );
+  });
+
+  app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/documents/:id/submit", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const visibleDocument = await findDocumentDetailVisibleToUser(request.params.id, activeUser.id);
+    const submittedFieldValues = Object.fromEntries(
+      Object.entries(request.body ?? {}).flatMap(([key, value]) => {
+        if (typeof value === "string") {
+          return [[key, value]];
+        }
+
+        return [];
+      }),
+    ) as Record<string, string | undefined>;
+
+    if (visibleDocument) {
+      if (isFormRuntimeReferenceTemplate(visibleDocument.templateKey)) {
+        const saveResult = await saveDocumentFormRuntimeValuesForUser({
+          documentId: request.params.id,
+          userId: activeUser.id,
+          activeUserDisplayName: activeUser.displayName,
+          submittedValues: request.body ?? {},
+        });
+
+        if (!saveResult.ok && saveResult.reason !== "document_not_visible") {
+          const message = saveResult.details ?? "Formularwerte konnten vor dem Submit nicht gespeichert werden.";
+
+          if (isHtmxRequest(request)) {
+            const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id, {
+              formRuntimeFieldValues: submittedFieldValues,
+            });
+
+            if (!viewModel) {
+              return reply.code(404).view("pages/document-not-found.ejs", {
+                ...(await withDialog(request, {})),
+                title: "Document Not Found",
+                ...(await createBaseViewModel("documents", queryValue(request))),
+                missingDocumentId: request.params.id,
+              });
+            }
+
+            return reply.code(400).type("text/html").send(
+              await renderDocumentFormBodyFragment({
+                ...viewModel,
+                ...buildDocumentFeedbackStateFromRequest(request),
+                submitError: message,
+                submitStatus: undefined,
+              }, {
+                includeWorkflowZoneOob: true,
+              }),
+            );
+          }
+
+          return reply.redirect(
+            `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&submitError=${encodeURIComponent(message)}`,
+            303,
+          );
+        }
+      } else {
+        const saveResult = await saveDocumentValuesForUser({
+          documentId: request.params.id,
+          userId: activeUser.id,
+          submittedValues: request.body ?? {},
+        });
+
+        if (!saveResult.ok && saveResult.reason !== "document_not_visible" && saveResult.reason !== "no_saveable_fields") {
+          const message = saveResult.details ?? "Werte konnten vor dem Submit nicht gespeichert werden.";
+
+          return reply.redirect(
+            `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&submitError=${encodeURIComponent(message)}`,
+            303,
+          );
+        }
+      }
+    }
+
     const result = await submitDocumentForUser({
       documentId: request.params.id,
       userId: activeUser.id,
@@ -2548,6 +2822,92 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     );
   });
 
+  app.post<{ Params: { id: string }; Body: { editorUserIds?: string | string[] } }>("/documents/:id/reassign", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const editorUserIds = Array.isArray(request.body?.editorUserIds)
+      ? request.body?.editorUserIds
+      : typeof request.body?.editorUserIds === "string"
+        ? [request.body.editorUserIds]
+        : [];
+    const result = await reassignDocumentForUser({
+      documentId: request.params.id,
+      userId: activeUser.id,
+      editorUserIds,
+    });
+
+    if (!result.ok && result.reason === "document_not_visible") {
+      return reply.code(404).view("pages/document-not-found.ejs", {
+        ...(await withDialog(request, {})),
+        title: "Document Not Found",
+        ...(await createBaseViewModel("documents", queryValue(request))),
+        missingDocumentId: request.params.id,
+      });
+    }
+
+    if (!result.ok) {
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply.type("text/html").send(
+          await renderDocumentFormBodyFragment({
+            ...viewModel,
+            ...buildDocumentFeedbackStateFromRequest(request),
+            reassignError: result.details ?? "Neu zuweisen ist im aktuellen Status nicht verfuegbar.",
+            reassignStatus: undefined,
+          }, {
+            includeWorkflowZoneOob: true,
+          }),
+        );
+      }
+
+      return reply.redirect(
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&reassignError=${encodeURIComponent(result.details ?? "Neu zuweisen ist im aktuellen Status nicht verfuegbar.")}`,
+        303,
+      );
+    }
+
+    if (isHtmxRequest(request)) {
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+
+      if (!viewModel) {
+        return reply.code(404).view("pages/document-not-found.ejs", {
+          ...(await withDialog(request, {})),
+          title: "Document Not Found",
+          ...(await createBaseViewModel("documents", queryValue(request))),
+          missingDocumentId: request.params.id,
+        });
+      }
+
+      return reply.type("text/html").send(
+        await renderDocumentFormBodyFragment({
+          ...viewModel,
+          ...buildDocumentFeedbackStateFromRequest(request),
+          reassignStatus: `Dokument wurde nach ${result.nextStatus} zurueckgefuehrt.`,
+          reassignError: undefined,
+        }, {
+          includeWorkflowZoneOob: true,
+          includeHeaderOob: true,
+          includeHistoryOob: true,
+        }),
+      );
+    }
+
+    return reply.redirect(
+      `/documents/${encodeURIComponent(result.documentId)}?user=${encodeURIComponent(activeUser.key)}&reassignStatus=${encodeURIComponent(`Dokument wurde nach ${result.nextStatus} zurueckgefuehrt.`)}`,
+      303,
+    );
+  });
+
   app.post<{ Params: { id: string } }>("/documents/:id/reject", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
@@ -2684,12 +3044,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             saveStatus: saveStatusValue(request),
             journalError: journalErrorValue(request),
             journalStatus: journalStatusValue(request),
+            assignError: assignErrorValue(request),
+            assignStatus: assignStatusValue(request),
             submitError: submitErrorValue(request),
             submitStatus: submitStatusValue(request),
             approveError: approveErrorValue(request),
             approveStatus: approveStatusValue(request),
             rejectError: rejectErrorValue(request),
             rejectStatus: rejectStatusValue(request),
+            reassignError: reassignErrorValue(request),
+            reassignStatus: reassignStatusValue(request),
             archiveError: archiveErrorValue(request),
             archiveStatus: archiveStatusValue(request),
             formRuntimeError: formRuntimeErrorValue(request),
@@ -2703,6 +3067,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         buildDialogRedirect(`/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}`, {
           title: "Upload nicht moeglich",
           message: "Bitte eine gueltige Datei auswaehlen.",
+          anchor: "document-attachments-fragment",
         }),
         303,
       );
@@ -2745,12 +3110,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
             saveStatus: saveStatusValue(request),
             journalError: journalErrorValue(request),
             journalStatus: journalStatusValue(request),
+            assignError: assignErrorValue(request),
+            assignStatus: assignStatusValue(request),
             submitError: submitErrorValue(request),
             submitStatus: submitStatusValue(request),
             approveError: approveErrorValue(request),
             approveStatus: approveStatusValue(request),
             rejectError: rejectErrorValue(request),
             rejectStatus: rejectStatusValue(request),
+            reassignError: reassignErrorValue(request),
+            reassignStatus: reassignStatusValue(request),
             archiveError: archiveErrorValue(request),
             archiveStatus: archiveStatusValue(request),
             formRuntimeError: formRuntimeErrorValue(request),
@@ -2764,6 +3133,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         buildDialogRedirect(`/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}`, {
           title: "Upload nicht moeglich",
           message: result.details ?? "Upload ist fuer dieses Dokument nicht moeglich.",
+          anchor: "document-attachments-fragment",
         }),
         303,
       );
@@ -2787,12 +3157,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         saveStatus: saveStatusValue(request),
         journalError: journalErrorValue(request),
         journalStatus: journalStatusValue(request),
+        assignError: assignErrorValue(request),
+        assignStatus: assignStatusValue(request),
         submitError: submitErrorValue(request),
         submitStatus: submitStatusValue(request),
         approveError: approveErrorValue(request),
         approveStatus: approveStatusValue(request),
         rejectError: rejectErrorValue(request),
         rejectStatus: rejectStatusValue(request),
+        reassignError: reassignErrorValue(request),
+        reassignStatus: reassignStatusValue(request),
         archiveError: archiveErrorValue(request),
         archiveStatus: archiveStatusValue(request),
         formRuntimeError: formRuntimeErrorValue(request),
@@ -2805,7 +3179,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     return reply.redirect(
-      `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&uploadStatus=${encodeURIComponent("Attachment hochgeladen.")}`,
+      `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&uploadStatus=${encodeURIComponent("Attachment hochgeladen.")}#document-attachments-fragment`,
       303,
     );
   });

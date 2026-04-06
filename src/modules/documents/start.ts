@@ -51,6 +51,7 @@ const findStartableTemplate = async (
       inner join memberships m on m.group_id = ta.group_id
       where ft.id = $1
         and m.user_id = $2
+        and position('x' in m.rights) > 0
         and ft.status = 'published'
         and wt.status = 'published'
       limit 1
@@ -107,18 +108,9 @@ export const startDocumentForUser = async ({ templateId, userId }: StartDocument
 
     await client.query(
       `
-      insert into document_assignments (document_id, user_id, role, assigned_by, active)
-      values ($1, $2, 'editor', $2, true)
-      `,
-      [documentId, userId],
-    );
-
-    await client.query(
-      `
       insert into audit_events (document_id, event_type, actor_user_id, message, payload_json)
       values
-        ($1, 'created', $2, $3, $4::jsonb),
-        ($1, 'assigned', $2, $5, $6::jsonb)
+        ($1, 'created', $2, $3, $4::jsonb)
       `,
       [
         documentId,
@@ -131,11 +123,6 @@ export const startDocumentForUser = async ({ templateId, userId }: StartDocument
           workflowTemplateId: template.workflow_template_id,
           workflowTemplateVersion: template.workflow_template_version,
           status: initialStatus,
-        }),
-        "Creator assigned as initial editor.",
-        JSON.stringify({
-          userId,
-          role: "editor",
         }),
       ],
     );

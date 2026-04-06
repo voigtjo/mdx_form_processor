@@ -26,52 +26,17 @@
   </div>
 </details>
 
-<details class="panel panel-collapsible">
-  <summary class="collapsible-summary">
-    <div class="collapsible-summary-copy">
-      <strong>Context</strong>
-      <span><%= workflowDetail.transitionRows.length %> Actions · <%= workflowDetail.relatedTemplates.length %> Templates · <%= workflowDetail.relatedDocuments.length %> Documents</span>
-    </div>
-    <div class="collapsible-summary-meta">
-      <span><%= workflowDetail.versions.length %> Versionen</span>
-    </div>
-  </summary>
-  <div class="collapsible-body">
-    <div class="grid two-up detail-grid">
-      <div>
-        <p><strong>Beschreibung</strong><br /><%= workflowDetail.workflow.description ?? "Keine Beschreibung hinterlegt." %></p>
-        <p><strong>Statusfolge</strong><br /><%= workflowDetail.sourceStatuses.join(" → ") %></p>
-        <p><strong>Templates</strong><br /><%= workflowDetail.relatedTemplates.length > 0 ? workflowDetail.relatedTemplates.map((template) => `${template.name} v${template.version}`).join(", ") : "keine sichtbaren Templates" %></p>
-      </div>
-      <div>
-        <h4>Versionen</h4>
-        <ul class="stack-list compact">
-          <% workflowDetail.versions.forEach((version) => { %>
-            <% const versionLifecycleLabel = version.status === "inactive" ? "unpublished" : version.status; %>
-            <li class="action-row">
-              <div>
-                <strong>v<%= version.version %></strong>
-                <p><%= versionLifecycleLabel %></p>
-              </div>
-              <% if (version.id === workflowDetail.workflow.id) { %>
-                <span class="chip">Current</span>
-              <% } else { %>
-                <a class="text-link action-link" href="/workflows/<%= version.id %>?user=<%= activeUser.key %>">Open</a>
-              <% } %>
-            </li>
-          <% }) %>
-        </ul>
-      </div>
-    </div>
-  </div>
-</details>
-
 <section class="panel">
   <div class="panel-header">
     <h3>Workflow Table</h3>
     <div class="panel-header-actions">
       <span class="chip"><%= workflowDetail.transitionRows.length %> Actions</span>
-      <button class="button-secondary" type="button" data-modal-open="workflow-json-dialog">JSON</button>
+      <button
+        class="button-secondary"
+        type="button"
+        data-modal-open="workflow-json-dialog"
+        onclick="document.getElementById('workflow-json-dialog')?.showModal()"
+      >JSON</button>
     </div>
   </div>
 
@@ -91,7 +56,7 @@
         <button class="button-secondary" type="submit" name="intent" value="save_draft">
           Save Draft v<%= workflowDetail.nextDraftVersion %>
         </button>
-        <button class="button-primary" type="submit" name="intent" value="publish">
+        <button class="button-primary" type="submit" name="intent" value="publish" <%= workflowDetail.canPublishVersion ? "" : "disabled" %>>
           Publish v<%= workflowDetail.publishTargetVersion %>
         </button>
         <button
@@ -111,15 +76,9 @@
           Archive v<%= viewedVersion %>
         </button>
       </div>
-      <% if (workflowDetail.unpublishBlockedReason) { %>
-        <p class="field-help"><%= workflowDetail.unpublishBlockedReason %></p>
-      <% } %>
-      <% if (workflowDetail.archiveBlockedReason) { %>
-        <p class="field-help"><%= workflowDetail.archiveBlockedReason %></p>
-      <% } %>
     </article>
 
-    <% if (workflowDetail.sourceError) { %>
+      <% if (workflowDetail.sourceError) { %>
       <div class="notice-card notice-error notice-inline">
         <strong>Workflow Source nicht lesbar</strong>
         <p><%= workflowDetail.sourceError %></p>
@@ -129,12 +88,35 @@
     <article class="subpanel">
       <div class="workflow-table-meta">
         <div class="field-block">
-          <label class="field-label" for="workflow-initial-status">Initialstatus</label>
-          <input id="workflow-initial-status" class="text-input" type="text" name="initialStatus" value="<%= workflowDetail.workflow.initialStatus %>" />
-        </div>
-        <div class="field-block">
           <label class="field-label" for="workflow-statuses-text">Statusfolge</label>
-          <input id="workflow-statuses-text" class="text-input" type="text" name="statusesText" value="<%= workflowDetail.sourceStatuses.join(', ') %>" />
+          <input id="workflow-statuses-text" class="text-input" type="hidden" name="statusesText" value="<%= workflowDetail.sourceStatuses.join(', ') %>" />
+          <div class="workflow-status-editor" data-workflow-status-editor>
+            <div class="stack-list compact" data-workflow-status-list>
+              <% workflowDetail.statusEditorRows.forEach((statusValue, index) => { %>
+                <div class="action-row" data-workflow-status-row>
+                  <input class="text-input" type="text" name="statusValue__<%= index %>" value="<%= statusValue %>" placeholder="Status" />
+                  <div class="panel-header-actions">
+                    <button class="button-secondary" type="button" data-workflow-status-move="up">Hoch</button>
+                    <button class="button-secondary" type="button" data-workflow-status-move="down">Runter</button>
+                    <button class="button-secondary" type="button" data-workflow-status-remove>Loeschen</button>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+            <template data-workflow-status-template>
+              <div class="action-row" data-workflow-status-row>
+                <input class="text-input" type="text" name="statusValue__INDEX__" value="" placeholder="Status" />
+                <div class="panel-header-actions">
+                  <button class="button-secondary" type="button" data-workflow-status-move="up">Hoch</button>
+                  <button class="button-secondary" type="button" data-workflow-status-move="down">Runter</button>
+                  <button class="button-secondary" type="button" data-workflow-status-remove>Loeschen</button>
+                </div>
+              </div>
+            </template>
+            <div class="template-lifecycle-actions">
+              <button class="button-secondary" type="button" data-workflow-status-add>Status hinzufuegen</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -155,17 +137,38 @@
             <% editableRows.forEach((row, index) => { %>
               <tr>
                 <td><input class="text-input" type="text" name="actionName__<%= index %>" value="<%= row.actionName %>" placeholder="submit" /></td>
-                <td><input class="text-input" type="text" name="actionFrom__<%= index %>" value="<%= row.from.join(', ') %>" placeholder="created, started" /></td>
-                <td><input class="text-input" type="text" name="actionTo__<%= index %>" value="<%= row.to %>" placeholder="submitted" /></td>
-                <td><input class="text-input" type="text" name="actionRoles__<%= index %>" value="<%= row.roles.join(', ') %>" placeholder="editor, approver" /></td>
+                <td>
+                  <select class="text-input" name="actionFrom__<%= index %>" data-workflow-action-status-select data-placeholder-label="From">
+                    <option value="">From</option>
+                    <% workflowDetail.availableStatusOptions.forEach((status) => { %>
+                      <option value="<%= status %>" <%= row.from[0] === status ? "selected" : "" %>><%= status %></option>
+                    <% }) %>
+                  </select>
+                </td>
+                <td>
+                  <select class="text-input" name="actionTo__<%= index %>" data-workflow-action-status-select data-placeholder-label="To">
+                    <option value="">To</option>
+                    <% workflowDetail.availableStatusOptions.forEach((status) => { %>
+                      <option value="<%= status %>" <%= row.to === status ? "selected" : "" %>><%= status %></option>
+                    <% }) %>
+                  </select>
+                </td>
+                <td>
+                  <select class="text-input" name="actionRole__<%= index %>">
+                    <option value="">Rolle</option>
+                    <% workflowDetail.availableRoleOptions.forEach((roleOption) => { %>
+                      <option value="<%= roleOption.value %>" <%= row.roles[0] === roleOption.value ? "selected" : "" %>><%= roleOption.label %></option>
+                    <% }) %>
+                  </select>
+                </td>
                 <td>
                   <select class="text-input" name="actionMode__<%= index %>">
                     <option value="OR" <%= row.modeLabel === "OR" ? "selected" : "" %>>OR</option>
                     <option value="AND" <%= row.modeLabel === "AND" ? "selected" : "" %>>AND</option>
                   </select>
                 </td>
-                <td><input class="text-input" type="text" name="actionApi__<%= index %>" value="<%= row.apiLabel === '—' ? '' : row.apiLabel %>" list="workflow-api-options" placeholder="customers.lookup" /></td>
-                <td><input class="text-input" type="text" name="actionCondition__<%= index %>" value="<%= row.conditionLabel === '—' ? '' : row.conditionLabel %>" placeholder='requiredFields: customer_id' /></td>
+                <td><input class="text-input" type="text" name="actionApi__<%= index %>" value="<%= row.apiLabel === '—' ? '' : row.apiLabel %>" list="workflow-api-options" placeholder="optional" /></td>
+                <td><input class="text-input" type="text" name="actionCondition__<%= index %>" value="<%= row.conditionLabel === '—' ? '' : row.conditionLabel %>" placeholder='optional' /></td>
               </tr>
             <% }) %>
           </tbody>
@@ -184,14 +187,14 @@
   <div class="workflow-json-dialog-card">
     <div class="panel-header">
       <h4>Workflow JSON</h4>
-      <button class="button-secondary" type="button" data-modal-close>Schliessen</button>
+      <button class="button-secondary" type="button" data-modal-close onclick="this.closest('dialog')?.close()">Schliessen</button>
     </div>
     <form method="post" action="/workflows/<%= workflowDetail.workflow.id %>/source?user=<%= activeUser.key %>" class="stack-list">
       <input type="hidden" name="sourceMode" value="json" />
       <textarea name="source" rows="24" class="form-runtime-source-editor"><%= workflowDetail.workflowSourceText %></textarea>
       <div class="template-lifecycle-actions">
         <button class="button-secondary" type="submit" name="intent" value="save_draft">Save Draft v<%= workflowDetail.nextDraftVersion %></button>
-        <button class="button-primary" type="submit" name="intent" value="publish">Publish v<%= workflowDetail.publishTargetVersion %></button>
+        <button class="button-primary" type="submit" name="intent" value="publish" <%= workflowDetail.canPublishVersion ? "" : "disabled" %>>Publish v<%= workflowDetail.publishTargetVersion %></button>
       </div>
     </form>
   </div>

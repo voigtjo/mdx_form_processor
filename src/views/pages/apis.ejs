@@ -2,7 +2,7 @@
   <summary class="collapsible-summary">
     <div class="collapsible-summary-copy">
       <strong>APIs</strong>
-      <span><%= apiCatalog.operations.length %> APIs · <%= apiCatalog.visibleTemplateFamilies.length %> Formfamilien · <%= apiCatalog.importedCustomers.length + apiCatalog.importedProducts.length %> Stammdaten</span>
+      <span><%= apiCatalog.operations.length %> APIs · <%= apiCatalog.visibleTemplateFamilies.length %> Formfamilien · <%= apiCatalog.totalImportedMasterData %> Stammdaten</span>
     </div>
     <div class="collapsible-summary-meta">
       <span>Handwerker-Plattform</span>
@@ -36,6 +36,7 @@
   </div>
 </section>
 
+<% if (apiCatalog.hasFormDataApis) { %>
 <section class="panel">
   <div class="panel-header">
     <h3>Formulardaten APIs</h3>
@@ -67,7 +68,9 @@
     </table>
   </div>
 </section>
+<% } %>
 
+<% if (appName !== "Service-Report" && apiCatalog.hasTypedRecordApis) { %>
 <section class="panel">
   <div class="panel-header">
     <h3>Typed Record APIs</h3>
@@ -98,7 +101,9 @@
     </table>
   </div>
 </section>
+<% } %>
 
+<% if (apiCatalog.hasMasterDataApis) { %>
 <section class="panel">
   <div class="panel-header">
     <h3>Stammdaten APIs</h3>
@@ -143,7 +148,9 @@
     </table>
   </div>
 </section>
+<% } %>
 
+<% if (apiCatalog.hasMasterDataApis) { %>
 <section class="grid two-up">
   <section class="panel">
   <div class="panel-header">
@@ -167,3 +174,4 @@
     </form>
   </section>
 </section>
+<% } %>

@@ -27,6 +27,11 @@ type AddJournalEntryFailure = {
 
 export type AddJournalEntryResult = AddJournalEntrySuccess | AddJournalEntryFailure;
 
+type DocumentJournalWriteState = {
+  isAvailable: boolean;
+  reason?: string;
+};
+
 const normalizeExistingJournalEntries = (value: unknown): Record<string, unknown>[] => {
   if (!Array.isArray(value)) {
     return [];
@@ -34,6 +39,54 @@ const normalizeExistingJournalEntries = (value: unknown): Record<string, unknown
 
   return value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry));
 };
+
+const getDocumentJournalWriteState = async (documentId: string, userId: string): Promise<DocumentJournalWriteState> => {
+  const visibleDocument = await findDocumentAccessContextForUser(documentId, userId);
+
+  if (!visibleDocument || !visibleDocument.canRead) {
+    return {
+      isAvailable: false,
+      reason: "Dokument ist nicht sichtbar.",
+    };
+  }
+
+  const templateFeatures = readTemplateFeatureToggles({
+    templateKey: visibleDocument.templateKey,
+    mdxBody: visibleDocument.templateMdxBody,
+  });
+
+  if (!templateFeatures.journal.enabled) {
+    return {
+      isAvailable: false,
+      reason: "Journal ist im aktuellen Template nicht aktiviert.",
+    };
+  }
+
+  const editState = await getDocumentEditStateForUser(documentId, userId);
+
+  if (editState.isAvailable) {
+    return {
+      isAvailable: true,
+    };
+  }
+
+  if (
+    visibleDocument.hasApproverAssignment &&
+    visibleDocument.canExecute &&
+    ["submitted", "approved"].includes(visibleDocument.status)
+  ) {
+    return {
+      isAvailable: true,
+    };
+  }
+
+  return {
+    isAvailable: false,
+    ...(editState.reason ? { reason: editState.reason } : {}),
+  };
+};
+
+export const getDocumentJournalWriteStateForUser = getDocumentJournalWriteState;
 
 export const addJournalEntryForUser = async ({
   documentId,
@@ -51,13 +104,13 @@ export const addJournalEntryForUser = async ({
     };
   }
 
-  const editState = await getDocumentEditStateForUser(documentId, userId);
+  const journalWriteState = await getDocumentJournalWriteState(documentId, userId);
 
-  if (!editState.isAvailable) {
+  if (!journalWriteState.isAvailable) {
     return {
       ok: false,
       reason: "journal_not_editable",
-      ...(editState.reason ? { details: editState.reason } : {}),
+      ...(journalWriteState.reason ? { details: journalWriteState.reason } : {}),
     };
   }
 
@@ -88,20 +141,12 @@ export const addJournalEntryForUser = async ({
     mdxBody: visibleDocument.templateMdxBody,
   });
 
-  if (!templateFeatures.journal.enabled) {
-    return {
-      ok: false,
-      reason: "journal_not_editable",
-      details: "Journal ist im aktuellen Template nicht aktiviert.",
-    };
-  }
-
   const journal = formDefinition.journals.find((entry) => entry.name === journalFieldName)
     ?? (
       isFormRuntimeReferenceTemplate(visibleDocument.templateKey) && journalFieldName === referenceFormRuntimeJournalFieldName
         ? buildReferenceFormRuntimeJournalDefinition({
           documentData: visibleDocument.dataJson,
-          isEditable: editState.isAvailable,
+          isEditable: journalWriteState.isAvailable,
         })
         : undefined
     );
@@ -119,6 +164,7 @@ export const addJournalEntryForUser = async ({
     at: new Date().toISOString(),
     text: trimmedEntryText,
     by: userDisplayName,
+    by_user_id: userId,
   };
   const mergedDocumentData = {
     ...visibleDocument.dataJson,

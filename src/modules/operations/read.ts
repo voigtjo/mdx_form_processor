@@ -1,5 +1,6 @@
 import { withDb } from "../../db/pool.js";
 import type { Operation } from "../../types/domain.js";
+import { readSchemaFields, sanitizeOperationSchemaJson } from "./schema.js";
 
 type OperationRow = {
   id: string;
@@ -19,36 +20,6 @@ type OperationRow = {
   archived_at: Date | null;
 };
 
-const readSchemaFields = (value: Record<string, unknown> | null): Array<{
-  name: string;
-  type: string;
-  required?: boolean;
-  description?: string;
-}> => {
-  const fields = Array.isArray(value?.fields) ? value.fields : [];
-
-  return fields.flatMap((field) => {
-    if (!field || typeof field !== "object" || Array.isArray(field)) {
-      return [];
-    }
-
-    const record = field as Record<string, unknown>;
-    const name = typeof record.name === "string" ? record.name : "";
-    const type = typeof record.type === "string" ? record.type : "";
-
-    if (!name || !type) {
-      return [];
-    }
-
-    return [{
-      name,
-      type,
-      ...(typeof record.required === "boolean" ? { required: record.required } : {}),
-      ...(typeof record.description === "string" ? { description: record.description } : {}),
-    }];
-  });
-};
-
 const mapOperation = (row: OperationRow): Operation => ({
   id: row.id,
   key: row.key,
@@ -56,8 +27,8 @@ const mapOperation = (row: OperationRow): Operation => ({
   status: row.status,
   connector: row.connector,
   authMode: row.auth_mode,
-  requestSchemaJson: row.request_schema_json ?? {},
-  responseSchemaJson: row.response_schema_json ?? {},
+  requestSchemaJson: sanitizeOperationSchemaJson(row.request_schema_json),
+  responseSchemaJson: sanitizeOperationSchemaJson(row.response_schema_json),
   handlerTsSource: row.handler_ts_source,
   createdAt: row.created_at.toISOString(),
   updatedAt: row.updated_at.toISOString(),

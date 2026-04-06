@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { withDbTransaction } from "../../db/pool.js";
+import { findOperationByKey } from "./read.js";
 import { transpileOperationHandlerSource } from "./runtime.js";
+import { sanitizeOperationSchemaJson } from "./schema.js";
 
 type OperationStatus = "draft" | "published" | "inactive" | "archived";
 
@@ -38,7 +40,7 @@ const parseJsonText = (label: string, value: string): Record<string, unknown> =>
       throw new Error(`${label} muss ein JSON-Objekt sein.`);
     }
 
-    return parsed as Record<string, unknown>;
+    return sanitizeOperationSchemaJson(parsed as Record<string, unknown>);
   } catch (error) {
     if (error instanceof Error && error.message === `${label} muss ein JSON-Objekt sein.`) {
       throw error;
@@ -116,14 +118,18 @@ export const saveOperationDraft = async (input: OperationMutationInput): Promise
   return withDbTransaction(async (client) => {
     await ensureOperationKeyUnique(client, key, input.operationId);
 
-    const nextStatus: OperationStatus = input.intent === "publish" ? "published" : "draft";
-
     if (input.operationId) {
       const currentStatus = await loadOperationStatus(client, input.operationId);
 
       if (!currentStatus) {
         throw new Error("Die angeforderte API wurde nicht gefunden.");
       }
+
+      const nextStatus: OperationStatus = input.intent === "publish"
+        ? "published"
+        : currentStatus === "draft"
+          ? "draft"
+          : currentStatus;
 
       await client.query(
         `update operations
@@ -171,6 +177,7 @@ export const saveOperationDraft = async (input: OperationMutationInput): Promise
     }
 
     const id = randomUUID();
+    const nextStatus: OperationStatus = input.intent === "publish" ? "published" : "draft";
 
     await client.query(
       `insert into operations (
@@ -269,6 +276,36 @@ export const publishOperation = async (input: { operationId: string }): Promise<
     transpileOperationHandlerSource(row.handler_ts_source);
     return transitionOperationStatus(input.operationId, "published");
   });
+};
+
+export const ensureOperationPublishedByKey = async (key: string): Promise<OperationMutationResult> => {
+  const operation = await findOperationByKey(key, { includeArchived: true });
+
+  if (!operation) {
+    throw new Error(`Die referenzierte API ${key} wurde nicht gefunden.`);
+  }
+
+  if (operation.status === "archived") {
+    throw new Error(`Die referenzierte API ${key} ist archiviert.`);
+  }
+
+  if (operation.status === "published") {
+    return {
+      id: operation.id,
+      key: operation.key,
+      status: "published",
+    };
+  }
+
+  return publishOperation({ operationId: operation.id });
+};
+
+export const ensureOperationsPublishedByKey = async (keys: string[]): Promise<void> => {
+  const uniqueKeys = Array.from(new Set(keys.map((key) => key.trim()).filter((key) => key.length > 0)));
+
+  for (const key of uniqueKeys) {
+    await ensureOperationPublishedByKey(key);
+  }
 };
 
 export const unpublishOperation = async (input: { operationId: string }): Promise<OperationMutationResult> => {

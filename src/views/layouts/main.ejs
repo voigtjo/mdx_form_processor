@@ -6,6 +6,7 @@
     <title><%= title %> | <%= appName %></title>
     <link rel="stylesheet" href="/public/css/app.css" />
     <script defer src="/public/vendor/htmx/htmx.min.js"></script>
+    <script type="module" src="/public/js/code-editor.js"></script>
     <script defer src="/public/js/app.js"></script>
   </head>
   <body>
@@ -17,16 +18,16 @@
           <p>Serviceeinsaetze, Produktion und Nachweise</p>
         </div>
 
-        <div class="user-select">
+        <form class="user-select" method="get" action="">
           <label for="user-switcher">Aktiver User</label>
-          <select id="user-switcher" data-user-switcher>
+          <select id="user-switcher" name="user" data-user-switcher onchange="this.form.requestSubmit()">
             <% users.forEach((user) => { %>
               <option value="<%= user.key %>" <%= user.key === activeUser.key ? "selected" : "" %>>
                 <%= user.displayName %>
               </option>
             <% }) %>
           </select>
-        </div>
+        </form>
       </header>
 
       <nav class="main-nav" aria-label="Hauptnavigation">
@@ -47,7 +48,11 @@
         <div class="dialog-card dialog-<%= appDialog.type %>" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title">
           <div class="dialog-header">
             <h2 id="app-dialog-title"><%= appDialog.title %></h2>
-            <button class="dialog-close" type="button" data-dialog-close aria-label="Dialog schliessen">Schliessen</button>
+            <a
+              class="dialog-close"
+              href="<%= appDialog.closeHref %>"
+              aria-label="Dialog schliessen"
+            >Schliessen</a>
           </div>
           <p><%= appDialog.message %></p>
         </div>

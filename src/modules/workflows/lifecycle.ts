@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { withDbTransaction } from "../../db/pool.js";
+import { withDb, withDbTransaction } from "../../db/pool.js";
+import { ensureOperationsPublishedByKey } from "../operations/write.js";
 import { parseWorkflowSourceText, serializeWorkflowSource } from "./source.js";
 
 type WorkflowLifecycleResult = {
@@ -70,15 +71,35 @@ const normalizeWorkflowSource = (sourceText: string): string => {
   return serializeWorkflowSource(parsed.workflowJson);
 };
 
+const readWorkflowOperationRefs = (sourceText: string): string[] => {
+  const parsed = parseWorkflowSourceText(sourceText);
+
+  return Array.from(
+    new Set(
+      parsed.transitionRows.flatMap((row) =>
+        (row.apiLabel ?? "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0 && value !== "—"),
+      ),
+    ),
+  );
+};
+
 export const publishWorkflowVersion = async (input: {
   workflowId: string;
   sourceText?: string;
 }): Promise<WorkflowLifecycleResult> => {
+  const workflow = ensureWorkflow(
+    await withDb(async (client) => loadWorkflowBase(client, input.workflowId)),
+  );
+  const normalizedSource = normalizeWorkflowSource(
+    input.sourceText ?? serializeWorkflowSource(workflow.workflow_json),
+  );
+  await ensureOperationsPublishedByKey(readWorkflowOperationRefs(normalizedSource));
+
   return withDbTransaction(async (client) => {
     const workflow = ensureWorkflow(await loadWorkflowBase(client, input.workflowId));
-    const normalizedSource = normalizeWorkflowSource(
-      input.sourceText ?? serializeWorkflowSource(workflow.workflow_json),
-    );
 
     if (workflow.status === "draft") {
       await client.query(

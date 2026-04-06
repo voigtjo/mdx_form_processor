@@ -127,7 +127,8 @@
         <% section.rows.forEach((row) => { %>
           <% const inlineLoadCustomerAction = row.slots.find((slot) => slot.element.name === "load_customer"); %>
           <% const inlineSuggestMaterialAction = row.slots.find((slot) => slot.element.name === "suggest_material"); %>
-          <% const visibleSlots = row.slots.filter((slot) => !["load_customer", "suggest_material"].includes(slot.element.name)); %>
+          <% const inlineLoadServiceOrderAction = row.slots.find((slot) => slot.element.name === "load_service_order"); %>
+          <% const visibleSlots = row.slots.filter((slot) => !["load_customer", "suggest_material", "load_service_order"].includes(slot.element.name)); %>
           <div class="form-runtime-readonly-row form-runtime-columns-<%= Math.min(Math.max(visibleSlots.length, 1), 3) %>">
             <% row.slots.forEach((slot) => { %>
               <% const element = slot.element; %>
@@ -138,6 +139,8 @@
               <% const optionItems = fieldUi.optionItems ?? (typeof element.properties.options === "string" ? element.properties.options.split(",").map((option) => option.trim()).filter((option) => option.length > 0).map((option) => ({ value: option, label: option })) : []); %>
               <% const multiSelectedValues = currentValueText.split(",").map((entry) => entry.trim()).filter((entry) => entry.length > 0); %>
               <% const displayValue = fieldUi.displayValue ?? currentValueText; %>
+              <% const propertyReadonly = element.properties.readonly === true; %>
+              <% const isFieldEditable = fieldUi.isEditable && !propertyReadonly; %>
               <% const orderNumberPlaceholder = element.name === "order_number" ? "z. B. O-ca26a72f-1" : emptyValueLabel; %>
               <% const gridColumns = fieldUi.controlType === "grid" && typeof element.properties.columns === "string"
                 ? element.properties.columns.split("|").map((column) => column.trim()).filter((column) => column.length > 0).map((column) => {
@@ -177,7 +180,7 @@
                   data-control-runtime-role="<%= fieldUi.runtimeRole %>"
                   data-control-lookup-role="<%= fieldUi.lookupRole %>"
                   data-field-required="<%= fieldUi.isSubmitRequired ? "true" : "false" %>"
-                  data-field-state="<%= fieldUi.state %>">
+                  data-field-state="<%= isFieldEditable ? "editable" : "readonly" %>">
                   <div class="form-runtime-field-head">
                     <label class="field-label"><%= element.label ?? element.name %><% if (fieldUi.isSubmitRequired) { %><span class="field-required" aria-hidden="true">*</span><span class="sr-only"> Pflichtfeld</span><% } %></label>
                     <div class="form-runtime-field-side">
@@ -196,6 +199,22 @@
                           hx-swap="outerHTML"
                           <%= documentDetail.formRuntimeReference.actionUi?.load_customer?.isEnabled === false ? "disabled" : "" %>
                         >Kundendaten laden</button>
+                      <% } %>
+                      <% if (element.name === "order_number" && inlineLoadServiceOrderAction) { %>
+                        <button
+                          type="submit"
+                          class="button-secondary form-runtime-inline-action"
+                          data-inline-action="load_service_order"
+                          data-action-control-type="<%= documentDetail.formRuntimeReference.actionUi?.load_service_order?.controlType ?? "action" %>"
+                          data-action-runtime-role="<%= documentDetail.formRuntimeReference.actionUi?.load_service_order?.runtimeRole ?? "lookup_trigger" %>"
+                          data-action-lookup-role="<%= documentDetail.formRuntimeReference.actionUi?.load_service_order?.lookupRole ?? "trigger" %>"
+                          data-preserve-form-position="true"
+                          formaction="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=load_service_order"
+                          hx-post="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=load_service_order"
+                          hx-target="#document-form-body-fragment"
+                          hx-swap="outerHTML"
+                          <%= documentDetail.formRuntimeReference.actionUi?.load_service_order?.isEnabled === false ? "disabled" : "" %>
+                        >Auftragsdaten laden</button>
                       <% } %>
                       <% if (element.name === "material" && inlineSuggestMaterialAction) { %>
                         <button
@@ -217,7 +236,7 @@
                   </div>
 
                   <% if (fieldUi.controlType === "html-editor") { %>
-                    <% if (fieldUi.isEditable) { %>
+                    <% if (isFieldEditable) { %>
                       <div class="form-runtime-richtext" data-rich-text-control data-field-name="<%= element.name %>">
                         <div class="form-runtime-richtext-toolbar" role="toolbar" aria-label="Formatierung fuer <%= element.label ?? element.name %>">
                           <button type="button" class="button-secondary form-runtime-richtext-button" data-rich-text-command="formatBlock" data-rich-text-value="p">Absatz</button>
@@ -260,7 +279,7 @@
                         <p><%= documentDetail.document.templateKey === "qualification-record" ? "Deine Signatur fehlt noch." : "Dokument kann mit aktuellem Nutzer signiert werden." %></p>
                       <% } %>
                     </div>
-                    <% if (fieldUi.isEditable) { %>
+                    <% if (isFieldEditable) { %>
                       <div class="form-runtime-signature-actions">
                         <button
                           type="submit"
@@ -276,7 +295,7 @@
                       </div>
                     <% } %>
                   <% } else if (fieldUi.controlType === "grid") { %>
-                    <% if (fieldUi.isEditable) { %>
+                    <% if (isFieldEditable) { %>
                       <div class="form-runtime-grid-control" data-grid-control data-field-name="<%= element.name %>">
                         <input type="hidden" name="<%= element.name %>" value="<%= currentValueText %>" data-grid-input />
                         <div class="table-wrap">
@@ -337,7 +356,7 @@
                       <div class="form-runtime-value form-runtime-value-readonly"><%= emptyValueLabel %></div>
                     <% } %>
                   <% } else if (fieldUi.controlType === "user-select") { %>
-                    <% if (fieldUi.isEditable) { %>
+                    <% if (isFieldEditable) { %>
                       <select class="text-input" name="<%= element.name %>">
                         <option value=""><%= emptyValueLabel %></option>
                         <% optionItems.forEach((option) => { %>
@@ -348,7 +367,7 @@
                       <div class="form-runtime-value form-runtime-value-readonly"><%= displayValue || emptyValueLabel %></div>
                     <% } %>
                   <% } else if (fieldUi.controlType === "user-multiselect") { %>
-                    <% if (fieldUi.isEditable) { %>
+                    <% if (isFieldEditable) { %>
                       <div class="form-runtime-user-multiselect-control" data-user-multiselect-control>
                         <input type="hidden" name="<%= element.name %>" value="<%= currentValueText %>" data-user-multiselect-input />
                         <select class="text-input form-runtime-user-multiselect" multiple data-user-multiselect-source>
@@ -361,7 +380,7 @@
                       <div class="form-runtime-value form-runtime-value-readonly"><%= displayValue || emptyValueLabel %></div>
                     <% } %>
                   <% } else if (fieldUi.controlType === "radio-group") { %>
-                    <% if (fieldUi.isEditable) { %>
+                    <% if (isFieldEditable) { %>
                       <div class="form-runtime-choice-group">
                         <% optionItems.forEach((option) => { %>
                           <label class="form-runtime-choice">
@@ -374,7 +393,7 @@
                       <div class="form-runtime-value form-runtime-value-readonly"><%= displayValue || emptyValueLabel %></div>
                     <% } %>
                   <% } else if (fieldUi.controlType === "checkbox-group") { %>
-                    <% if (fieldUi.isEditable) { %>
+                    <% if (isFieldEditable) { %>
                       <div class="form-runtime-choice-group">
                         <input type="hidden" name="<%= element.name %>" value="<%= currentValueText %>" data-checkbox-group-input />
                         <% optionItems.forEach((option) => { %>
@@ -400,7 +419,7 @@
                       <textarea class="form-runtime-runtime-textarea is-readonly" name="<%= element.name %>" placeholder="<%= emptyValueLabel %>" readonly><%= currentValueText %></textarea>
                     <% } %>
                   <% } else if (fieldUi.controlType === "select") { %>
-                    <% if (fieldUi.isEditable && optionItems.length > 0) { %>
+                    <% if (isFieldEditable) { %>
                       <select class="text-input" name="<%= element.name %>">
                         <option value=""><%= emptyValueLabel %></option>
                         <% optionItems.forEach((option) => { %>
@@ -411,15 +430,15 @@
                       <div class="form-runtime-value form-runtime-value-readonly"><%= displayValue || emptyValueLabel %></div>
                     <% } %>
                   <% } else if (fieldUi.controlType === "date") { %>
-                    <input class="text-input <%= fieldUi.isEditable ? "" : "text-input-readonly" %>" type="date" name="<%= element.name %>" value="<%= currentValueText %>" <%= fieldUi.isEditable ? "" : "readonly" %> />
+                    <input class="text-input <%= isFieldEditable ? "" : "text-input-readonly" %>" type="date" name="<%= element.name %>" value="<%= currentValueText %>" <%= isFieldEditable ? "" : "readonly" %> />
                   <% } else if (fieldUi.controlType === "number") { %>
-                    <input class="text-input <%= fieldUi.isEditable ? "" : "text-input-readonly" %>" type="number" step="0.25" min="0" name="<%= element.name %>" value="<%= currentValueText %>" placeholder="<%= emptyValueLabel %>" <%= fieldUi.isEditable ? "" : "readonly" %> />
+                    <input class="text-input <%= isFieldEditable ? "" : "text-input-readonly" %>" type="number" step="0.25" min="0" name="<%= element.name %>" value="<%= currentValueText %>" placeholder="<%= emptyValueLabel %>" <%= isFieldEditable ? "" : "readonly" %> />
                   <% } else { %>
-                    <input class="text-input <%= fieldUi.isEditable ? "" : "text-input-readonly" %>" type="text" name="<%= element.name %>" value="<%= currentValueText %>" placeholder="<%= orderNumberPlaceholder %>" <%= fieldUi.isEditable ? "" : "readonly" %> />
+                    <input class="text-input <%= isFieldEditable ? "" : "text-input-readonly" %>" type="text" name="<%= element.name %>" value="<%= currentValueText %>" placeholder="<%= orderNumberPlaceholder %>" <%= isFieldEditable ? "" : "readonly" %> />
                   <% } %>
                 </article>
               <% } else { %>
-                <% if (element.name !== "load_customer" && element.name !== "suggest_material") { %>
+                <% if (!["load_customer", "suggest_material", "load_service_order"].includes(element.name)) { %>
                   <article
                     class="field-block form-runtime-readonly-field form-runtime-action-card form-runtime-type-<%= element.controlType %>"
                     data-action-name="<%= element.name %>"

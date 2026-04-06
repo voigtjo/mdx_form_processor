@@ -81,28 +81,11 @@
         <div class="panel-header">
           <h4>Lifecycle</h4>
         </div>
-        <div class="field-block">
-          <label class="field-label" for="template-workflow-version">Workflow-Version</label>
-          <select id="template-workflow-version" name="workflowTemplateId" class="text-input">
-            <% templateDetail.availableWorkflows.forEach((workflowVersion) => { %>
-              <option value="<%= workflowVersion.id %>" <%= workflowVersion.id === templateDetail.selectedWorkflowTemplateId ? "selected" : "" %>>
-                <%= workflowVersion.name %> · <%= workflowVersion.key %> · v<%= workflowVersion.version %> · <%= workflowVersion.status === "inactive" ? "unpublished" : workflowVersion.status %>
-              </option>
-            <% }) %>
-          </select>
-          <% if (templateDetail.workflowPublishBlockedReason) { %>
-            <p class="field-help"><%= templateDetail.workflowPublishBlockedReason %></p>
-          <% } %>
-          <label class="checkbox-item">
-            <input type="checkbox" name="cascadePublishWorkflow" />
-            <span>Cascade Publish Workflow</span>
-          </label>
-        </div>
         <div class="template-lifecycle-actions">
           <button class="button-secondary" type="submit" name="intent" value="save_draft">
             Save Draft v<%= nextDraftVersion %>
           </button>
-          <button class="button-primary" type="submit" name="intent" value="publish">
+          <button class="button-primary" type="submit" name="intent" value="publish" <%= templateDetail.canPublishVersion ? "" : "disabled" %>>
             Publish v<%= publishTargetVersion %>
           </button>
           <button
@@ -126,6 +109,52 @@
 
       <article class="subpanel">
         <div class="panel-header">
+          <h4>Template-Konfiguration</h4>
+        </div>
+        <div class="grid two-up detail-grid">
+          <div class="field-block">
+            <label class="field-label" for="template-workflow-version">Workflow-Version</label>
+            <select
+              id="template-workflow-version"
+              name="workflowTemplateId"
+              class="text-input">
+              <% templateDetail.availableWorkflows.forEach((workflowVersion) => { %>
+                <option value="<%= workflowVersion.id %>" <%= workflowVersion.id === templateDetail.selectedWorkflowTemplateId ? "selected" : "" %>>
+                  <%= workflowVersion.name %> · <%= workflowVersion.key %> · v<%= workflowVersion.version %> · <%= workflowVersion.status === "inactive" ? "unpublished" : workflowVersion.status %>
+                </option>
+              <% }) %>
+            </select>
+            <% if (templateDetail.workflowPublishBlockedReason) { %>
+              <p class="field-help"><%= templateDetail.workflowPublishBlockedReason %></p>
+            <% } %>
+          </div>
+
+          <div class="field-block">
+            <label class="field-label">Form Type</label>
+            <div class="form-runtime-value"><%= templateDetail.template.formType %></div>
+          </div>
+        </div>
+
+        <div class="grid two-up detail-grid">
+          <div class="field-block">
+            <input type="hidden" name="attachmentsEnabledPresent" value="1" />
+            <label class="checkbox-field">
+              <input type="checkbox" name="attachmentsEnabled" <%= templateDetail.templateFeatures.attachments.enabled ? "checked" : "" %> />
+              <span>Anhang aktivieren</span>
+            </label>
+          </div>
+          <div class="field-block">
+            <input type="hidden" name="journalEnabledPresent" value="1" />
+            <label class="checkbox-field">
+              <input type="checkbox" name="journalEnabled" <%= templateDetail.templateFeatures.journal.enabled ? "checked" : "" %> />
+              <span>Nachrichten aktivieren</span>
+            </label>
+          </div>
+        </div>
+      </article>
+
+      <article class="subpanel">
+        <div class="panel-header">
           <h4>Source</h4>
         </div>
         <textarea name="source" rows="22" class="form-runtime-source-editor"><%= templateDetail.formRuntimeReference.sourceText %></textarea>
@@ -134,13 +163,16 @@
       <% if (templateDetail.formRuntimeReference.apiBindings && templateDetail.formRuntimeReference.apiBindings.length > 0) { %>
         <article class="subpanel">
           <div class="panel-header">
-            <h4>API Operations</h4>
+            <h4>API-Funktionen</h4>
           </div>
           <div class="stack-list compact">
             <% templateDetail.formRuntimeReference.apiBindings.forEach((binding) => { %>
               <div class="field-block">
                 <label class="field-label" for="api-binding-<%= binding.actionName %>"><%= binding.label %></label>
-                <select id="api-binding-<%= binding.actionName %>" name="apiBinding.<%= binding.actionName %>" class="text-input">
+                <select
+                  id="api-binding-<%= binding.actionName %>"
+                  name="apiBinding.<%= binding.actionName %>"
+                  class="text-input">
                   <option value="">Keine Operation zugeordnet</option>
                   <% templateDetail.availableOperations.forEach((operation) => { %>
                     <option value="<%= operation.key %>" <%= operation.key === binding.operationRef ? "selected" : "" %>>
@@ -148,20 +180,18 @@
                     </option>
                   <% }) %>
                 </select>
+                <p class="field-help">
+                  Aktion: <strong><%= binding.actionName %></strong>
+                  <% if (binding.args && binding.args.length > 0) { %> · Request: <%= binding.args.join(", ") %><% } %>
+                  <% if (binding.bind && binding.bind.length > 0) { %> · Response bindet: <%= binding.bind.join(", ") %><% } %>
+                  <% if (binding.operationTitle) { %> · Aktuell: <%= binding.operationTitle %><% } %>
+                  <% if (binding.operationStatus) { %> · <%= binding.operationStatus %><% } %>
+                </p>
               </div>
             <% }) %>
           </div>
         </article>
       <% } %>
-
-      <article class="subpanel">
-        <h4>Kopfdaten</h4>
-        <div class="grid two-up detail-grid">
-          <p><strong>form_type</strong><br /><%= templateDetail.template.formType %></p>
-          <p><strong>attachments_enabled</strong><br /><%= templateDetail.templateFeatures.attachments.enabled ? "Ja" : "Nein" %></p>
-          <p><strong>journal_enabled</strong><br /><%= templateDetail.templateFeatures.journal.enabled ? "Ja" : "Nein" %></p>
-        </div>
-      </article>
     </form>
 
     <% if (templateDetail.formRuntimeReference.parseError) { %>

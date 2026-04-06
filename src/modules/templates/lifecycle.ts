@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { withDbTransaction } from "../../db/pool.js";
 import { parseFormRuntimeSource } from "../forms/read.js";
 import { isFormRuntimeReferenceTemplate } from "../forms/document-bridge.js";
-import { findOperationByKey } from "../operations/read.js";
+import { ensureOperationsPublishedByKey } from "../operations/write.js";
 import { publishWorkflowVersion } from "../workflows/lifecycle.js";
 import { setTemplateSourceFrontmatterValue } from "./source.js";
 
@@ -126,29 +126,14 @@ const normalizeReferenceSource = (sourceText: string, version: number): string =
   return setTemplateSourceFrontmatterValue(sourceText, "version", String(version));
 };
 
-const validateReferencedOperations = async (sourceText: string, input: { requirePublished: boolean }) => {
+const readReferencedOperations = (sourceText: string): string[] => {
   const parsedForm = parseFormRuntimeSource(sourceText);
-  const operationRefs = Array.from(new Set(parsedForm.actions.flatMap((action) => (action.ref ? [action.ref] : []))));
-
-  for (const operationRef of operationRefs) {
-    const operation = await findOperationByKey(operationRef, {
-      ...(input.requirePublished ? { publishedOnly: true } : {}),
-    });
-
-    if (!operation) {
-      throw new Error(
-        input.requirePublished
-          ? `Die referenzierte API ${operationRef} ist nicht publiziert.`
-          : `Die referenzierte API ${operationRef} wurde nicht gefunden.`,
-      );
-    }
-  }
+  return Array.from(new Set(parsedForm.actions.flatMap((action) => (action.ref ? [action.ref] : []))));
 };
 
 const resolveTemplateWorkflowVersion = async (
   client: Parameters<Parameters<typeof withDbTransaction>[0]>[0],
   workflowTemplateId: string,
-  cascadePublishWorkflow: boolean,
 ) => {
   const workflow = await loadWorkflowBase(client, workflowTemplateId);
 
@@ -164,10 +149,6 @@ const resolveTemplateWorkflowVersion = async (
     return workflow.id;
   }
 
-  if (!cascadePublishWorkflow) {
-    throw new Error("Das Template kann nur publiziert werden, wenn die zugeordnete Workflow-Version publiziert ist oder Cascade Publish aktiv ist.");
-  }
-
   const publishedWorkflow = await publishWorkflowVersion({
     workflowId: workflow.id,
   });
@@ -180,7 +161,7 @@ export const saveReferenceTemplateDraft = async (input: {
   sourceText: string;
   workflowTemplateId: string;
 }): Promise<TemplateLifecycleResult> => {
-  await validateReferencedOperations(input.sourceText, { requirePublished: false });
+  parseFormRuntimeSource(input.sourceText);
 
   return withDbTransaction(async (client) => {
     const template = ensureReferenceTemplate(await loadTemplateBase(client, input.templateId));
@@ -284,9 +265,9 @@ export const publishReferenceTemplateVersion = async (input: {
   templateId: string;
   sourceText: string;
   workflowTemplateId: string;
-  cascadePublishWorkflow: boolean;
 }): Promise<TemplateLifecycleResult> => {
-  await validateReferencedOperations(input.sourceText, { requirePublished: true });
+  const normalizedSource = normalizeReferenceSource(input.sourceText, 1);
+  await ensureOperationsPublishedByKey(readReferencedOperations(normalizedSource));
 
   return withDbTransaction(async (client) => {
     const template = ensureReferenceTemplate(await loadTemplateBase(client, input.templateId));
@@ -296,7 +277,6 @@ export const publishReferenceTemplateVersion = async (input: {
       const targetWorkflowTemplateId = await resolveTemplateWorkflowVersion(
         client,
         input.workflowTemplateId,
-        input.cascadePublishWorkflow,
       );
 
       await client.query(
@@ -337,7 +317,6 @@ export const publishReferenceTemplateVersion = async (input: {
     const targetWorkflowTemplateId = await resolveTemplateWorkflowVersion(
       client,
       input.workflowTemplateId,
-      input.cascadePublishWorkflow,
     );
     const publishedId = randomUUID();
 

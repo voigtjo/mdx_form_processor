@@ -40,8 +40,9 @@ type WorkflowTableRowInput = {
 
 type WorkflowTableInput = {
   baselineSourceText?: string;
-  initialStatus: string;
+  initialStatus?: string;
   statusesText: string;
+  statusValues?: string[];
   rows: WorkflowTableRowInput[];
 };
 
@@ -270,16 +271,13 @@ export const buildWorkflowSourceTextFromTableInput = (input: WorkflowTableInput)
     }
   }
 
-  const statuses = parseStatusList(input.statusesText);
-  const initialStatus = input.initialStatus.trim();
-
-  if (!initialStatus) {
-    throw new Error("Initialstatus darf nicht leer sein.");
-  }
-
+  const statuses = Array.isArray(input.statusValues) && input.statusValues.length > 0
+    ? input.statusValues.map((entry) => entry.trim()).filter((entry) => entry.length > 0)
+    : parseStatusList(input.statusesText);
   if (statuses.length === 0) {
     throw new Error("Statusfolge darf nicht leer sein.");
   }
+  const initialStatus = statuses[0] ?? "";
 
   const normalizedRows = input.rows
     .map((row) => ({

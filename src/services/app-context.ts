@@ -6,8 +6,11 @@ import { listAssignmentsForDocument } from "../modules/assignments/read.js";
 import { listAuditEvents } from "../modules/audit/read.js";
 import { listAuditEventsForDocument } from "../modules/audit/read.js";
 import { getDocumentEditStateForUser } from "../modules/documents/access.js";
+import { getDocumentAssignStateForUser } from "../modules/documents/assign.js";
+import { listDocumentAssignableEditorsForUser } from "../modules/documents/assign.js";
 import { getDocumentApproveStateForUser } from "../modules/documents/approve.js";
 import { getDocumentArchiveStateForUser } from "../modules/documents/archive.js";
+import { getDocumentReassignStateForUser } from "../modules/documents/reassign.js";
 import {
   findDocumentDetailVisibleToUser,
   listDocumentsAssignedToUser,
@@ -21,8 +24,10 @@ import { getDocumentRejectStateForUser } from "../modules/documents/reject.js";
 import { getDocumentSubmitStateForUser } from "../modules/documents/submit.js";
 import { findGroupById, listGroups, listGroupsForUser } from "../modules/groups/read.js";
 import { listMemberships, listMembershipsForGroup, listMembershipsForUser } from "../modules/memberships/read.js";
+import { getDocumentJournalWriteStateForUser } from "../modules/journal/add.js";
 import { buildReferenceFormRuntimeJournalDefinition } from "../modules/journal/reference.js";
 import { findOperationById, listOperations } from "../modules/operations/read.js";
+import { sanitizeOperationSchemaJson } from "../modules/operations/schema.js";
 import { listFormRuntimeApiBindings } from "../modules/forms/api-bindings.js";
 import {
   buildReferenceFormRuntimeActionUi,
@@ -38,6 +43,7 @@ import { buildQualificationProgressView, getQualificationOwnerUserId } from "../
 import { evaluateQualificationDocumentData } from "../modules/qualification/evaluation.js";
 import { getQualificationPageDefinition, normalizeQualificationPageIndex, qualificationPageCount } from "../modules/qualification/pages.js";
 import { listReferenceEntities } from "../modules/entities/read.js";
+import { executePublishedOperationByKey } from "../modules/operations/runtime.js";
 import { readTemplateFeatureToggles } from "../modules/templates/features.js";
 import { isFormRuntimeReferenceTemplate, mapDocumentDataToFormRuntimeValues } from "../modules/forms/document-bridge.js";
 import { buildReadOnlyFormDefinition } from "../modules/templates/form-read.js";
@@ -162,11 +168,10 @@ export const createTemplateDetailViewModel = async (
     : template.mdxBody;
   const workflowPublishBlockedReason = workflow
     ? workflow.status === "archived"
-      ? "Archivierte Workflow-Versionen koennen nicht zugeordnet oder publiziert werden."
-      : workflow.status !== "published"
-        ? "Die zugeordnete Workflow-Version ist noch nicht publiziert."
-        : undefined
+      ? "Archivierte Workflow-Versionen koennen Templates nicht zugeordnet werden."
+      : undefined
     : "Bitte ordne dem Template eine Workflow-Version zu.";
+  const canPublishVersion = template.status === "draft" && !workflowPublishBlockedReason;
   const formDefinition = buildReadOnlyFormDefinition({
     templateId: template.id,
     templateKey: template.key,
@@ -191,6 +196,10 @@ export const createTemplateDetailViewModel = async (
           label: string;
           controlType: "action" | "lookup";
           operationRef?: string;
+          args?: string[];
+          bind?: string[];
+          operationTitle?: string;
+          operationStatus?: string;
         }>;
         parsedForm?: FormRuntimeDefinition;
         parseError?: string;
@@ -206,7 +215,18 @@ export const createTemplateDetailViewModel = async (
 
     try {
       formRuntimeReference.parsedForm = parseFormRuntimeSource(sourceTextForReference);
-      formRuntimeReference.apiBindings = listFormRuntimeApiBindings(formRuntimeReference.parsedForm);
+      formRuntimeReference.apiBindings = listFormRuntimeApiBindings(formRuntimeReference.parsedForm).map((binding) => {
+        const actionDefinition = formRuntimeReference?.parsedForm?.actions.find((action) => action.name === binding.actionName);
+        const selectedOperation = operations.find((operation) => operation.key === binding.operationRef);
+
+        return {
+          ...binding,
+          ...(actionDefinition?.args ? { args: actionDefinition.args } : {}),
+          ...(actionDefinition?.bind ? { bind: actionDefinition.bind } : {}),
+          ...(selectedOperation?.title ? { operationTitle: selectedOperation.title } : {}),
+          ...(selectedOperation?.status ? { operationStatus: selectedOperation.status } : {}),
+        };
+      });
     } catch (error: unknown) {
       formRuntimeReference.parseError = error instanceof Error ? error.message : "Die neue Formularquelle konnte nicht gelesen werden.";
     }
@@ -226,6 +246,7 @@ export const createTemplateDetailViewModel = async (
       relatedDocuments,
       availableWorkflows: workflows,
       selectedWorkflowTemplateId,
+      canPublishVersion,
       workflowPublishBlockedReason,
       formDefinition,
       templateFeatures,
@@ -331,6 +352,8 @@ export const createWorkflowDetailViewModel = async (
   const archiveBlockedReason = workflow.status !== "inactive"
     ? "Archive ist erst moeglich, wenn die betrachtete Version unveroeffentlicht ist."
     : undefined;
+  const canPublishVersion = workflow.status === "draft";
+  const statusEditorRows = sourceStatuses.length > 0 ? sourceStatuses : [""];
 
   return {
     ...shellContext,
@@ -346,12 +369,19 @@ export const createWorkflowDetailViewModel = async (
       currentPublishedVersion,
       nextDraftVersion,
       publishTargetVersion,
+      canPublishVersion,
       publishedTemplateUsages,
       canUnpublish: workflow.status === "published" && publishedTemplateUsages.length === 0,
       unpublishBlockedReason,
       canArchive: workflow.status === "inactive",
       archiveBlockedReason,
       transitionRows,
+      statusEditorRows,
+      availableStatusOptions: sourceStatuses,
+      availableRoleOptions: [
+        { value: "editor", label: "editor (w: write)" },
+        { value: "approver", label: "approver (x: execute)" },
+      ],
       sourceStatuses,
       workflowSourceText,
       sourceError,
@@ -514,6 +544,11 @@ export const createApiCatalogViewModel = async (userKey: string | undefined) => 
       count: usageData.documents.filter((document) => document.formType === "generic_form").length,
     },
   ];
+  const totalImportedMasterData = usageData.importedCustomers.length + usageData.importedProducts.length;
+  const totalTypedRecordCount = typedRecordApis.reduce((count, family) => count + family.count, 0);
+  const hasFormDataApis = visibleTemplateFamilies.length > 0;
+  const hasTypedRecordApis = env.appName !== "Service-Report" && (totalTypedRecordCount > 0 || visibleTemplateFamilies.length > 0);
+  const hasMasterDataApis = totalImportedMasterData > 0;
 
   return {
     ...shellContext,
@@ -522,9 +557,14 @@ export const createApiCatalogViewModel = async (userKey: string | undefined) => 
     apiCatalog: {
       operations: operationsWithUsage,
       visibleTemplateFamilies,
-      typedRecordApis,
+      typedRecordApis: env.appName === "Service-Report" ? [] : typedRecordApis,
       importedCustomers: usageData.importedCustomers,
       importedProducts: usageData.importedProducts,
+      totalImportedMasterData,
+      totalTypedRecordCount,
+      hasFormDataApis,
+      hasTypedRecordApis,
+      hasMasterDataApis,
     },
   };
 };
@@ -552,9 +592,9 @@ const buildOperationEditorState = (input?: {
     description: values?.description ?? operation?.description ?? "",
     connector: values?.connector ?? operation?.connector ?? "typescript",
     authMode: values?.authMode ?? operation?.authMode ?? "none",
-    requestSchemaText: values?.requestSchemaText ?? JSON.stringify(operation?.requestSchemaJson ?? {}, null, 2),
-    responseSchemaText: values?.responseSchemaText ?? JSON.stringify(operation?.responseSchemaJson ?? {}, null, 2),
-    handlerTsSource: values?.handlerTsSource ?? operation?.handlerTsSource ?? "export default async function handler(input, runtime) {\n  return {\n    ok: true,\n  };\n}\n",
+    requestSchemaText: values?.requestSchemaText ?? JSON.stringify(sanitizeOperationSchemaJson(operation?.requestSchemaJson), null, 2),
+    responseSchemaText: values?.responseSchemaText ?? JSON.stringify(sanitizeOperationSchemaJson(operation?.responseSchemaJson), null, 2),
+    handlerTsSource: values?.handlerTsSource ?? operation?.handlerTsSource ?? "export default defineApi(async ({ info }) => {\n  return info(\"API ausgefuehrt\", \"Noch keine Logik hinterlegt.\");\n});\n",
     tagsText: values?.tagsText ?? (operation?.tags ?? []).join(", "),
   };
 };
@@ -585,6 +625,7 @@ export const createApiDetailViewModel = async (
     pageSection: "apis" as const,
     apiDetail: {
       operation,
+      canPublishVersion: operation.status === "draft",
       editor: buildOperationEditorState({
         operation,
         ...(input ? { values: input } : {}),
@@ -606,6 +647,7 @@ export const createApiNewViewModel = async (
     pageSection: "apis" as const,
     apiDetail: {
       operation: null,
+      canPublishVersion: true,
       editor: buildOperationEditorState(input ? { values: input } : undefined),
       usage: null,
     },
@@ -820,16 +862,20 @@ export const createDocumentDetailViewModel = async (
     return null;
   }
 
-  const [assignments, tasks, attachments, auditEvents, attachmentUploadState, editState, submitState, approveState, rejectState, archiveState, workflowDetail, typedRecordSummary] = await Promise.all([
+  const [assignments, tasks, attachments, auditEvents, attachmentUploadState, editState, journalWriteState, assignState, assignableEditors, submitState, approveState, rejectState, reassignState, archiveState, workflowDetail, typedRecordSummary] = await Promise.all([
     listAssignmentsForDocument(document.id),
     listTasksForDocument(document.id),
     listAttachmentsForDocument(document.id),
     listAuditEventsForDocument(document.id),
     getAttachmentUploadStateForUser(document.id, activeUser.id),
     getDocumentEditStateForUser(document.id, activeUser.id),
+    getDocumentJournalWriteStateForUser(document.id, activeUser.id),
+    getDocumentAssignStateForUser(document.id, activeUser.id),
+    listDocumentAssignableEditorsForUser(document.id, activeUser.id),
     getDocumentSubmitStateForUser(document.id, activeUser.id),
     getDocumentApproveStateForUser(document.id, activeUser.id),
     getDocumentRejectStateForUser(document.id, activeUser.id),
+    getDocumentReassignStateForUser(document.id, activeUser.id),
     getDocumentArchiveStateForUser(document.id, activeUser.id),
     findWorkflowTemplateById(document.workflowTemplateId),
     findTypedRecordSummary(document.id, document.formType),
@@ -953,7 +999,7 @@ export const createDocumentDetailViewModel = async (
       documentStatus: document.status,
       baseEditState: editState,
     });
-    const formRuntimeFieldValues = {
+    let formRuntimeFieldValues = {
       ...mapDocumentDataToFormRuntimeValues(document.templateKey, document.documentDataJson, {
         currentUserId: activeUser.id,
       }),
@@ -961,6 +1007,32 @@ export const createDocumentDetailViewModel = async (
         Object.entries(input?.formRuntimeFieldValues ?? {}).map(([key, value]) => [key, value?.toString() ?? ""]),
       ),
     };
+    if (document.templateKey === "service-report") {
+      try {
+        const serviceReportLookup = await executePublishedOperationByKey({
+          operationKey: "service-report.erp-orders",
+          executionInput: {
+            action: {
+              kind: "action",
+              controlType: "action",
+              name: "load_service_order",
+              label: "Auftragsdaten laden",
+              properties: {},
+              ref: "service-report.erp-orders",
+              args: ["order_number"],
+              bind: ["customer", "customer_order_status", "customer_master_status"],
+            },
+            fieldValues: formRuntimeFieldValues,
+            documentId: document.id,
+            userId: activeUser.id,
+            templateKey: document.templateKey,
+          },
+        });
+        formRuntimeFieldValues = serviceReportLookup.fieldValues;
+      } catch {
+        // The service report form should still render when ERP-SIM is temporarily unavailable.
+      }
+    }
     const formRuntimeFieldUi = buildReferenceFormRuntimeFieldUi({
       templateKey: document.templateKey,
       canEdit: formRuntimeEditState.isAvailable,
@@ -1070,21 +1142,27 @@ export const createDocumentDetailViewModel = async (
           formDefinition.journals.length > 0
             ? formDefinition.journals.map((journal) => ({
               ...journal,
-              isEditable: journal.isEditable && editState.isAvailable,
+              isEditable: journal.isEditable && journalWriteState.isAvailable,
             }))
             : isFormRuntimeReferenceTemplate(document.templateKey)
               ? [buildReferenceFormRuntimeJournalDefinition({
                 documentData: document.documentDataJson,
-                isEditable: editState.isAvailable,
+                isEditable: journalWriteState.isAvailable,
               })]
               : []
         )
         : [],
       editState,
       attachmentUploadState,
+      assignState,
+      assignableEditors: assignableEditors.map((editor) => ({
+        ...editor,
+        isSelected: assignments.some((assignment) => assignment.active && assignment.role === "editor" && assignment.userId === editor.userId),
+      })),
       submitState,
       approveState,
       rejectState,
+      reassignState,
       archiveState,
       assignments,
       tasks,

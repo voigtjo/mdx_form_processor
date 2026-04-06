@@ -37,7 +37,8 @@ export const listAuditEventsForDocument = async (documentId: string): Promise<Au
       `select id, document_id, event_type, actor_user_id, message, created_at
        from audit_events
        where document_id = $1
-       order by created_at asc`,
+         and event_type in ('created', 'assigned', 'submitted', 'approved', 'reassigned', 'rejected', 'archived')
+       order by created_at desc`,
       [documentId],
     );
 

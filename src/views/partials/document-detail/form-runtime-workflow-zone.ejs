@@ -12,6 +12,20 @@
   </div>
 <% } %>
 
+<% if (assignStatus) { %>
+  <div class="notice-card notice-success notice-inline">
+    <strong>Zugewiesen</strong>
+    <p><%= assignStatus %></p>
+  </div>
+<% } %>
+
+<% if (assignError) { %>
+  <div class="notice-card notice-error notice-inline">
+    <strong>Assign blockiert</strong>
+    <p><%= assignError %></p>
+  </div>
+<% } %>
+
 <% if (submitStatus) { %>
   <div class="notice-card notice-success notice-inline">
     <strong>Eingereicht</strong>
@@ -54,6 +68,20 @@
   </div>
 <% } %>
 
+<% if (reassignStatus) { %>
+  <div class="notice-card notice-success notice-inline">
+    <strong>Neu zugewiesen</strong>
+    <p><%= reassignStatus %></p>
+  </div>
+<% } %>
+
+<% if (reassignError) { %>
+  <div class="notice-card notice-error notice-inline">
+    <strong>Neu zuweisen blockiert</strong>
+    <p><%= reassignError %></p>
+  </div>
+<% } %>
+
 <% if (archiveStatus) { %>
   <div class="notice-card notice-success notice-inline">
     <strong>Archiviert</strong>
@@ -70,6 +98,7 @@
 
 <% const formRuntimeEditState = documentDetail.formRuntimeReference?.editState ?? documentDetail.editState; %>
 <% const participantProgress = documentDetail.formRuntimeReference?.participantProgress; %>
+<% const assignableEditors = documentDetail.assignableEditors ?? []; %>
 
 <div class="form-runtime-toolbar">
   <% if (participantProgress) { %>
@@ -77,6 +106,19 @@
       <span>Deine Rollen: <%= participantProgress.currentUserRoles.length > 0 ? participantProgress.currentUserRoles.join(", ") : "keine" %></span>
       <span>Submit <%= participantProgress.submitModeLabel %> · <%= participantProgress.submitProgressLabel %></span>
       <span>Approve <%= participantProgress.approvalModeLabel %></span>
+    </div>
+  <% } %>
+  <% if ((documentDetail.assignState?.isAvailable || documentDetail.reassignState?.isAvailable) && assignableEditors.length > 0) { %>
+    <div class="workflow-action-strip workflow-action-strip-meta">
+      <span>Editoren fuer Zuweisung</span>
+      <div class="choice-grid compact">
+        <% assignableEditors.forEach((editor) => { %>
+          <label class="checkbox-item">
+            <input type="checkbox" name="editorUserIds" value="<%= editor.userId %>" <%= editor.isSelected ? "checked" : "" %> />
+            <span><%= editor.displayName %></span>
+          </label>
+        <% }) %>
+      </div>
     </div>
   <% } %>
   <div class="workflow-action-strip">
@@ -91,6 +133,19 @@
       hx-swap="outerHTML"
       <%= formRuntimeEditState.isAvailable ? "" : "disabled" %>
     >Speichern</button>
+    <% if (documentDetail.assignState?.isAvailable) { %>
+      <button
+        class="button-secondary"
+        type="submit"
+        formaction="/documents/<%= documentDetail.document.id %>/assign?user=<%= activeUser.key %>"
+        hx-post="/documents/<%= documentDetail.document.id %>/assign?user=<%= activeUser.key %>"
+        hx-target="#document-form-body-fragment"
+        hx-swap="outerHTML"
+        data-preserve-form-position="true"
+      >Zuweisen</button>
+    <% } else if (documentDetail.document.status === "draft") { %>
+      <button class="button-secondary" type="button" disabled>Zuweisen</button>
+    <% } %>
     <% if (documentDetail.submitState.isAvailable) { %>
       <button
         class="button-secondary"
@@ -100,7 +155,7 @@
         hx-target="#document-form-body-fragment"
         hx-swap="outerHTML"
         data-preserve-form-position="true"
-      >Einreichen</button>
+      >Einreichen und speichern</button>
     <% } else if (documentDetail.document.status === "created") { %>
       <button class="button-secondary" type="button" disabled>Einreichen</button>
     <% } %>
@@ -114,6 +169,17 @@
         hx-swap="outerHTML"
         data-preserve-form-position="true"
       >Freigeben</button>
+    <% } %>
+    <% if (documentDetail.reassignState?.isAvailable) { %>
+      <button
+        class="button-secondary"
+        type="submit"
+        formaction="/documents/<%= documentDetail.document.id %>/reassign?user=<%= activeUser.key %>"
+        hx-post="/documents/<%= documentDetail.document.id %>/reassign?user=<%= activeUser.key %>"
+        hx-target="#document-form-body-fragment"
+        hx-swap="outerHTML"
+        data-preserve-form-position="true"
+      >Neu zuweisen</button>
     <% } %>
     <% if (documentDetail.rejectState.isAvailable) { %>
       <button

@@ -28,6 +28,7 @@ const normalizeStringArray = (value: unknown): string[] => {
 
 const supportedFormRuntimeTemplateKeys = new Set([
   "customer-order-test",
+  "service-report",
   "production-batch",
   "qualification-record",
   "generic-form",
@@ -64,6 +65,10 @@ const mapCustomerOrderDocumentDataToFormRuntimeValues = (data: Record<string, un
     labor_hours: normalizeText(data.labor_hours),
     travel_hours: normalizeText(data.travel_hours),
     break_minutes: normalizeText(data.break_minutes),
+    customer_information_flags: normalizeStringArray(data.customer_information_flags).join(","),
+    service_result_status: normalizeText(data.service_result_status),
+    follow_up_date: normalizeText(data.follow_up_date),
+    service_order_options_json: normalizeText(data.service_order_options_json),
     approval_status: normalizeText(data.approval_status),
   };
 };
@@ -135,6 +140,10 @@ export const mapDocumentDataToFormRuntimeValues = (
     return mapCustomerOrderDocumentDataToFormRuntimeValues(dataForRead);
   }
 
+  if (templateKey === "service-report") {
+    return mapCustomerOrderDocumentDataToFormRuntimeValues(dataForRead);
+  }
+
   if (templateKey === "qualification-record") {
     return mapQualificationDocumentDataToFormRuntimeValues(dataForRead);
   }
@@ -175,6 +184,18 @@ const mergeCustomerOrderFormRuntimeValues = (
     labor_hours: hasOwnFieldValue(fieldValues, "labor_hours") ? normalizeText(fieldValues.labor_hours) : existingData.labor_hours,
     travel_hours: hasOwnFieldValue(fieldValues, "travel_hours") ? normalizeText(fieldValues.travel_hours) : existingData.travel_hours,
     break_minutes: hasOwnFieldValue(fieldValues, "break_minutes") ? normalizeText(fieldValues.break_minutes) : existingData.break_minutes,
+    customer_information_flags: hasOwnFieldValue(fieldValues, "customer_information_flags")
+      ? normalizeStringArray(fieldValues.customer_information_flags)
+      : existingData.customer_information_flags,
+    service_result_status: hasOwnFieldValue(fieldValues, "service_result_status")
+      ? normalizeText(fieldValues.service_result_status)
+      : existingData.service_result_status,
+    follow_up_date: hasOwnFieldValue(fieldValues, "follow_up_date")
+      ? normalizeText(fieldValues.follow_up_date)
+      : existingData.follow_up_date,
+    service_order_options_json: hasOwnFieldValue(fieldValues, "service_order_options_json")
+      ? normalizeText(fieldValues.service_order_options_json)
+      : existingData.service_order_options_json,
     approval_status: hasOwnFieldValue(fieldValues, "approval_status") ? normalizeText(fieldValues.approval_status) : existingData.approval_status,
   };
 };
@@ -293,6 +314,10 @@ export const mergeFormRuntimeValuesIntoDocumentData = (
   },
 ): Record<string, unknown> => {
   if (templateKey === "customer-order-test") {
+    return mergeCustomerOrderFormRuntimeValues(existingData, fieldValues);
+  }
+
+  if (templateKey === "service-report") {
     return mergeCustomerOrderFormRuntimeValues(existingData, fieldValues);
   }
 

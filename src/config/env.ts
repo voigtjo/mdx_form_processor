@@ -1,6 +1,10 @@
 import { config } from "dotenv";
 
-config();
+const envFile = process.env.ENV_FILE?.trim() || ".env";
+
+config({
+  path: envFile,
+});
 
 const toNumber = (value: string | undefined, fallback: number): number => {
   if (!value) {
@@ -12,6 +16,7 @@ const toNumber = (value: string | undefined, fallback: number): number => {
 };
 
 export const env = {
+  envFile,
   appName: process.env.APP_NAME ?? "Handwerker Service und Nachweise",
   host: process.env.HOST ?? "127.0.0.1",
   port: toNumber(process.env.PORT, 3000),

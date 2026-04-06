@@ -66,6 +66,11 @@ const formatDocumentTitle = (templateKey: string, dataJson: Record<string, unkno
     return typeof orderNumber === "string" ? `Kundenauftrag ${orderNumber}` : templateName;
   }
 
+  if (templateKey === "service-report") {
+    const orderNumber = dataJson.customer_order_number;
+    return typeof orderNumber === "string" ? `Service-Report ${orderNumber}` : templateName;
+  }
+
   if (templateKey === "production-batch") {
     const batchId = dataJson.batch_id;
     return typeof batchId === "string" ? `Produktion ${batchId}` : templateName;

@@ -111,6 +111,11 @@ export const formatDocumentTitle = (templateKey: string, dataJson: Record<string
     return typeof orderNumber === "string" ? `Serviceeinsatz ${orderNumber}` : templateName;
   }
 
+  if (templateKey === "service-report") {
+    const orderNumber = dataJson.customer_order_number;
+    return typeof orderNumber === "string" ? `Service-Report ${orderNumber}` : templateName;
+  }
+
   if (templateKey === "production-batch") {
     const batchId = dataJson.batch_id;
     return typeof batchId === "string" ? `Produktion ${batchId}` : templateName;

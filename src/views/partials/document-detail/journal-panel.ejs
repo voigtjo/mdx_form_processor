@@ -1,6 +1,7 @@
 <%
   const journalTimestampKeys = ["at", "created_at", "createdAt", "timestamp", "time", "date"];
   const journalUserKeys = ["by", "user", "author", "actor", "created_by"];
+  const journalUserIdKeys = ["by_user_id", "user_id", "author_user_id", "actor_user_id", "created_by_user_id"];
   const journalTextKeys = ["text", "entry", "message", "note", "description"];
   const truncateJournalText = (value, maxLength = 160) => {
     if (typeof value !== "string") {
@@ -45,6 +46,7 @@
         entry,
         index,
         timestamp: pickJournalValue(entry, journalTimestampKeys, timestampFallbackKey),
+        byUserId: pickJournalValue(entry, journalUserIdKeys, undefined),
         by: pickJournalValue(entry, journalUserKeys, userFallbackKey),
         text: pickJournalValue(entry, journalTextKeys, textFallbackKey),
       }))
@@ -52,6 +54,17 @@
         const byTimestamp = right.timestamp.localeCompare(left.timestamp);
         return byTimestamp !== 0 ? byTimestamp : right.index - left.index;
       });
+  };
+  const resolveJournalAuthor = (row) => {
+    if (typeof row.byUserId === "string" && row.byUserId.trim().length > 0) {
+      const author = users.find((entry) => entry.id === row.byUserId);
+
+      if (author) {
+        return author.displayName;
+      }
+    }
+
+    return row.by;
   };
   const totalJournalEntries = documentDetail.journals.reduce((total, journal) => total + journal.entries.length, 0);
   const latestJournalEntry = documentDetail.journals
@@ -64,8 +77,8 @@
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Journal</h3>
-    <span><%= totalJournalEntries %><% if (latestJournalEntry) { %> · <%= latestJournalEntry.by %><% } %></span>
+    <h3>Nachrichten</h3>
+    <span><%= totalJournalEntries %><% if (latestJournalEntry) { %> · <%= resolveJournalAuthor(latestJournalEntry) %><% } %></span>
   </div>
 
   <% if (journalStatus) { %>
@@ -81,7 +94,7 @@
   <% } %>
 
   <% if (documentDetail.journals.length === 0) { %>
-    <p>Kein Journal im aktuellen Template definiert.</p>
+    <p>Keine Nachrichten im aktuellen Template definiert.</p>
   <% } else { %>
     <div class="journal-panel-stack">
       <% documentDetail.journals.forEach((journal) => { %>
@@ -125,7 +138,7 @@
                     <% const journalDialogId = `journal-entry-dialog-${journal.name}-${row.index}`; %>
                     <tr>
                       <td><%= row.timestamp %></td>
-                      <td><%= row.by %></td>
+                      <td><%= resolveJournalAuthor(row) %></td>
                       <td class="journal-entry-cell">
                         <button
                           class="journal-entry-preview-button"
@@ -140,11 +153,11 @@
                               <div>
                                 <h4><%= journal.label %></h4>
                               </div>
-                              <button class="button-secondary" type="submit" data-journal-dialog-close>Schliessen</button>
+                              <button class="button-secondary" type="submit" data-journal-dialog-close onclick="this.closest('dialog')?.close()">Schliessen</button>
                             </div>
                             <div class="journal-entry-full-meta">
                               <span><strong>Zeitpunkt:</strong> <%= row.timestamp %></span>
-                              <span><strong>Von:</strong> <%= row.by %></span>
+                              <span><strong>Von:</strong> <%= resolveJournalAuthor(row) %></span>
                             </div>
                             <div class="journal-entry-full-text"><%= row.text %></div>
                           </form>
