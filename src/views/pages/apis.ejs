@@ -1,177 +1,47 @@
-<details class="panel panel-collapsible page-header-collapsible">
-  <summary class="collapsible-summary">
-    <div class="collapsible-summary-copy">
-      <strong>APIs</strong>
-      <span><%= apiCatalog.operations.length %> APIs · <%= apiCatalog.visibleTemplateFamilies.length %> Formfamilien · <%= apiCatalog.totalImportedMasterData %> Stammdaten</span>
-    </div>
-    <div class="collapsible-summary-meta">
-      <span>Handwerker-Plattform</span>
-    </div>
-  </summary>
-  <div class="collapsible-body">
-    <h2>APIs</h2>
-    <div class="hero-actions">
-      <a class="button-primary" href="/apis/new?user=<%= activeUser.key %>">Neue API</a>
-    </div>
+<section class="hero-card hero-card-compact api-catalog-hero">
+  <div>
+    <h2>API-Liste</h2>
+    <p class="hero-inline-meta"><%= apiCatalog.operations.length %> APIs</p>
   </div>
-</details>
+  <div class="hero-actions">
+    <a class="button-primary" href="/apis/new?user=<%= activeUser.key %>">Neue API</a>
+  </div>
+</section>
 
 <section class="panel">
   <div class="panel-header">
     <h3>API-Liste</h3>
     <span><%= apiCatalog.operations.length %> APIs</span>
   </div>
-
-  <div class="stack-list compact">
-    <% apiCatalog.operations.forEach(({ operation, templateUsages, workflowUsages, documentCount, requestFields, responseFields }) => { %>
-      <div class="action-row">
-        <div>
-          <strong><a class="text-link" href="/apis/<%= operation.id %>?user=<%= activeUser.key %>"><%= operation.title %></a></strong>
-          <p><%= operation.key %> · <%= operation.status %> · <%= operation.connector %> · <%= operation.authMode %></p>
-          <p class="table-meta"><%= requestFields.length %> Request · <%= responseFields.length %> Response · <%= documentCount %> Vorgaenge · <%= templateUsages.length %> Templates · <%= workflowUsages.length %> Workflows</p>
-        </div>
-        <a class="text-link action-link" href="/apis/<%= operation.id %>?user=<%= activeUser.key %>">Oeffnen</a>
-      </div>
-    <% }) %>
-  </div>
-</section>
-
-<% if (apiCatalog.hasFormDataApis) { %>
-<section class="panel">
-  <div class="panel-header">
-    <h3>Formulardaten APIs</h3>
-    <span>JSON + CSV</span>
-  </div>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Template</th>
-          <th>Datensaetze</th>
-          <th>JSON Liste</th>
-          <th>CSV</th>
+          <th>Titel</th>
+          <th>Key</th>
+          <th>Status</th>
+          <th>Typ</th>
+          <th>Nutzung</th>
+          <th>Aktion</th>
         </tr>
       </thead>
       <tbody>
-        <% apiCatalog.visibleTemplateFamilies.forEach((template) => { %>
+        <% if (apiCatalog.operations.length === 0) { %>
           <tr>
-            <td>
-              <strong><%= template.name %></strong>
-              <p class="table-meta"><%= template.key %> · v<%= template.version %></p>
-            </td>
-            <td><%= template.documentCount %></td>
-            <td><a class="text-link" href="/api/form-data/templates/<%= template.key %>?user=<%= activeUser.key %>">JSON</a></td>
-            <td><a class="text-link" href="/api/form-data/templates/<%= template.key %>/export.csv?user=<%= activeUser.key %>">CSV</a></td>
+            <td colspan="6"><span class="table-meta">Noch keine APIs vorhanden.</span></td>
+          </tr>
+        <% } %>
+        <% apiCatalog.operations.forEach(({ operation, templateUsages, workflowUsages, documentCount }) => { %>
+          <tr>
+            <td><strong><a class="text-link" href="/apis/<%= operation.id %>?user=<%= activeUser.key %>"><%= operation.title %></a></strong></td>
+            <td><code><%= operation.key %></code></td>
+            <td><%= operation.status %></td>
+            <td><%= operation.connector %></td>
+            <td><%= documentCount %> Vorg. · <%= templateUsages.length %> T · <%= workflowUsages.length %> W</td>
+            <td><a class="text-link" href="/apis/<%= operation.id %>?user=<%= activeUser.key %>">Oeffnen</a></td>
           </tr>
         <% }) %>
       </tbody>
     </table>
   </div>
 </section>
-<% } %>
-
-<% if (appName !== "Service-Report" && apiCatalog.hasTypedRecordApis) { %>
-<section class="panel">
-  <div class="panel-header">
-    <h3>Typed Record APIs</h3>
-    <span>JSON + CSV</span>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Familie</th>
-          <th>Tabelle</th>
-          <th>Datensaetze</th>
-          <th>JSON Liste</th>
-          <th>CSV</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% apiCatalog.typedRecordApis.forEach((family) => { %>
-          <tr>
-            <td><strong><%= family.label %></strong></td>
-            <td><%= family.tableName %></td>
-            <td><%= family.count %></td>
-            <td><a class="text-link" href="/api/typed-records/<%= family.familyKey %>?user=<%= activeUser.key %>">JSON</a></td>
-            <td><a class="text-link" href="/api/typed-records/<%= family.familyKey %>/export.csv?user=<%= activeUser.key %>">CSV</a></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  </div>
-</section>
-<% } %>
-
-<% if (apiCatalog.hasMasterDataApis) { %>
-<section class="panel">
-  <div class="panel-header">
-    <h3>Stammdaten APIs</h3>
-    <span>Kunden + Produkte</span>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Entitaet</th>
-          <th>Datensaetze</th>
-          <th>JSON Liste</th>
-          <th>Beispiel</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Kunden</strong></td>
-          <td><%= apiCatalog.importedCustomers.length %></td>
-          <td><a class="text-link" href="/api/entities/customers?user=<%= activeUser.key %>">JSON</a></td>
-          <td>
-            <% if (apiCatalog.importedCustomers[0]) { %>
-              <a class="text-link" href="/api/entities/customers/<%= apiCatalog.importedCustomers[0].entityKey %>?user=<%= activeUser.key %>">Eintrag</a>
-            <% } else { %>
-              <span class="table-meta">Noch kein Eintrag</span>
-            <% } %>
-          </td>
-        </tr>
-        <tr>
-          <td><strong>Produkte</strong></td>
-          <td><%= apiCatalog.importedProducts.length %></td>
-          <td><a class="text-link" href="/api/entities/products?user=<%= activeUser.key %>">JSON</a></td>
-          <td>
-            <% if (apiCatalog.importedProducts[0]) { %>
-              <a class="text-link" href="/api/entities/products/<%= apiCatalog.importedProducts[0].entityKey %>?user=<%= activeUser.key %>">Eintrag</a>
-            <% } else { %>
-              <span class="table-meta">Noch kein Eintrag</span>
-            <% } %>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-<% } %>
-
-<% if (apiCatalog.hasMasterDataApis) { %>
-<section class="grid two-up">
-  <section class="panel">
-  <div class="panel-header">
-    <h3>CSV Import Kunden</h3>
-    <span><%= apiCatalog.importedCustomers.length %> Datensaetze</span>
-  </div>
-    <form method="post" action="/apis/import/customers?user=<%= activeUser.key %>" class="stack-list">
-      <textarea name="csvText" rows="8" class="form-runtime-source-editor" placeholder="entity_key,display_name,status,customer_number,order_number,order_status,order_created_at,service_location,city&#10;customer-baukontor,Baukontor Nord,active,CU-1007,KD-2026-1007,in_bearbeitung,2026-04-02T08:15:00.000Z,Lagerhalle 2 Bremen,Bremen"></textarea>
-      <button class="button-primary" type="submit">Kunden importieren</button>
-    </form>
-  </section>
-
-  <section class="panel">
-  <div class="panel-header">
-    <h3>CSV Import Produkte</h3>
-    <span><%= apiCatalog.importedProducts.length %> Datensaetze</span>
-  </div>
-    <form method="post" action="/apis/import/products?user=<%= activeUser.key %>" class="stack-list">
-      <textarea name="csvText" rows="8" class="form-runtime-source-editor" placeholder="entity_key,display_name,status,product_type,match_terms&#10;product-heating-maintenance-kit,Wartungsset Heizung,active,Wartungsset,&quot;wartung heizung filter service&quot;"></textarea>
-      <button class="button-primary" type="submit">Produkte importieren</button>
-    </form>
-  </section>
-</section>
-<% } %>

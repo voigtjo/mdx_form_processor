@@ -1,5 +1,6 @@
 import { EditorView, basicSetup } from "https://esm.sh/codemirror@6.0.1";
 import { javascript } from "https://esm.sh/@codemirror/lang-javascript@6.2.4";
+import { json } from "https://esm.sh/@codemirror/lang-json@6.0.1";
 import { syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.10.3";
 import { oneDark, oneDarkHighlightStyle } from "https://esm.sh/@codemirror/theme-one-dark@6.1.2";
 
@@ -20,7 +21,9 @@ const initializeCodeEditors = (root = document) => {
       doc: textarea.value,
       extensions: [
         basicSetup,
-        javascript({ typescript: textarea.dataset.codeEditor === "typescript" }),
+        textarea.dataset.codeEditor === "json"
+          ? json()
+          : javascript({ typescript: textarea.dataset.codeEditor === "typescript" }),
         oneDark,
         syntaxHighlighting(oneDarkHighlightStyle),
         EditorView.lineWrapping,
@@ -31,7 +34,7 @@ const initializeCodeEditors = (root = document) => {
         }),
         EditorView.theme({
           "&": {
-            minHeight: "24rem",
+            minHeight: textarea.dataset.codeEditor === "json" ? "16rem" : "24rem",
             fontSize: "0.92rem",
             borderRadius: "16px",
             border: "1px solid rgba(122, 78, 41, 0.12)",
@@ -45,7 +48,7 @@ const initializeCodeEditors = (root = document) => {
             lineHeight: "1.5",
           },
           ".cm-content": {
-            minHeight: "24rem",
+            minHeight: textarea.dataset.codeEditor === "json" ? "16rem" : "24rem",
             padding: "1rem",
           },
           ".cm-gutters": {

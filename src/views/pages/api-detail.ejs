@@ -1,40 +1,26 @@
 <% const operation = apiDetail.operation; %>
-<details class="panel panel-collapsible page-header-collapsible" open>
-  <summary class="collapsible-summary">
-    <div class="collapsible-summary-copy">
-      <strong><%= operation ? operation.title : "Neue API" %></strong>
-      <span><%= operation ? `${operation.key} · ${operation.status}` : "Draft" %></span>
-    </div>
-    <div class="collapsible-summary-meta">
-      <span>API</span>
-    </div>
-  </summary>
-  <div class="collapsible-body">
-    <span class="eyebrow">TypeScript API</span>
-    <h2><%= operation ? operation.title : "Neue API" %></h2>
-    <div class="hero-actions">
-      <a class="button-secondary" href="/apis?user=<%= activeUser.key %>">Zur API-Liste</a>
-    </div>
+<section class="hero-card hero-card-compact api-detail-hero">
+  <div>
+    <strong><%= operation ? operation.key : "Neue API" %></strong>
+    <p class="hero-inline-meta"><%= operation ? `${operation.title} · ${operation.status}` : "Draft" %></p>
   </div>
-</details>
+  <div class="hero-actions">
+    <a class="button-secondary" href="/apis?user=<%= activeUser.key %>">Zur API-Liste</a>
+  </div>
+</section>
 
 <section class="panel">
   <div class="panel-header">
     <h3>API Detail</h3>
-    <span><%= operation ? operation.status : "draft" %></span>
   </div>
 
   <form method="post" action="<%= operation ? `/apis/${operation.id}?user=${activeUser.key}` : `/apis/new?user=${activeUser.key}` %>" class="stack-list">
     <article class="subpanel">
-      <div class="panel-header">
-        <h4>Lifecycle</h4>
-      </div>
       <div class="template-lifecycle-actions">
-        <button class="button-secondary" type="submit" name="intent" value="save_draft">Save Draft</button>
-        <button class="button-primary" type="submit" name="intent" value="publish" <%= apiDetail.canPublishVersion ? "" : "disabled" %>>Publish</button>
+        <button class="button-primary" type="submit" name="intent" value="publish" <%= apiDetail.canSavePublish ? "" : "disabled" %>>Save &amp; Publish</button>
         <% if (operation) { %>
           <button class="button-secondary" type="submit" name="intent" value="unpublish" <%= operation.status === "published" ? "" : "disabled" %>>Unpublish</button>
-          <button class="button-secondary" type="submit" name="intent" value="archive" <%= operation.status !== "archived" ? "" : "disabled" %>>Archive</button>
+          <button class="button-secondary" type="submit" name="intent" value="archive" <%= operation.status === "inactive" ? "" : "disabled" %>>Archive</button>
         <% } %>
       </div>
     </article>
@@ -53,7 +39,7 @@
 
       <div class="field-block">
         <label class="field-label" for="api-description">Description</label>
-        <textarea id="api-description" name="description" rows="3" class="text-input api-description-input"><%= apiDetail.editor.description %></textarea>
+        <textarea id="api-description" name="description" rows="2" class="text-input api-description-input"><%= apiDetail.editor.description %></textarea>
       </div>
     </article>
 
@@ -77,11 +63,11 @@
       <div class="grid two-up">
         <div class="field-block">
           <label class="field-label" for="api-request-schema">Request Schema JSON</label>
-          <textarea id="api-request-schema" name="requestSchemaText" rows="14" class="form-runtime-source-editor"><%= apiDetail.editor.requestSchemaText %></textarea>
+          <textarea id="api-request-schema" name="requestSchemaText" rows="12" class="form-runtime-source-editor" data-code-editor="json"><%= apiDetail.editor.requestSchemaText %></textarea>
         </div>
         <div class="field-block">
           <label class="field-label" for="api-response-schema">Response Schema JSON</label>
-          <textarea id="api-response-schema" name="responseSchemaText" rows="14" class="form-runtime-source-editor"><%= apiDetail.editor.responseSchemaText %></textarea>
+          <textarea id="api-response-schema" name="responseSchemaText" rows="12" class="form-runtime-source-editor" data-code-editor="json"><%= apiDetail.editor.responseSchemaText %></textarea>
         </div>
       </div>
     </article>

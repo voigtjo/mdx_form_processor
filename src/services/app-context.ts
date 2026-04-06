@@ -145,13 +145,14 @@ export const createTemplateDetailViewModel = async (
     return null;
   }
 
-  const [groups, templateAssignments, workflows, documents, versions, operations] = await Promise.all([
+  const [groups, templateAssignments, workflows, documents, versions, operations, availableOperations] = await Promise.all([
     listGroups(),
     listTemplateAssignmentsForTemplate(template.id),
     listWorkflowTemplates(),
     listDocumentsVisibleToUser(activeUser.id),
     listFormTemplateVersions(template.key),
     listOperations(),
+    listOperations({ statuses: ["published"] }),
   ]);
 
   const selectedWorkflowTemplateId = input?.workflowTemplateId ?? template.workflowTemplateId;
@@ -251,7 +252,7 @@ export const createTemplateDetailViewModel = async (
       formDefinition,
       templateFeatures,
       ...(formRuntimeReference ? { formRuntimeReference } : {}),
-      availableOperations: operations,
+      availableOperations,
       integrations: {
         actions: formDefinition.actions.filter((action) => action.operationRef),
         fields: formDefinition.fields.filter((field) => field.operationRef),
@@ -294,12 +295,13 @@ export const createWorkflowDetailViewModel = async (
     return null;
   }
 
-  const [templates, allTemplates, versions, documents, operations] = await Promise.all([
+  const [templates, allTemplates, versions, documents, operations, availableOperations] = await Promise.all([
     listFormTemplates(),
     listFormTemplates({ includeArchived: true }),
     listWorkflowTemplateVersions(workflow.key),
     listDocumentsVisibleToUser(activeUser.id),
     listOperations(),
+    listOperations({ statuses: ["published"] }),
   ]);
 
   const relatedTemplates = templates.filter((template) => template.workflowTemplateId === workflow.id);
@@ -385,7 +387,7 @@ export const createWorkflowDetailViewModel = async (
       sourceStatuses,
       workflowSourceText,
       sourceError,
-      availableOperations: operations,
+      availableOperations,
     },
   };
 };
@@ -625,7 +627,7 @@ export const createApiDetailViewModel = async (
     pageSection: "apis" as const,
     apiDetail: {
       operation,
-      canPublishVersion: operation.status === "draft",
+      canSavePublish: operation.status !== "archived",
       editor: buildOperationEditorState({
         operation,
         ...(input ? { values: input } : {}),
@@ -647,7 +649,7 @@ export const createApiNewViewModel = async (
     pageSection: "apis" as const,
     apiDetail: {
       operation: null,
-      canPublishVersion: true,
+      canSavePublish: true,
       editor: buildOperationEditorState(input ? { values: input } : undefined),
       usage: null,
     },

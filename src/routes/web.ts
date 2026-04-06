@@ -1056,7 +1056,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   }>("/apis/new", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
-    const intent = request.body?.intent === "publish" ? "publish" : "save_draft";
+    const intent = "publish";
 
     try {
       const result = await saveOperationDraft({
@@ -1075,8 +1075,8 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.redirect(
         buildDialogRedirect(`/apis/${result.id}?user=${encodeURIComponent(activeUser.key)}`, {
           type: "info",
-          title: intent === "publish" ? "API publiziert" : "API als Draft gespeichert",
-          message: `${result.key} wurde gespeichert.`,
+          title: "API gespeichert",
+          message: `${result.key} ist jetzt ${result.status}.`,
         }),
         303,
       );
@@ -1136,7 +1136,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     const params = request.params as { id: string };
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
-    const intent = request.body?.intent ?? "save_draft";
+    const intent = request.body?.intent ?? "publish";
 
     try {
       const result = intent === "publish"
@@ -1168,20 +1168,18 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
                 responseSchemaText: request.body?.responseSchemaText ?? "",
                 handlerTsSource: request.body?.handlerTsSource ?? "",
                 tagsText: request.body?.tagsText ?? "",
-                intent: "save_draft",
+                intent: "publish",
               });
 
       return reply.redirect(
         buildDialogRedirect(`/apis/${result.id}?user=${encodeURIComponent(activeUser.key)}`, {
           type: "info",
           title:
-            intent === "publish"
-              ? "API publiziert"
-              : intent === "unpublish"
-                ? "API depubliziert"
-                : intent === "archive"
-                  ? "API archiviert"
-                  : "API gespeichert",
+            intent === "unpublish"
+              ? "API depubliziert"
+              : intent === "archive"
+                ? "API archiviert"
+                : "API gespeichert",
           message: `${result.key} ist jetzt ${result.status}.`,
         }),
         303,
