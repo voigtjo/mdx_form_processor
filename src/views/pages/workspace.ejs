@@ -106,7 +106,7 @@
                 <p><%= template.description ?? template.key %></p>
                 <p><span class="status-pill status-<%= template.status %>"><%= template.status %></span> · v<%= template.version %></p>
               </div>
-              <% if (template.status === "published") { %>
+              <% if (workspaceSummary.startableTemplateIds.includes(template.id)) { %>
                 <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form compact">
                   <input type="hidden" name="templateId" value="<%= template.id %>" />
                   <button class="button-secondary" type="submit">Starten</button>

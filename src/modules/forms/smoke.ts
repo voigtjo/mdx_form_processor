@@ -19,6 +19,10 @@ const main = async (): Promise<void> => {
   const productionSource = await readFile(productionSourcePath, "utf8");
   const genericSource = await readFile(genericSourcePath, "utf8");
   const parsed = await readReferenceCustomerOrderForm();
+  const parsedUnnamedAction = parseFormRuntimeSource(rawSource.replace(
+    'action(load_customer, ref="customers.lookup", args="order_number", bind="customer,service_location")',
+    'action(ref="customers.lookup", args="order_number", bind="customer,service_location")',
+  ));
   const parsedQualification = parseFormRuntimeSource(qualificationSource);
   const parsedProduction = parseFormRuntimeSource(productionSource);
   const parsedGeneric = parseFormRuntimeSource(genericSource);
@@ -28,6 +32,10 @@ const main = async (): Promise<void> => {
   assert.equal(parsed.meta.version, "1");
   assert.equal(parsed.sections.length, 4);
   assert.equal(parsed.actions.length, 2);
+  assert.equal(parsedUnnamedAction.actions[0]?.name, "action_1");
+  assert.equal(parsedUnnamedAction.actions[0]?.ref, "customers.lookup");
+  assert.deepEqual(parsedUnnamedAction.actions[0]?.args, ["order_number"]);
+  assert.deepEqual(parsedUnnamedAction.actions[0]?.bind, ["customer", "service_location"]);
   assert.throws(
     () => parseFormRuntimeSource(rawSource.replace("text(order_number, required)", "email(order_number, required)")),
     /Control-Typ email wird im vereinfachten Formularmodell aktuell nicht unterstuetzt\./,

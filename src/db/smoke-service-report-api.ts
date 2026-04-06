@@ -7,7 +7,7 @@ import { seedServiceReportInstance } from "./seed-service-report.js";
 const action: FormRuntimeElement = {
   kind: "action",
   controlType: "action",
-  name: "load_service_order",
+  name: "action_1",
   label: "Auftragsdaten laden",
   properties: {},
   ref: "service-report.erp-orders",

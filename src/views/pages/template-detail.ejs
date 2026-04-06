@@ -92,7 +92,7 @@
                   <% }) %>
                 </select>
                 <div class="compact-meta-block">
-                  <p><strong>Formularaktion:</strong> <%= binding.actionName %></p>
+                  <p><strong>Button / Action:</strong> <%= binding.label %></p>
                   <p><strong>API-Key:</strong> <%= binding.operationRef ?? "noch nicht gesetzt" %></p>
                   <p><strong>API Request:</strong> <%= binding.args && binding.args.length > 0 ? binding.args.join(", ") : "keine Eingabefelder" %></p>
                   <p><strong>API Response:</strong> <%= binding.bind && binding.bind.length > 0 ? binding.bind.join(", ") : "keine Rueckfelder" %></p>

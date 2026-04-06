@@ -29,7 +29,7 @@
       template,
       workflow: catalog.workflows.find((workflow) => workflow.id === template.workflowTemplateId),
     }))
-    .filter(({ template, workflow }) => template.status === "published" && workflow?.status === "published"); %>
+    .filter(({ template, workflow }) => workspaceSummary.startableTemplateIds.includes(template.id) && template.status === "published" && workflow?.status === "published"); %>
   <div class="hero-actions">
     <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form">
       <label class="sr-only" for="templateId">Template</label>

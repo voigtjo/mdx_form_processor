@@ -124,7 +124,12 @@ const parsePropertyToken = (token: string, properties: FormRuntimePropertyMap): 
 const isFormRuntimeControlType = (value: string): value is FormRuntimeControlType =>
   (formRuntimeControlTypes as readonly string[]).includes(value);
 
-const parseControlSlot = (source: string): FormRuntimeSlot => {
+const parseControlSlot = (
+  source: string,
+  context: {
+    nextGeneratedActionName: (controlType: Extract<FormRuntimeControlType, "action" | "lookup">) => string;
+  },
+): FormRuntimeSlot => {
   const match = source.match(/^(.+?):\s*([a-zA-Z][a-zA-Z0-9_-]*)\((.*)\)$/);
 
   if (!match) {
@@ -144,30 +149,48 @@ const parseControlSlot = (source: string): FormRuntimeSlot => {
   }
 
   const propertyTokens = splitPropertyList(rawArgs);
-  const name = propertyTokens.shift();
-
-  if (!name) {
-    throw new Error(`Control-Name fehlt: "${source}"`);
-  }
-
   const properties: FormRuntimePropertyMap = {};
+  const kind = controlType === "action" ? "action" : controlType === "lookup" ? "lookup" : "field";
+  let name = "";
+  let authoredName: string | undefined;
+
+  if (kind === "action" || kind === "lookup") {
+    const firstToken = propertyTokens[0];
+    const hasExplicitName = typeof firstToken === "string" && !firstToken.includes("=");
+    const actionControlType = kind;
+
+    if (hasExplicitName) {
+      authoredName = propertyTokens.shift()?.trim();
+    }
+
+    name = authoredName || context.nextGeneratedActionName(actionControlType);
+  } else {
+    const controlName = propertyTokens.shift();
+
+    if (!controlName) {
+      throw new Error(`Control-Name fehlt: "${source}"`);
+    }
+
+    name = controlName;
+  }
 
   for (const token of propertyTokens) {
     parsePropertyToken(token, properties);
   }
 
-  const kind = controlType === "action" ? "action" : controlType === "lookup" ? "lookup" : "field";
   const args = splitCommaSeparatedValue(typeof properties.args === "string" ? properties.args : undefined);
   const bind = splitCommaSeparatedValue(typeof properties.bind === "string" ? properties.bind : undefined);
   const control: FormRuntimeElement = {
     kind,
     controlType,
     name,
+    ...(authoredName ? { authoredName } : {}),
     label: rawLabel,
     properties,
     ...(typeof properties.ref === "string" ? { ref: properties.ref } : {}),
     ...(args ? { args } : {}),
     ...(bind ? { bind } : {}),
+    sourceText: source,
   };
 
   return {
@@ -237,6 +260,7 @@ export const parseFormRuntimeSource = (source: string): FormRuntimeDefinition =>
   const actions: FormRuntimeElement[] = [];
   const lines = body.split(/\r?\n/);
   let currentSection: FormRuntimeSection | null = null;
+  let generatedActionCounter = 0;
 
   for (const line of metaLines) {
     const trimmed = line.trim();
@@ -271,7 +295,12 @@ export const parseFormRuntimeSource = (source: string): FormRuntimeDefinition =>
     }
 
     const rowSource = trimmed.replace(/^-+\s*/, "");
-    const slots = splitRowIntoSlots(rowSource).map(parseControlSlot);
+    const slots = splitRowIntoSlots(rowSource).map((slotSource) => parseControlSlot(slotSource, {
+      nextGeneratedActionName: (controlType) => {
+        generatedActionCounter += 1;
+        return `${controlType}_${generatedActionCounter}`;
+      },
+    }));
     const row: FormRuntimeRow = {
       source: rowSource,
       slots,

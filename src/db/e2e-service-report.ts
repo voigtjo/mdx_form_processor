@@ -83,6 +83,20 @@ const main = async (): Promise<void> => {
     });
     assert.equal(frankAssignedOpen.statusCode, 200);
     assert.match(frankAssignedOpen.body, /assigned/);
+    assert.match(frankAssignedOpen.body, /actionName=action_1/);
+
+    const loadOrderResponse = await postForm(app, {
+      url: `/documents/${documentId}/form?user=frank`,
+      payload: [
+        "intent=run-action",
+        "actionName=action_1",
+        `order_number=${encodeURIComponent("O-ca26a72f-1")}`,
+      ].join("&"),
+    });
+    assert.equal(loadOrderResponse.statusCode, 200);
+    assert.match(loadOrderResponse.body, /Auftragsdaten geladen/);
+    assert.match(loadOrderResponse.body, /Customer A/);
+    assert.match(loadOrderResponse.body, /received/);
 
     const saveResponse = await postForm(app, {
       url: `/documents/${documentId}/form?user=frank`,

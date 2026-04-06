@@ -53,7 +53,7 @@
                 <div class="table-actions">
                   <a class="text-link" href="/templates/<%= template.id %>?user=<%= activeUser.key %>">Oeffnen</a>
                   <a class="text-link" href="/documents?user=<%= activeUser.key %>&q=<%= encodeURIComponent(template.key) %>">Vorgaenge</a>
-                  <% if (template.status === "published" && workflow?.status === "published") { %>
+                  <% if (workspaceSummary.startableTemplateIds.includes(template.id) && template.status === "published" && workflow?.status === "published") { %>
                     <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form compact">
                       <input type="hidden" name="templateId" value="<%= template.id %>" />
                       <button class="button-secondary" type="submit">Starten</button>

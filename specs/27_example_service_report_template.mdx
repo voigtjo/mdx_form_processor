@@ -8,7 +8,7 @@ journal_enabled: true
 
 ## Dokumentkopf
 
-- Einsatznummer: select(order_number, required, ref="service-report.erp-orders") | Auftragsstatus: text(customer_order_status, readonly) | Auftragsdaten laden: action(load_service_order, ref="service-report.erp-orders", args="order_number", bind="customer,customer_order_status,customer_master_status")
+- Einsatznummer: select(order_number, required, ref="service-report.erp-orders") | Auftragsstatus: text(customer_order_status, readonly) | Auftragsdaten laden: action(ref="service-report.erp-orders", args="order_number", bind="customer,customer_order_status,customer_master_status")
 - Kunde: text(customer, required, readonly) | Kunde gueltig: text(customer_master_status, readonly)
 
 ## Inhalt

@@ -33,11 +33,13 @@ export type FormRuntimeElement = {
   kind: FormRuntimeElementKind;
   controlType: FormRuntimeControlType;
   name: string;
+  authoredName?: string;
   label?: string;
   properties: FormRuntimePropertyMap;
   ref?: string;
   args?: string[];
   bind?: string[];
+  sourceText?: string;
 };
 
 export type FormRuntimeSlot = {

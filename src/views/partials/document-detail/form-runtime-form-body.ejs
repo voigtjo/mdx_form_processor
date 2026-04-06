@@ -132,8 +132,11 @@
             <% if (actionSlots.length > 0) { %>
               <div class="form-runtime-row-actions">
                 <% actionSlots.forEach((slot) => { %>
-                  <% const actionElement = slot.element; %>
-                  <% const actionUi = documentDetail.formRuntimeReference.actionUi?.[actionElement.name] ?? { controlType: actionElement.controlType === "lookup" ? "lookup" : "action", runtimeRole: "lookup_trigger", lookupRole: "trigger", args: actionElement.args ?? [], bind: actionElement.bind ?? [], isEnabled: documentDetail.formRuntimeReference.editState.isAvailable }; %>
+                  <% var actionElement = slot.element; %>
+                  <% var actionUi = documentDetail.formRuntimeReference.actionUi && documentDetail.formRuntimeReference.actionUi[actionElement.name]; %>
+                  <% if (!actionUi) { %>
+                    <% actionUi = { controlType: actionElement.controlType === "lookup" ? "lookup" : "action", runtimeRole: "lookup_trigger", lookupRole: "trigger", args: actionElement.args || [], bind: actionElement.bind || [], isEnabled: documentDetail.formRuntimeReference.editState.isAvailable }; %>
+                  <% } %>
                   <button
                     type="submit"
                     class="button-secondary form-runtime-inline-action"
@@ -146,7 +149,7 @@
                     hx-post="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=<%= encodeURIComponent(actionElement.name) %>"
                     hx-target="#document-form-body-fragment"
                     hx-swap="outerHTML"
-                    <%= actionUi.isEnabled === false ? "disabled" : "" %>
+                    <% if (actionUi.isEnabled === false) { %>disabled<% } %>
                   ><%= actionElement.label ?? actionElement.name %></button>
                 <% }) %>
               </div>
@@ -407,6 +410,7 @@
                     <input class="text-input <%= isFieldEditable ? "" : "text-input-readonly" %>" type="text" name="<%= element.name %>" value="<%= currentValueText %>" placeholder="<%= orderNumberPlaceholder %>" <%= isFieldEditable ? "" : "readonly" %> />
                   <% } %>
                 </article>
+              <% } %>
             <% }) %>
           </div>
         <% }) %>

@@ -1,10 +1,14 @@
 import type { FormRuntimeDefinition } from "./types.js";
+import { parseFormRuntimeSource } from "./read.js";
 
 export type FormRuntimeApiBinding = {
   actionName: string;
+  authoredName?: string;
   label: string;
   controlType: "action" | "lookup";
   operationRef?: string;
+  args?: string[];
+  bind?: string[];
 };
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -12,43 +16,95 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
 export const listFormRuntimeApiBindings = (parsedForm: FormRuntimeDefinition): FormRuntimeApiBinding[] => {
   return parsedForm.actions.map((action) => ({
     actionName: action.name,
+    ...(action.authoredName ? { authoredName: action.authoredName } : {}),
     label: action.label ?? action.name,
     controlType: action.controlType === "lookup" ? "lookup" : "action",
     ...(action.ref ? { operationRef: action.ref } : {}),
+    ...(action.args ? { args: action.args } : {}),
+    ...(action.bind ? { bind: action.bind } : {}),
   }));
 };
 
-const replaceRefInActionSource = (source: string, actionName: string, operationRef: string): string => {
-  const actionPattern = new RegExp(
-    `\\b(action|lookup)\\(${escapeRegExp(actionName)}((?:[^"\\)]|"[^"]*")*)\\)`,
-    "g",
-  );
+const splitPropertyList = (source: string): string[] => {
+  const parts: string[] = [];
+  let current = "";
+  let inQuotes = false;
 
-  return source.replace(actionPattern, (match, controlType, rawArgs) => {
-    const argsText = typeof rawArgs === "string" ? rawArgs : "";
-    const nextArgs = /(?:^|,\s*)ref="/.test(argsText)
-      ? argsText.replace(/ref="[^"]*"/, `ref="${operationRef}"`)
-      : `${argsText.trim().length > 0 ? `${argsText}, ` : ", "}ref=\"${operationRef}\"`;
+  for (const character of source) {
+    if (character === "\"") {
+      inQuotes = !inQuotes;
+      current += character;
+      continue;
+    }
 
-    return `${controlType}(${actionName}${nextArgs})`;
-  });
+    if (character === "," && !inQuotes) {
+      const part = current.trim();
+
+      if (part.length > 0) {
+        parts.push(part);
+      }
+
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  const finalPart = current.trim();
+
+  if (finalPart.length > 0) {
+    parts.push(finalPart);
+  }
+
+  return parts;
 };
 
-const removeRefFromActionSource = (source: string, actionName: string): string => {
-  const actionPattern = new RegExp(
-    `\\b(action|lookup)\\(${escapeRegExp(actionName)}((?:[^"\\)]|"[^"]*")*)\\)`,
-    "g",
-  );
+const replaceFirstExact = (source: string, needle: string, replacement: string): string => {
+  const startIndex = source.indexOf(needle);
 
-  return source.replace(actionPattern, (match, controlType, rawArgs) => {
-    const argsText = typeof rawArgs === "string" ? rawArgs : "";
-    const nextArgs = argsText
-      .replace(/,\s*ref="[^"]*"/, "")
-      .replace(/ref="[^"]*"\s*,\s*/, ", ")
-      .replace(/ref="[^"]*"/, "");
+  if (startIndex < 0) {
+    return source;
+  }
 
-    return `${controlType}(${actionName}${nextArgs})`;
-  });
+  return source.slice(0, startIndex) + replacement + source.slice(startIndex + needle.length);
+};
+
+const rewriteActionSlotSource = (input: {
+  slotSource: string;
+  actionName: string;
+  operationRef: string;
+  authoredName?: string;
+}): string => {
+  const match = input.slotSource.match(/^(.+?):\s*([a-zA-Z][a-zA-Z0-9_-]*)\((.*)\)$/);
+
+  if (!match) {
+    return input.slotSource;
+  }
+
+  const rawLabel = match[1]?.trim() ?? "";
+  const controlType = match[2]?.trim() ?? "action";
+  const rawArgs = match[3]?.trim() ?? "";
+  const propertyTokens = splitPropertyList(rawArgs);
+  const hasExplicitName = Boolean(input.authoredName) && propertyTokens[0] === input.authoredName;
+
+  if (hasExplicitName) {
+    propertyTokens.shift();
+  }
+
+  const nextPropertyTokens = propertyTokens.filter((token) => !/^ref="[^"]*"$/.test(token));
+  const normalizedOperationRef = input.operationRef.trim();
+
+  if (normalizedOperationRef) {
+    nextPropertyTokens.push(`ref="${normalizedOperationRef}"`);
+  }
+
+  const nextArgs = [
+    ...(input.authoredName ? [input.authoredName] : []),
+    ...nextPropertyTokens,
+  ];
+
+  return `${rawLabel}: ${controlType}(${nextArgs.join(", ")})`;
 };
 
 export const applyFormRuntimeApiBindings = (input: {
@@ -56,13 +112,31 @@ export const applyFormRuntimeApiBindings = (input: {
   bindings: Record<string, string>;
 }): string => {
   let nextSource = input.sourceText;
+  let parsedForm: FormRuntimeDefinition;
+
+  try {
+    parsedForm = parseFormRuntimeSource(input.sourceText);
+  } catch {
+    return nextSource;
+  }
+
+  const actionsByName = new Map(parsedForm.actions.map((action) => [action.name, action] as const));
 
   for (const [actionName, operationRef] of Object.entries(input.bindings)) {
-    const normalizedOperationRef = operationRef.trim();
+    const action = actionsByName.get(actionName);
 
-    nextSource = normalizedOperationRef
-      ? replaceRefInActionSource(nextSource, actionName, normalizedOperationRef)
-      : removeRefFromActionSource(nextSource, actionName);
+    if (!action?.sourceText) {
+      continue;
+    }
+
+    const nextSlotSource = rewriteActionSlotSource({
+      slotSource: action.sourceText,
+      actionName,
+      operationRef,
+      ...(action.authoredName ? { authoredName: action.authoredName } : {}),
+    });
+
+    nextSource = replaceFirstExact(nextSource, action.sourceText, nextSlotSource);
   }
 
   return nextSource;

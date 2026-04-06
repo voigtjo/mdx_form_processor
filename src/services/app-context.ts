@@ -827,6 +827,27 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
       ? templateAssignments
       : templateAssignments.filter((assignment) => catalogTemplateIds.has(assignment.templateId));
   const workspaceDocuments = userDocuments.filter((document) => document.status !== "archived");
+  const activeMemberships = memberships.filter((membership) => membership.userId === activeUser.id);
+  const executableGroupIds = new Set(
+    activeMemberships
+      .filter((membership) => membership.rights.execute)
+      .map((membership) => membership.groupId),
+  );
+  const startableTemplateIds = new Set(
+    userTemplates
+      .filter((template) => {
+        const workflow = workflows.find((item) => item.id === template.workflowTemplateId);
+        const isAssignedToExecutableGroup = templateAssignments.some(
+          (assignment) =>
+            assignment.templateId === template.id
+            && assignment.status === "active"
+            && executableGroupIds.has(assignment.groupId),
+        );
+
+        return template.status === "published" && workflow?.status === "published" && isAssignedToExecutableGroup;
+      })
+      .map((template) => template.id),
+  );
 
   return {
     ...shellContext,
@@ -835,6 +856,7 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
       groups: userGroups,
       tasks: userTasks,
       templates: userTemplates,
+      startableTemplateIds: Array.from(startableTemplateIds),
       documents: workspaceDocuments,
       workflows: workflowsForTemplates(userTemplates, workflows),
     },
