@@ -125,16 +125,36 @@
         </div>
 
         <% section.rows.forEach((row) => { %>
-          <% const inlineLoadCustomerAction = row.slots.find((slot) => slot.element.name === "load_customer"); %>
-          <% const inlineSuggestMaterialAction = row.slots.find((slot) => slot.element.name === "suggest_material"); %>
-          <% const inlineLoadServiceOrderAction = row.slots.find((slot) => slot.element.name === "load_service_order"); %>
-          <% const visibleSlots = row.slots.filter((slot) => !["load_customer", "suggest_material", "load_service_order"].includes(slot.element.name)); %>
-          <div class="form-runtime-readonly-row form-runtime-columns-<%= Math.min(Math.max(visibleSlots.length, 1), 3) %>">
-            <% row.slots.forEach((slot) => { %>
+          <% const actionSlots = row.slots.filter((slot) => slot.element.kind !== "field"); %>
+          <% const visibleSlots = row.slots.filter((slot) => slot.element.kind === "field"); %>
+          <% const rowColumnCount = Math.min(Math.max(visibleSlots.length, 1), 3); %>
+          <div class="form-runtime-readonly-row form-runtime-columns-<%= rowColumnCount %>">
+            <% if (actionSlots.length > 0) { %>
+              <div class="form-runtime-row-actions">
+                <% actionSlots.forEach((slot) => { %>
+                  <% const actionElement = slot.element; %>
+                  <% const actionUi = documentDetail.formRuntimeReference.actionUi?.[actionElement.name] ?? { controlType: actionElement.controlType === "lookup" ? "lookup" : "action", runtimeRole: "lookup_trigger", lookupRole: "trigger", args: actionElement.args ?? [], bind: actionElement.bind ?? [], isEnabled: documentDetail.formRuntimeReference.editState.isAvailable }; %>
+                  <button
+                    type="submit"
+                    class="button-secondary form-runtime-inline-action"
+                    data-inline-action="<%= actionElement.name %>"
+                    data-action-control-type="<%= actionUi.controlType %>"
+                    data-action-runtime-role="<%= actionUi.runtimeRole %>"
+                    data-action-lookup-role="<%= actionUi.lookupRole %>"
+                    data-preserve-form-position="true"
+                    formaction="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=<%= encodeURIComponent(actionElement.name) %>"
+                    hx-post="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=<%= encodeURIComponent(actionElement.name) %>"
+                    hx-target="#document-form-body-fragment"
+                    hx-swap="outerHTML"
+                    <%= actionUi.isEnabled === false ? "disabled" : "" %>
+                  ><%= actionElement.label ?? actionElement.name %></button>
+                <% }) %>
+              </div>
+            <% } %>
+            <% visibleSlots.forEach((slot) => { %>
               <% const element = slot.element; %>
               <% const currentValueText = documentDetail.formRuntimeReference.fieldValues[element.name] ?? ""; %>
               <% const fieldUi = documentDetail.formRuntimeReference.fieldUi?.[element.name] ?? { controlType: element.controlType, runtimeRole: "derived_readonly", lookupRole: "none", isSubmitRequired: false, isEditable: false, isReadOnly: true, state: "readonly" }; %>
-              <% const actionUi = documentDetail.formRuntimeReference.actionUi?.[element.name]; %>
               <% const emptyValueLabel = fieldUi.emptyValueLabel ?? (element.controlType === "select" ? "Noch keine Auswahl" : "Noch kein Wert"); %>
               <% const optionItems = fieldUi.optionItems ?? (typeof element.properties.options === "string" ? element.properties.options.split(",").map((option) => option.trim()).filter((option) => option.length > 0).map((option) => ({ value: option, label: option })) : []); %>
               <% const multiSelectedValues = currentValueText.split(",").map((entry) => entry.trim()).filter((entry) => entry.length > 0); %>
@@ -183,56 +203,6 @@
                   data-field-state="<%= isFieldEditable ? "editable" : "readonly" %>">
                   <div class="form-runtime-field-head">
                     <label class="field-label"><%= element.label ?? element.name %><% if (fieldUi.isSubmitRequired) { %><span class="field-required" aria-hidden="true">*</span><span class="sr-only"> Pflichtfeld</span><% } %></label>
-                    <div class="form-runtime-field-side">
-                      <% if (element.name === "order_number" && inlineLoadCustomerAction) { %>
-                        <button
-                          type="submit"
-                          class="button-secondary form-runtime-inline-action"
-                          data-inline-action="load_customer"
-                          data-action-control-type="<%= actionUi?.controlType ?? "action" %>"
-                          data-action-runtime-role="<%= actionUi?.runtimeRole ?? "lookup_trigger" %>"
-                          data-action-lookup-role="<%= actionUi?.lookupRole ?? "trigger" %>"
-                          data-preserve-form-position="true"
-                          formaction="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=load_customer"
-                          hx-post="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=load_customer"
-                          hx-target="#document-form-body-fragment"
-                          hx-swap="outerHTML"
-                          <%= documentDetail.formRuntimeReference.actionUi?.load_customer?.isEnabled === false ? "disabled" : "" %>
-                        >Kundendaten laden</button>
-                      <% } %>
-                      <% if (element.name === "order_number" && inlineLoadServiceOrderAction) { %>
-                        <button
-                          type="submit"
-                          class="button-secondary form-runtime-inline-action"
-                          data-inline-action="load_service_order"
-                          data-action-control-type="<%= documentDetail.formRuntimeReference.actionUi?.load_service_order?.controlType ?? "action" %>"
-                          data-action-runtime-role="<%= documentDetail.formRuntimeReference.actionUi?.load_service_order?.runtimeRole ?? "lookup_trigger" %>"
-                          data-action-lookup-role="<%= documentDetail.formRuntimeReference.actionUi?.load_service_order?.lookupRole ?? "trigger" %>"
-                          data-preserve-form-position="true"
-                          formaction="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=load_service_order"
-                          hx-post="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=load_service_order"
-                          hx-target="#document-form-body-fragment"
-                          hx-swap="outerHTML"
-                          <%= documentDetail.formRuntimeReference.actionUi?.load_service_order?.isEnabled === false ? "disabled" : "" %>
-                        >Auftragsdaten laden</button>
-                      <% } %>
-                      <% if (element.name === "material" && inlineSuggestMaterialAction) { %>
-                        <button
-                          type="submit"
-                          class="button-secondary form-runtime-inline-action"
-                          data-inline-action="suggest_material"
-                          data-action-control-type="<%= actionUi?.controlType ?? "lookup" %>"
-                          data-action-runtime-role="<%= actionUi?.runtimeRole ?? "lookup_trigger" %>"
-                          data-action-lookup-role="<%= actionUi?.lookupRole ?? "trigger" %>"
-                          data-preserve-form-position="true"
-                          formaction="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=suggest_material"
-                          hx-post="/documents/<%= documentDetail.document.id %>/form?user=<%= activeUser.key %>&intent=run-action&actionName=suggest_material"
-                          hx-target="#document-form-body-fragment"
-                          hx-swap="outerHTML"
-                          <%= documentDetail.formRuntimeReference.actionUi?.suggest_material?.isEnabled === false ? "disabled" : "" %>
-                        >Materialvorschlag holen</button>
-                      <% } %>
-                    </div>
                   </div>
 
                   <% if (fieldUi.controlType === "html-editor") { %>
@@ -437,19 +407,6 @@
                     <input class="text-input <%= isFieldEditable ? "" : "text-input-readonly" %>" type="text" name="<%= element.name %>" value="<%= currentValueText %>" placeholder="<%= orderNumberPlaceholder %>" <%= isFieldEditable ? "" : "readonly" %> />
                   <% } %>
                 </article>
-              <% } else { %>
-                <% if (!["load_customer", "suggest_material", "load_service_order"].includes(element.name)) { %>
-                  <article
-                    class="field-block form-runtime-readonly-field form-runtime-action-card form-runtime-type-<%= element.controlType %>"
-                    data-action-name="<%= element.name %>"
-                    data-action-state="<%= actionUi?.isEnabled === false ? "disabled" : "enabled" %>">
-                    <div class="form-runtime-field-head">
-                      <label class="field-label"><%= element.label ?? element.name %></label>
-                    </div>
-                    <div class="form-runtime-action-button" aria-disabled="true"><%= element.label ?? element.name %></div>
-                  </article>
-                <% } %>
-              <% } %>
             <% }) %>
           </div>
         <% }) %>

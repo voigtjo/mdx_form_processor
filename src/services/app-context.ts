@@ -1001,6 +1001,7 @@ export const createDocumentDetailViewModel = async (
       documentStatus: document.status,
       baseEditState: editState,
     });
+    let parsedFormForRuntime: FormRuntimeDefinition | undefined;
     let formRuntimeFieldValues = {
       ...mapDocumentDataToFormRuntimeValues(document.templateKey, document.documentDataJson, {
         currentUserId: activeUser.id,
@@ -1009,30 +1010,39 @@ export const createDocumentDetailViewModel = async (
         Object.entries(input?.formRuntimeFieldValues ?? {}).map(([key, value]) => [key, value?.toString() ?? ""]),
       ),
     };
-    if (document.templateKey === "service-report") {
+
+    try {
+      parsedFormForRuntime = parseFormRuntimeSource(document.formTemplateMdxBody);
+    } catch {
+      parsedFormForRuntime = undefined;
+    }
+
+    const bootstrapActions = (parsedFormForRuntime?.actions ?? []).filter((action) => {
+      if (!action.ref || !Array.isArray(action.args) || action.args.length === 0) {
+        return false;
+      }
+
+      return action.args.some((fieldName) => {
+        const control = parsedFormForRuntime?.controls.find((entry) => entry.name === fieldName);
+        return control?.controlType === "select";
+      });
+    });
+
+    for (const action of bootstrapActions) {
       try {
-        const serviceReportLookup = await executePublishedOperationByKey({
-          operationKey: "service-report.erp-orders",
+        const bootstrapResult = await executePublishedOperationByKey({
+          operationKey: action.ref!,
           executionInput: {
-            action: {
-              kind: "action",
-              controlType: "action",
-              name: "load_service_order",
-              label: "Auftragsdaten laden",
-              properties: {},
-              ref: "service-report.erp-orders",
-              args: ["order_number"],
-              bind: ["customer", "customer_order_status", "customer_master_status"],
-            },
+            action,
             fieldValues: formRuntimeFieldValues,
             documentId: document.id,
             userId: activeUser.id,
             templateKey: document.templateKey,
           },
         });
-        formRuntimeFieldValues = serviceReportLookup.fieldValues;
+        formRuntimeFieldValues = bootstrapResult.fieldValues;
       } catch {
-        // The service report form should still render when ERP-SIM is temporarily unavailable.
+        // The form should still render when dependent APIs are temporarily unavailable.
       }
     }
     const formRuntimeFieldUi = buildReferenceFormRuntimeFieldUi({
@@ -1060,7 +1070,7 @@ export const createDocumentDetailViewModel = async (
       }
     }
     const formRuntimeActionUi = buildReferenceFormRuntimeActionUi({
-      templateKey: document.templateKey,
+      ...(parsedFormForRuntime ? { parsedForm: parsedFormForRuntime } : {}),
       canEdit: formRuntimeEditState.isAvailable,
     });
     const linkedProductionBatchReference = await findVisibleProductionBatchReferenceByMaterial({
@@ -1119,10 +1129,14 @@ export const createDocumentDetailViewModel = async (
       submitRequiredFieldNames: getReferenceFormRuntimeSubmitRequiredFieldNames(document.templateKey),
     };
 
-    try {
-      currentFormRuntimeReference.parsedForm = parseFormRuntimeSource(document.formTemplateMdxBody);
-    } catch (error: unknown) {
-      currentFormRuntimeReference.parseError = error instanceof Error ? error.message : "Die neue Formularquelle konnte nicht gelesen werden.";
+    if (parsedFormForRuntime) {
+      currentFormRuntimeReference.parsedForm = parsedFormForRuntime;
+    } else {
+      try {
+        currentFormRuntimeReference.parsedForm = parseFormRuntimeSource(document.formTemplateMdxBody);
+      } catch (error: unknown) {
+        currentFormRuntimeReference.parseError = error instanceof Error ? error.message : "Die neue Formularquelle konnte nicht gelesen werden.";
+      }
     }
 
     formRuntimeReference = currentFormRuntimeReference;

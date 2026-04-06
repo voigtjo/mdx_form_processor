@@ -1,5 +1,5 @@
 import type { User } from "../../types/domain.js";
-import type { FormRuntimeControlType, FormRuntimeFieldControlType } from "./types.js";
+import type { FormRuntimeControlType, FormRuntimeDefinition, FormRuntimeFieldControlType } from "./types.js";
 
 export type ReferenceFormRuntimeFieldRuntimeRole =
   | "lookup_input"
@@ -36,7 +36,6 @@ export type ReferenceFormRuntimeActionSemantic = {
 
 type ReferenceFormRuntimeTemplateConfig = {
   fieldSemantics: Record<string, ReferenceFormRuntimeFieldSemantic>;
-  actionSemantics: Record<string, ReferenceFormRuntimeActionSemantic>;
   hiddenFieldNames: string[];
   buildMasterDataSections?: (fieldValues: Record<string, string>) => ReferenceFormRuntimeMasterDataSection[];
 };
@@ -440,40 +439,9 @@ const genericFormFieldSemantics = {
   },
 } as const satisfies Record<string, ReferenceFormRuntimeFieldSemantic>;
 
-export const referenceFormRuntimeActionSemantics = {
-  load_customer: {
-    controlType: "action",
-    runtimeRole: "lookup_trigger",
-    lookupRole: "trigger",
-    args: ["order_number"],
-    bind: ["customer", "service_location"],
-    hint: "Fuellt Kunde und schlaegt Einsatzort vor.",
-  },
-  suggest_material: {
-    controlType: "lookup",
-    runtimeRole: "lookup_trigger",
-    lookupRole: "trigger",
-    args: ["work_description"],
-    bind: ["material"],
-    hint: "Fuellt Material aus dem Produktvorschlag.",
-  },
-} as const satisfies Record<string, ReferenceFormRuntimeActionSemantic>;
-
-const serviceReportActionSemantics = {
-  load_service_order: {
-    controlType: "action",
-    runtimeRole: "lookup_trigger",
-    lookupRole: "trigger",
-    args: ["order_number"],
-    bind: ["customer", "customer_order_status", "customer_master_status"],
-    hint: "Laedt Auftragsstatus und Kundendaten aus ERP-SIM.",
-  },
-} as const satisfies Record<string, ReferenceFormRuntimeActionSemantic>;
-
 const formRuntimeTemplateConfigs = {
   "customer-order-test": {
     fieldSemantics: customerOrderFieldSemantics,
-    actionSemantics: referenceFormRuntimeActionSemantics,
     hiddenFieldNames: [
       "customer_master_id",
       "customer_master_status",
@@ -542,22 +510,18 @@ const formRuntimeTemplateConfigs = {
   },
   "service-report": {
     fieldSemantics: serviceReportFieldSemantics,
-    actionSemantics: serviceReportActionSemantics,
     hiddenFieldNames: ["service_order_options_json"],
   },
   "qualification-record": {
     fieldSemantics: qualificationFieldSemantics,
-    actionSemantics: {},
     hiddenFieldNames: [],
   },
   "production-batch": {
     fieldSemantics: productionBatchFieldSemantics,
-    actionSemantics: {},
     hiddenFieldNames: [],
   },
   "generic-form": {
     fieldSemantics: genericFormFieldSemantics,
-    actionSemantics: {},
     hiddenFieldNames: [],
   },
 } as const satisfies Record<string, ReferenceFormRuntimeTemplateConfig>;
@@ -756,27 +720,28 @@ export const buildReferenceFormRuntimeFieldUi = (input: {
 };
 
 export const buildReferenceFormRuntimeActionUi = (input: {
-  templateKey: string;
+  parsedForm?: FormRuntimeDefinition;
   canEdit: boolean;
 }): Record<string, ReferenceFormRuntimeActionUi> => {
-  const { templateKey, canEdit } = input;
-  const config = getTemplateConfig(templateKey);
+  const { parsedForm, canEdit } = input;
 
-  if (!config) {
+  if (!parsedForm) {
     return {};
   }
 
   return Object.fromEntries(
-    Object.entries(config.actionSemantics).map(([name, definition]) => [
-      name,
+    parsedForm.actions.map((action) => [
+      action.name,
       {
-        controlType: definition.controlType,
-        runtimeRole: definition.runtimeRole,
-        lookupRole: definition.lookupRole,
-        args: [...definition.args],
-        bind: [...definition.bind],
+        controlType: action.controlType === "lookup" ? "lookup" : "action",
+        runtimeRole: "lookup_trigger",
+        lookupRole: "trigger",
+        args: [...(action.args ?? [])],
+        bind: [...(action.bind ?? [])],
         isEnabled: canEdit,
-        ...(definition.hint ? { hint: definition.hint } : {}),
+        ...(typeof action.properties.hint === "string" && action.properties.hint.trim().length > 0
+          ? { hint: action.properties.hint.trim() }
+          : {}),
       },
     ]),
   );
