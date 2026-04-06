@@ -809,16 +809,6 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       sourceText = setTemplateSourceFrontmatterValue(sourceText, "workflow_version", String(selectedWorkflow.version));
     }
 
-    const selectedOperationKeys = apiBindingEntries
-      .map(([, value]) => value.trim())
-      .filter((value) => value.length > 0);
-
-    sourceText = setTemplateSourceFrontmatterValue(
-      sourceText,
-      "api_refs",
-      Array.from(new Set(selectedOperationKeys)).join(", "),
-    );
-
     try {
       const result = intent === "publish"
         ? await publishReferenceTemplateVersion({

@@ -56,18 +56,19 @@
       ><%= apiDetail.editor.handlerTsSource %></textarea>
     </article>
 
-    <article class="subpanel">
+    <article class="subpanel api-schema-panel">
       <div class="panel-header">
-        <h4>Request / Response</h4>
+        <h4>Optionale Schema-Metadaten</h4>
       </div>
+      <p class="field-help">Nur zur Dokumentation des API-Vertrags. Die Runtime fuehrt den Handler Source aus.</p>
       <div class="grid two-up">
         <div class="field-block">
           <label class="field-label" for="api-request-schema">Request Schema JSON</label>
-          <textarea id="api-request-schema" name="requestSchemaText" rows="12" class="form-runtime-source-editor" data-code-editor="json"><%= apiDetail.editor.requestSchemaText %></textarea>
+          <textarea id="api-request-schema" name="requestSchemaText" rows="8" class="form-runtime-source-editor api-schema-editor" data-code-editor="json" placeholder="Optional, z. B. {&quot;fields&quot;:[...] }"><%= apiDetail.editor.requestSchemaText %></textarea>
         </div>
         <div class="field-block">
           <label class="field-label" for="api-response-schema">Response Schema JSON</label>
-          <textarea id="api-response-schema" name="responseSchemaText" rows="12" class="form-runtime-source-editor" data-code-editor="json"><%= apiDetail.editor.responseSchemaText %></textarea>
+          <textarea id="api-response-schema" name="responseSchemaText" rows="8" class="form-runtime-source-editor api-schema-editor" data-code-editor="json" placeholder="Optional, z. B. {&quot;fields&quot;:[...] }"><%= apiDetail.editor.responseSchemaText %></textarea>
         </div>
       </div>
     </article>

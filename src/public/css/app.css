@@ -166,6 +166,15 @@ a {
   padding: 12px 16px;
 }
 
+.api-schema-panel {
+  opacity: 0.96;
+}
+
+.api-schema-editor + .code-editor-host .cm-editor,
+.api-schema-editor + .code-editor-host {
+  min-height: 12rem;
+}
+
 .workflow-detail-hero {
   flex-direction: row;
   align-items: center;

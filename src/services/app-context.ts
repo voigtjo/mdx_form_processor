@@ -587,6 +587,10 @@ const buildOperationEditorState = (input?: {
 }) => {
   const operation = input?.operation;
   const values = input?.values;
+  const formatOptionalSchemaText = (schema: Record<string, unknown> | undefined): string => {
+    const sanitized = sanitizeOperationSchemaJson(schema);
+    return Object.keys(sanitized).length > 0 ? JSON.stringify(sanitized, null, 2) : "";
+  };
 
   return {
     key: values?.key ?? operation?.key ?? "",
@@ -594,8 +598,8 @@ const buildOperationEditorState = (input?: {
     description: values?.description ?? operation?.description ?? "",
     connector: values?.connector ?? operation?.connector ?? "typescript",
     authMode: values?.authMode ?? operation?.authMode ?? "none",
-    requestSchemaText: values?.requestSchemaText ?? JSON.stringify(sanitizeOperationSchemaJson(operation?.requestSchemaJson), null, 2),
-    responseSchemaText: values?.responseSchemaText ?? JSON.stringify(sanitizeOperationSchemaJson(operation?.responseSchemaJson), null, 2),
+    requestSchemaText: values?.requestSchemaText ?? formatOptionalSchemaText(operation?.requestSchemaJson),
+    responseSchemaText: values?.responseSchemaText ?? formatOptionalSchemaText(operation?.responseSchemaJson),
     handlerTsSource: values?.handlerTsSource ?? operation?.handlerTsSource ?? "export default defineApi(async ({ info }) => {\n  return info(\"API ausgefuehrt\", \"Noch keine Logik hinterlegt.\");\n});\n",
     tagsText: values?.tagsText ?? (operation?.tags ?? []).join(", "),
   };
