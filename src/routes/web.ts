@@ -76,6 +76,7 @@ import {
   unpublishWorkflowVersion,
 } from "../modules/workflows/lifecycle.js";
 import { buildWorkflowSourceTextFromTableInput, saveWorkflowDraftSource } from "../modules/workflows/source.js";
+import { findWorkflowTemplateById } from "../modules/workflows/read.js";
 
 type UserQuery = {
   user?: string;
@@ -696,7 +697,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/templates", async (request, reply) => {
-    return renderPage(request, reply, "templates", "templates", "Templates");
+    return renderPage(request, reply, "templates", "templates", "Formulare");
   });
 
   app.get("/templates/new", async (request, reply) => {
@@ -801,6 +802,22 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         request.body?.journalEnabled ? "true" : "false",
       );
     }
+
+    const selectedWorkflow = workflowTemplateId ? await findWorkflowTemplateById(workflowTemplateId) : null;
+    if (selectedWorkflow) {
+      sourceText = setTemplateSourceFrontmatterValue(sourceText, "workflow_key", selectedWorkflow.key);
+      sourceText = setTemplateSourceFrontmatterValue(sourceText, "workflow_version", String(selectedWorkflow.version));
+    }
+
+    const selectedOperationKeys = apiBindingEntries
+      .map(([, value]) => value.trim())
+      .filter((value) => value.length > 0);
+
+    sourceText = setTemplateSourceFrontmatterValue(
+      sourceText,
+      "api_refs",
+      Array.from(new Set(selectedOperationKeys)).join(", "),
+    );
 
     try {
       const result = intent === "publish"

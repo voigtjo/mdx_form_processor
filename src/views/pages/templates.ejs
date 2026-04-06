@@ -1,21 +1,21 @@
 <section class="hero-card">
   <div>
-    <h2>Templates</h2>
+    <h2>Formulare</h2>
     <p>Formulare fuer Serviceeinsaetze, Produktion, Nachweise und generische Freigaben.</p>
   </div>
   <div class="hero-actions">
-    <a class="button-primary" href="/templates/new?user=<%= activeUser.key %>">Neues Template</a>
+    <a class="button-primary" href="/templates/new?user=<%= activeUser.key %>">Neues Formular</a>
   </div>
 </section>
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Template-Liste</h3>
+    <h3>Formularliste</h3>
   </div>
   <% if (catalog.templates.length === 0) { %>
     <div class="empty-state">
-      <strong>Keine Templates sichtbar.</strong>
-      <p>Im aktuellen Konfigurationskontext gibt es keine sichtbaren Form Templates.</p>
+      <strong>Keine Formulare sichtbar.</strong>
+      <p>Im aktuellen Konfigurationskontext gibt es keine sichtbaren Formulare.</p>
     </div>
   <% } else { %>
     <div class="table-wrap">
@@ -32,10 +32,10 @@
           </tr>
         </thead>
         <tbody>
-          <% catalog.templates.forEach((template) => { %>
-            <% const workflow = catalog.workflows.find((item) => item.id === template.workflowTemplateId); %>
-            <% const groupNames = catalog.groups.filter((group) => template.groupIds.includes(group.id)).map((group) => group.name); %>
-            <% const documentCount = catalog.documents.filter((document) => document.templateId === template.id).length; %>
+            <% catalog.templates.forEach((template) => { %>
+              <% const workflow = catalog.workflows.find((item) => item.id === template.workflowTemplateId); %>
+              <% const groupNames = catalog.groups.filter((group) => template.groupIds.includes(group.id)).map((group) => group.name); %>
+              <% const documentCount = catalog.documents.filter((document) => document.templateId === template.id).length; %>
             <tr>
               <td>
                 <strong><a class="text-link" href="/templates/<%= template.id %>?user=<%= activeUser.key %>"><%= template.name %></a></strong>

@@ -6,114 +6,33 @@
   <% const nextDraftVersion = currentDraftVersion ? currentDraftVersion.version : highestKnownVersion + 1; %>
   <% const publishTargetVersion = templateDetail.template.status === "draft" ? templateDetail.template.version : nextDraftVersion; %>
   <% const viewedVersion = templateDetail.template.version; %>
-  <details class="panel panel-collapsible page-header-collapsible">
-    <summary class="collapsible-summary">
-      <div class="collapsible-summary-copy">
-        <strong><%= templateDetail.template.name %></strong>
-        <span><%= templateDetail.template.name %> v<%= templateDetail.template.version %> · <%= templateDetail.template.formType %> · <%= lifecycleLabel %></span>
-      </div>
-      <div class="collapsible-summary-meta">
-        <span>Template</span>
-        <span>v<%= viewedVersion %></span>
-      </div>
-    </summary>
-    <div class="collapsible-body">
-      <span class="eyebrow">Template</span>
-      <h2><%= templateDetail.template.name %></h2>
-      <p class="hero-inline-meta"><strong>Formular:</strong> v<%= templateDetail.template.version %> · <strong>Typ:</strong> <%= templateDetail.template.formType %> · <strong>Workflow:</strong> <%= templateDetail.workflow?.name ?? "Nicht zugeordnet" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %></p>
-      <p class="hero-inline-meta"><strong>Status:</strong> <%= lifecycleLabel %> · <strong>Key:</strong> <%= templateDetail.template.key %> · <strong>Updated:</strong> <%= templateDetail.template.updatedAt %></p>
-      <p class="hero-inline-meta"><strong>Draft:</strong> <%= currentDraftVersion ? `v${currentDraftVersion.version}` : `naechster Draft v${nextDraftVersion}` %> · <strong>Published:</strong> <%= currentPublishedVersion ? `v${currentPublishedVersion.version}` : "keine" %></p>
-      <div class="hero-actions">
-        <a class="button-secondary" href="/templates?user=<%= activeUser.key %>">Back to Templates</a>
-      </div>
+  <section class="hero-card hero-card-compact template-detail-hero">
+    <div>
+      <strong><%= templateDetail.template.name %></strong>
+      <p class="hero-inline-meta"><%= templateDetail.template.key %> · v<%= viewedVersion %> · <%= templateDetail.template.formType %> · <%= lifecycleLabel %></p>
+      <% if (templateDetail.template.description) { %>
+        <p class="hero-copy compact"><%= templateDetail.template.description %></p>
+      <% } %>
     </div>
-  </details>
-
-  <details class="panel panel-collapsible">
-    <summary class="collapsible-summary">
-      <div class="collapsible-summary-copy">
-        <strong>Context</strong>
-        <span><%= templateDetail.workflow?.name ?? "Kein Workflow" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %> · <%= templateDetail.assignmentsWithGroups.length %> Groups · <%= templateDetail.relatedDocuments.length %> Documents</span>
-      </div>
-      <div class="collapsible-summary-meta">
-        <span><%= templateDetail.versions.length %> Versionen</span>
-      </div>
-    </summary>
-    <div class="collapsible-body">
-      <div class="grid two-up detail-grid">
-        <div>
-          <p><strong>Workflow</strong><br /><%= templateDetail.workflow?.name ?? "Nicht zugeordnet" %><% if (templateDetail.workflow) { %> v<%= templateDetail.workflow.version %><% } %></p>
-          <p><strong>Form Type</strong><br /><%= templateDetail.template.formType %></p>
-          <p><strong>Groups</strong><br /><%= templateDetail.assignmentsWithGroups.length > 0 ? templateDetail.assignmentsWithGroups.map(({ group, assignment }) => group?.name ?? assignment.groupId).join(", ") : "keine" %></p>
-          <p><strong>Beschreibung</strong><br /><%= templateDetail.template.description ?? "Keine Beschreibung hinterlegt." %></p>
-        </div>
-        <div>
-          <h4>Versions</h4>
-          <ul class="stack-list compact">
-            <% templateDetail.versions.forEach((version) => { %>
-              <% const versionLifecycleLabel = version.status === "inactive" ? "unpublished" : version.status; %>
-              <li class="action-row">
-                <div>
-                  <strong>v<%= version.version %></strong>
-                  <p><%= versionLifecycleLabel %></p>
-                </div>
-                <% if (version.id === templateDetail.template.id) { %>
-                  <span class="chip">Current</span>
-                <% } else { %>
-                  <a class="text-link action-link" href="/templates/<%= version.id %>?user=<%= activeUser.key %>">Open</a>
-                <% } %>
-              </li>
-            <% }) %>
-          </ul>
-        </div>
-      </div>
+    <div class="hero-actions">
+      <a class="button-secondary" href="/templates?user=<%= activeUser.key %>">Zur Formularliste</a>
     </div>
-  </details>
+  </section>
 
   <section class="panel">
     <div class="panel-header">
-      <h3>Template Source</h3>
+      <h3>Formular</h3>
       <span><%= lifecycleLabel %> · v<%= templateDetail.template.version %></span>
     </div>
 
     <form method="post" action="/templates/<%= templateDetail.template.id %>/source?user=<%= activeUser.key %>" class="stack-list">
       <article class="subpanel">
         <div class="panel-header">
-          <h4>Lifecycle</h4>
-        </div>
-        <div class="template-lifecycle-actions">
-          <button class="button-secondary" type="submit" name="intent" value="save_draft">
-            Save Draft v<%= nextDraftVersion %>
-          </button>
-          <button class="button-primary" type="submit" name="intent" value="publish" <%= templateDetail.canPublishVersion ? "" : "disabled" %>>
-            Publish v<%= publishTargetVersion %>
-          </button>
-          <button
-            class="button-secondary"
-            type="submit"
-            name="intent"
-            value="unpublish"
-            <%= templateDetail.template.status === "published" ? "" : "disabled" %>>
-            Unpublish v<%= viewedVersion %>
-          </button>
-          <button
-            class="button-secondary"
-            type="submit"
-            name="intent"
-            value="archive"
-            <%= templateDetail.template.status === "inactive" ? "" : "disabled" %>>
-            Archive v<%= viewedVersion %>
-          </button>
-        </div>
-      </article>
-
-      <article class="subpanel">
-        <div class="panel-header">
-          <h4>Template-Konfiguration</h4>
+          <h4>MDX-Header</h4>
         </div>
         <div class="grid two-up detail-grid">
           <div class="field-block">
-            <label class="field-label" for="template-workflow-version">Workflow-Version</label>
+            <label class="field-label" for="template-workflow-version">Workflow-Zuordnung</label>
             <select
               id="template-workflow-version"
               name="workflowTemplateId"
@@ -124,6 +43,10 @@
                 </option>
               <% }) %>
             </select>
+            <p class="field-help">
+              Aktuell: <strong><%= templateDetail.workflow?.key ?? "kein Workflow" %></strong>
+              <% if (templateDetail.workflow) { %> · v<%= templateDetail.workflow.version %><% } %>
+            </p>
             <% if (templateDetail.workflowPublishBlockedReason) { %>
               <p class="field-help"><%= templateDetail.workflowPublishBlockedReason %></p>
             <% } %>
@@ -151,20 +74,8 @@
             </label>
           </div>
         </div>
-      </article>
 
-      <article class="subpanel">
-        <div class="panel-header">
-          <h4>Source</h4>
-        </div>
-        <textarea name="source" rows="22" class="form-runtime-source-editor"><%= templateDetail.formRuntimeReference.sourceText %></textarea>
-      </article>
-
-      <% if (templateDetail.formRuntimeReference.apiBindings && templateDetail.formRuntimeReference.apiBindings.length > 0) { %>
-        <article class="subpanel">
-          <div class="panel-header">
-            <h4>API-Funktionen</h4>
-          </div>
+        <% if (templateDetail.formRuntimeReference.apiBindings && templateDetail.formRuntimeReference.apiBindings.length > 0) { %>
           <div class="stack-list compact">
             <% templateDetail.formRuntimeReference.apiBindings.forEach((binding) => { %>
               <div class="field-block">
@@ -173,25 +84,58 @@
                   id="api-binding-<%= binding.actionName %>"
                   name="apiBinding.<%= binding.actionName %>"
                   class="text-input">
-                  <option value="">Keine Operation zugeordnet</option>
+                  <option value="">Keine API zugeordnet</option>
                   <% templateDetail.availableOperations.forEach((operation) => { %>
                     <option value="<%= operation.key %>" <%= operation.key === binding.operationRef ? "selected" : "" %>>
                       <%= operation.key %> · <%= operation.title %> · <%= operation.status %>
                     </option>
                   <% }) %>
                 </select>
-                <p class="field-help">
-                  Aktion: <strong><%= binding.actionName %></strong>
-                  <% if (binding.args && binding.args.length > 0) { %> · Request: <%= binding.args.join(", ") %><% } %>
-                  <% if (binding.bind && binding.bind.length > 0) { %> · Response bindet: <%= binding.bind.join(", ") %><% } %>
-                  <% if (binding.operationTitle) { %> · Aktuell: <%= binding.operationTitle %><% } %>
-                  <% if (binding.operationStatus) { %> · <%= binding.operationStatus %><% } %>
-                </p>
+                <div class="compact-meta-block">
+                  <p><strong>Formularaktion:</strong> <%= binding.actionName %></p>
+                  <p><strong>API-Key:</strong> <%= binding.operationRef ?? "noch nicht gesetzt" %></p>
+                  <p><strong>API Request:</strong> <%= binding.args && binding.args.length > 0 ? binding.args.join(", ") : "keine Eingabefelder" %></p>
+                  <p><strong>API Response:</strong> <%= binding.bind && binding.bind.length > 0 ? binding.bind.join(", ") : "keine Rueckfelder" %></p>
+                </div>
               </div>
             <% }) %>
           </div>
-        </article>
-      <% } %>
+        <% } %>
+      </article>
+
+      <article class="subpanel">
+        <div class="panel-header">
+          <h4>MDX</h4>
+        </div>
+        <textarea name="source" rows="22" class="form-runtime-source-editor" data-code-editor="typescript"><%= templateDetail.formRuntimeReference.sourceText %></textarea>
+      </article>
+
+      <article class="subpanel">
+        <div class="template-lifecycle-actions">
+          <button class="button-secondary" type="submit" name="intent" value="save_draft">
+            Save Draft v<%= nextDraftVersion %>
+          </button>
+          <button class="button-primary" type="submit" name="intent" value="publish" <%= templateDetail.canPublishVersion ? "" : "disabled" %>>
+            Publish v<%= publishTargetVersion %>
+          </button>
+          <button
+            class="button-secondary"
+            type="submit"
+            name="intent"
+            value="unpublish"
+            <%= templateDetail.template.status === "published" ? "" : "disabled" %>>
+            Unpublish v<%= viewedVersion %>
+          </button>
+          <button
+            class="button-secondary"
+            type="submit"
+            name="intent"
+            value="archive"
+            <%= templateDetail.template.status === "inactive" ? "" : "disabled" %>>
+            Archive v<%= viewedVersion %>
+          </button>
+        </div>
+      </article>
     </form>
 
     <% if (templateDetail.formRuntimeReference.parseError) { %>

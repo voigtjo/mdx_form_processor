@@ -23,7 +23,6 @@
         <thead>
           <tr>
             <th>Workflow</th>
-            <th>Initial</th>
             <th>Main Flow</th>
             <th>Status</th>
             <th>Version</th>
@@ -35,7 +34,6 @@
           <% catalog.workflows.forEach((workflow) => { %>
             <% const relatedTemplates = catalog.templates.filter((template) => template.workflowTemplateId === workflow.id); %>
             <% const relatedDocuments = catalog.documents.filter((document) => relatedTemplates.some((template) => template.id === document.templateId)); %>
-            <% const mainAction = workflow.actions[0]; %>
             <tr>
               <td>
                 <strong><a class="text-link" href="/workflows/<%= workflow.id %>?user=<%= activeUser.key %>"><%= workflow.name %></a></strong>
@@ -44,12 +42,8 @@
                   <p class="table-meta"><%= workflow.description %></p>
                 <% } %>
               </td>
-              <td><%= workflow.initialStatus %></td>
               <td>
                 <strong><%= workflow.statuses.join(" → ") %></strong>
-                <% if (mainAction) { %>
-                  <p class="table-meta"><%= mainAction.name %>: <%= mainAction.from.join(", ") %> → <%= mainAction.to %></p>
-                <% } %>
               </td>
               <td><span class="status-pill status-<%= workflow.status %>"><%= workflow.status %></span></td>
               <td>v<%= workflow.version %></td>

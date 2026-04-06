@@ -1,16 +1,16 @@
 <section class="hero-card">
   <div>
-    <span class="eyebrow">Template Edit</span>
-    <h2>New Template</h2>
+    <span class="eyebrow">Formulare</span>
+    <h2>Neues Formular</h2>
   </div>
   <div class="hero-actions">
-    <a class="button-secondary" href="/templates?user=<%= activeUser.key %>">Back to Templates</a>
+    <a class="button-secondary" href="/templates?user=<%= activeUser.key %>">Zur Formularliste</a>
   </div>
 </section>
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Create Draft</h3>
+    <h3>Entwurf anlegen</h3>
   </div>
   <form method="post" action="/templates/new?user=<%= activeUser.key %>" class="form-stack">
     <div class="field-block">
@@ -34,13 +34,13 @@
       </select>
     </div>
     <div class="field-block">
-      <label class="field-label" for="template-workflow">Workflow Template</label>
+      <label class="field-label" for="template-workflow">Workflow-Zuordnung</label>
       <select id="template-workflow" name="workflowTemplateId" required>
         <% availableWorkflows.forEach((workflow) => { %>
           <option value="<%= workflow.id %>"><%= workflow.name %> (<%= workflow.key %>)</option>
         <% }) %>
       </select>
     </div>
-    <button class="button-primary" type="submit">Create Draft</button>
+    <button class="button-primary" type="submit">Entwurf anlegen</button>
   </form>
 </section>

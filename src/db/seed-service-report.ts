@@ -194,7 +194,7 @@ const memberships = [
 
 const workflowTemplate = {
   id: "81111111-1111-1111-1111-111111111111",
-  key: "service-report.review.v1",
+  key: "service-report.review",
   name: "Service-Report Freigabe",
   description: "Einfacher Dokumentworkflow fuer Service-Reports mit einer Approver-Stufe.",
   version: 1,
