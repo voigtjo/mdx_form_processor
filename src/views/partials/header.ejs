@@ -2,11 +2,11 @@
   <div class="brand-block">
     <span class="eyebrow">Handwerker App</span>
     <h1><%= appName %></h1>
-    <p>Serviceeinsaetze, Produktion und Nachweise</p>
+    <p><%= t("app.tagline") %></p>
   </div>
 
   <form class="user-select" method="get" action="">
-    <label for="user-switcher">Aktiver User</label>
+    <label for="user-switcher"><%= t("header.activeUser") %></label>
     <select id="user-switcher" name="user" data-user-switcher onchange="this.form.requestSubmit()">
       <% users.forEach((user) => { %>
         <option value="<%= user.key %>" <%= user.key === activeUser.key ? "selected" : "" %>>

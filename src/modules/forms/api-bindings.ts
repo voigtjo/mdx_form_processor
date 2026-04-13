@@ -1,4 +1,4 @@
-import type { FormRuntimeDefinition } from "./types.js";
+import type { FormRuntimeApiDefinition, FormRuntimeDefinition } from "./types.js";
 import { parseFormRuntimeSource } from "./read.js";
 
 export type FormRuntimeApiBinding = {
@@ -23,6 +23,26 @@ export const listFormRuntimeApiBindings = (parsedForm: FormRuntimeDefinition): F
     ...(action.args ? { args: action.args } : {}),
     ...(action.bind ? { bind: action.bind } : {}),
   }));
+};
+
+export const listFormRuntimeApiDefinitions = (parsedForm: FormRuntimeDefinition): FormRuntimeApiDefinition[] => {
+  const definitions: FormRuntimeApiDefinition[] = [];
+  const seenRefs = new Set<string>();
+
+  for (const action of parsedForm.actions) {
+    if (!action.ref || seenRefs.has(action.ref)) {
+      continue;
+    }
+
+    seenRefs.add(action.ref);
+    definitions.push({
+      ref: action.ref,
+      ...(action.args && action.args.length > 0 ? { request: action.args } : {}),
+      ...(action.bind && action.bind.length > 0 ? { response: action.bind } : {}),
+    });
+  }
+
+  return definitions;
 };
 
 const splitPropertyList = (source: string): string[] => {
@@ -137,6 +157,43 @@ export const applyFormRuntimeApiBindings = (input: {
     });
 
     nextSource = replaceFirstExact(nextSource, action.sourceText, nextSlotSource);
+  }
+
+  return nextSource;
+};
+
+export const normalizeFormRuntimeApiActionCalls = (input: {
+  sourceText: string;
+  parsedForm?: FormRuntimeDefinition;
+}): string => {
+  const parsedForm = input.parsedForm ?? (() => {
+    try {
+      return parseFormRuntimeSource(input.sourceText);
+    } catch {
+      return null;
+    }
+  })();
+
+  if (!parsedForm) {
+    return input.sourceText;
+  }
+
+  let nextSource = input.sourceText;
+
+  for (const action of parsedForm.actions) {
+    if (!action.sourceText || !action.ref) {
+      continue;
+    }
+
+    const propertyKeys = Object.keys(action.properties);
+    const onlyApiBindingProperties = propertyKeys.every((key) => ["ref", "args", "bind", "request", "response"].includes(key));
+
+    if (!onlyApiBindingProperties) {
+      continue;
+    }
+
+    const normalizedSlotSource = `${action.label ?? action.name}: ${action.controlType}("${action.ref}")`;
+    nextSource = replaceFirstExact(nextSource, action.sourceText, normalizedSlotSource);
   }
 
   return nextSource;

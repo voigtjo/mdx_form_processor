@@ -4,7 +4,7 @@
     <h2>Neues Formular</h2>
   </div>
   <div class="hero-actions">
-    <a class="button-secondary" href="/templates?user=<%= activeUser.key %>">Zur Formularliste</a>
+    <a class="button-secondary" href="<%= hrefWithContext('/templates') %>">Zur Formularliste</a>
   </div>
 </section>
 
@@ -12,7 +12,7 @@
   <div class="panel-header">
     <h3>Entwurf anlegen</h3>
   </div>
-  <form method="post" action="/templates/new?user=<%= activeUser.key %>" class="form-stack">
+  <form method="post" action="<%= hrefWithContext('/templates/new') %>" class="form-stack">
     <div class="field-block">
       <label class="field-label" for="template-name">Name</label>
       <input id="template-name" name="name" type="text" required />

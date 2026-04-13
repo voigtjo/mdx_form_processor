@@ -1,19 +1,37 @@
 let pendingFormPositionRestore = null;
 const attachmentDraftStoragePrefix = "attachment-document-draft:";
 
-const navigateToUserContext = (target) => {
-  if (!(target instanceof HTMLSelectElement) || !target.matches("[data-user-switcher]")) {
+const navigateToContext = (target) => {
+  if (!(target instanceof HTMLSelectElement) || !target.matches("[data-context-switcher]")) {
     return;
   }
 
-  const targetUser = target.value.trim();
+  const queryParam = target.dataset.contextParam?.trim();
 
-  if (targetUser.length === 0) {
+  if (!queryParam) {
     return;
   }
 
   const currentUrl = new URL(window.location.href);
-  currentUrl.searchParams.set("user", targetUser);
+
+  if (queryParam === "user") {
+    const targetUser = target.value.trim();
+
+    if (!targetUser) {
+      return;
+    }
+
+    currentUrl.searchParams.set("user", targetUser);
+  } else if (queryParam === "group") {
+    const targetGroup = target.value.trim();
+
+    if (targetGroup && targetGroup !== "__all__") {
+      currentUrl.searchParams.set("group", targetGroup);
+    } else {
+      currentUrl.searchParams.set("group", "__all__");
+    }
+  }
+
   window.location.assign(currentUrl.toString());
 };
 
@@ -737,12 +755,92 @@ const initializeCodeEditors = (root = document) => {
   }
 };
 
+const getCurrentFormFieldValue = (form, fieldName) => {
+  if (!(form instanceof HTMLFormElement) || typeof fieldName !== "string" || fieldName.trim().length === 0) {
+    return "";
+  }
+
+  const controls = Array.from(form.querySelectorAll(`[name="${CSS.escape(fieldName)}"]`))
+    .filter((control) => control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement);
+
+  if (controls.length === 0) {
+    return "";
+  }
+
+  const radioControls = controls.filter((control) => control instanceof HTMLInputElement && control.type === "radio");
+
+  if (radioControls.length > 0) {
+    const checked = radioControls.find((control) => control instanceof HTMLInputElement && control.checked);
+    return checked instanceof HTMLInputElement ? checked.value.trim() : "";
+  }
+
+  const checkboxControls = controls.filter((control) => control instanceof HTMLInputElement && control.type === "checkbox");
+
+  if (checkboxControls.length > 0) {
+    return checkboxControls
+      .filter((control) => control instanceof HTMLInputElement && control.checked)
+      .map((control) => control.value.trim())
+      .filter((value) => value.length > 0)
+      .join(",");
+  }
+
+  const firstControl = controls[0];
+  return "value" in firstControl && typeof firstControl.value === "string" ? firstControl.value.trim() : "";
+};
+
+const updateWorkflowActionButtons = (root = document) => {
+  if (!(root instanceof Document || root instanceof HTMLElement)) {
+    return;
+  }
+
+  const documentForm = document.querySelector('[data-document-form="true"]');
+
+  if (!(documentForm instanceof HTMLFormElement)) {
+    return;
+  }
+
+  root.querySelectorAll("[data-workflow-action]").forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    const requiredFields = (button.dataset.requiredFields ?? "")
+      .split(",")
+      .map((fieldName) => fieldName.trim())
+      .filter((fieldName) => fieldName.length > 0);
+    const missingFields = requiredFields.filter((fieldName) => getCurrentFormFieldValue(documentForm, fieldName).length === 0);
+    const requiresEditors = button.dataset.requiresEditors === "true";
+    const selectedEditors = Array.from(documentForm.querySelectorAll('input[name="editorUserIds"]'))
+      .filter((input) => input instanceof HTMLInputElement && input.checked).length;
+
+    let disabledReason = "";
+
+    if (missingFields.length > 0) {
+      disabledReason = `Pflichtfelder fehlen: ${missingFields.join(", ")}`;
+    } else if (requiresEditors && selectedEditors === 0) {
+      disabledReason = "Bitte mindestens einen Editor fuer die Zuweisung auswaehlen.";
+    }
+
+    button.disabled = disabledReason.length > 0;
+    button.title = disabledReason;
+
+    const hint = document.querySelector(`[data-workflow-action-hint="${button.dataset.workflowAction}"]`);
+
+    if (hint instanceof HTMLElement) {
+      hint.textContent = disabledReason;
+      hint.hidden = disabledReason.length === 0;
+    }
+  });
+};
+
 document.addEventListener("change", (event) => {
-  navigateToUserContext(event.target);
+  navigateToContext(event.target);
+  updateWorkflowActionButtons(document);
 });
 
 document.addEventListener("input", (event) => {
-  navigateToUserContext(event.target);
+  navigateToContext(event.target);
+  updateWorkflowActionButtons(document);
 });
 
 const closeDialogButton = document.querySelector("[data-dialog-close]");
@@ -781,6 +879,10 @@ if (appDialog instanceof HTMLElement) {
 
 document.addEventListener("click", (event) => {
   const preserveTrigger = event.target instanceof Element ? event.target.closest("[data-preserve-form-position]") : null;
+
+  if (event.target instanceof Element && event.target.closest('input[name="editorUserIds"], label.checkbox-item')) {
+    window.setTimeout(() => updateWorkflowActionButtons(document), 0);
+  }
 
   if (preserveTrigger instanceof HTMLElement) {
     pendingFormPositionRestore = getFormPositionAnchor(preserveTrigger);
@@ -869,6 +971,7 @@ document.addEventListener("htmx:afterSwap", (event) => {
     initializeGridControls(target);
     initializeCheckboxGroupControls(target);
     initializeWorkflowStatusEditors(target);
+    updateWorkflowActionButtons(document);
   }
 
   if (
@@ -897,3 +1000,4 @@ initializeGridControls(document);
 initializeCheckboxGroupControls(document);
 initializeWorkflowStatusEditors(document);
 restoreDocumentDraftAfterAttachmentUpload();
+updateWorkflowActionButtons(document);

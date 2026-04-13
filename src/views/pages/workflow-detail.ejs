@@ -3,6 +3,7 @@
   { actionName: "", from: [], to: "", roles: [], rolesLabel: "", modeLabel: "OR", apiLabel: "", conditionLabel: "" },
   { actionName: "", from: [], to: "", roles: [], rolesLabel: "", modeLabel: "OR", apiLabel: "", conditionLabel: "" },
 ]); %>
+<% const isEditable = workflowDetail.isEditable; %>
 
 <section class="hero-card hero-card-compact workflow-detail-hero">
   <div>
@@ -13,7 +14,7 @@
     <% } %>
   </div>
   <div class="hero-actions">
-    <a class="button-secondary" href="/workflows?user=<%= activeUser.key %>">Back to Workflows</a>
+    <a class="button-secondary" href="<%= hrefWithContext('/workflows') %>">Back to Workflows</a>
   </div>
 </section>
 
@@ -31,14 +32,54 @@
     </div>
   </div>
 
-  <form method="post" action="/workflows/<%= workflowDetail.workflow.id %>/source?user=<%= activeUser.key %>" class="stack-list">
+  <article class="subpanel">
+    <div class="panel-header">
+      <h4>Versionen</h4>
+      <div class="panel-header-actions">
+        <% if (workflowDetail.canStartEdit) { %>
+          <form method="post" action="<%= hrefWithContext(`/workflows/${workflowDetail.workflow.id}/edit`, { version: workflowDetail.selectedVersionId }) %>" class="inline-form compact">
+            <button class="button-primary" type="submit"><%= workflowDetail.isEditMode ? "Entwurf bearbeiten" : "Bearbeiten" %></button>
+          </form>
+        <% } %>
+      </div>
+    </div>
+    <div class="compact-meta-block">
+      <p><strong>Aktuelle Ansicht:</strong> v<%= workflowDetail.workflow.version %> · <%= workflowDetail.lifecycleLabel %> <% if (workflowDetail.isEditMode) { %>· Edit-Modus<% } %></p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Status</th>
+            <th>Ansicht</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% workflowDetail.versions.forEach((version) => { %>
+            <% const isCurrentVersion = version.id === workflowDetail.selectedVersionId; %>
+            <% const versionLifecycleLabel = version.status === "inactive" ? "unpublished" : version.status; %>
+            <tr>
+              <td><strong>v<%= version.version %></strong></td>
+              <td><span class="status-pill status-<%= version.status %>"><%= versionLifecycleLabel %></span></td>
+              <td><%= isCurrentVersion ? "Aktuell" : "Readonly" %></td>
+              <td><a class="text-link" href="<%= hrefWithContext(`/workflows/${version.id}`, { version: version.id }) %>">Anzeigen</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <form method="post" action="<%= hrefWithContext(`/workflows/${workflowDetail.workflow.id}/source`) %>" class="stack-list">
     <textarea class="sr-only" name="source"><%= workflowDetail.workflowSourceText %></textarea>
     <article class="subpanel">
       <div class="template-lifecycle-actions">
-        <button class="button-secondary" type="submit" name="intent" value="save_draft">
+        <button class="button-secondary" type="submit" name="intent" value="save_draft" <%= isEditable ? "" : "disabled" %>>
           Save Draft v<%= workflowDetail.nextDraftVersion %>
         </button>
-        <button class="button-primary" type="submit" name="intent" value="publish" <%= workflowDetail.canPublishVersion ? "" : "disabled" %>>
+        <button class="button-primary" type="submit" name="intent" value="publish" <%= isEditable && workflowDetail.canPublishVersion ? "" : "disabled" %>>
           Publish v<%= workflowDetail.publishTargetVersion %>
         </button>
         <button
@@ -46,7 +87,7 @@
           type="submit"
           name="intent"
           value="unpublish"
-          <%= workflowDetail.canUnpublish ? "" : "disabled" %>>
+          <%= isEditable && workflowDetail.canUnpublish ? "" : "disabled" %>>
           Unpublish v<%= viewedVersion %>
         </button>
         <button
@@ -54,7 +95,7 @@
           type="submit"
           name="intent"
           value="archive"
-          <%= workflowDetail.canArchive ? "" : "disabled" %>>
+          <%= isEditable && workflowDetail.canArchive ? "" : "disabled" %>>
           Archive v<%= viewedVersion %>
         </button>
       </div>
@@ -76,11 +117,11 @@
             <div class="stack-list compact" data-workflow-status-list>
               <% workflowDetail.statusEditorRows.forEach((statusValue, index) => { %>
                 <div class="action-row" data-workflow-status-row>
-                  <input class="text-input" type="text" name="statusValue__<%= index %>" value="<%= statusValue %>" placeholder="Status" />
+                  <input class="text-input" type="text" name="statusValue__<%= index %>" value="<%= statusValue %>" placeholder="Status" <%= isEditable ? "" : "readonly" %> />
                   <div class="panel-header-actions">
-                    <button class="button-secondary" type="button" data-workflow-status-move="up">Hoch</button>
-                    <button class="button-secondary" type="button" data-workflow-status-move="down">Runter</button>
-                    <button class="button-secondary" type="button" data-workflow-status-remove>Loeschen</button>
+                    <button class="button-secondary" type="button" data-workflow-status-move="up" <%= isEditable ? "" : "disabled" %>>Hoch</button>
+                    <button class="button-secondary" type="button" data-workflow-status-move="down" <%= isEditable ? "" : "disabled" %>>Runter</button>
+                    <button class="button-secondary" type="button" data-workflow-status-remove <%= isEditable ? "" : "disabled" %>>Loeschen</button>
                   </div>
                 </div>
               <% }) %>
@@ -89,14 +130,14 @@
               <div class="action-row" data-workflow-status-row>
                 <input class="text-input" type="text" name="statusValue__INDEX__" value="" placeholder="Status" />
                 <div class="panel-header-actions">
-                  <button class="button-secondary" type="button" data-workflow-status-move="up">Hoch</button>
-                  <button class="button-secondary" type="button" data-workflow-status-move="down">Runter</button>
-                  <button class="button-secondary" type="button" data-workflow-status-remove>Loeschen</button>
+                  <button class="button-secondary" type="button" data-workflow-status-move="up" <%= isEditable ? "" : "disabled" %>>Hoch</button>
+                  <button class="button-secondary" type="button" data-workflow-status-move="down" <%= isEditable ? "" : "disabled" %>>Runter</button>
+                  <button class="button-secondary" type="button" data-workflow-status-remove <%= isEditable ? "" : "disabled" %>>Loeschen</button>
                 </div>
               </div>
             </template>
             <div class="template-lifecycle-actions">
-              <button class="button-secondary" type="button" data-workflow-status-add>Status hinzufuegen</button>
+              <button class="button-secondary" type="button" data-workflow-status-add <%= isEditable ? "" : "disabled" %>>Status hinzufuegen</button>
             </div>
           </div>
         </div>
@@ -118,9 +159,9 @@
           <tbody>
             <% editableRows.forEach((row, index) => { %>
               <tr>
-                <td><input class="text-input" type="text" name="actionName__<%= index %>" value="<%= row.actionName %>" placeholder="submit" /></td>
+                <td><input class="text-input" type="text" name="actionName__<%= index %>" value="<%= row.actionName %>" placeholder="submit" <%= isEditable ? "" : "readonly" %> /></td>
                 <td>
-                  <select class="text-input" name="actionFrom__<%= index %>" data-workflow-action-status-select data-placeholder-label="From">
+                  <select class="text-input" name="actionFrom__<%= index %>" data-workflow-action-status-select data-placeholder-label="From" <%= isEditable ? "" : "disabled" %>>
                     <option value="">From</option>
                     <% workflowDetail.availableStatusOptions.forEach((status) => { %>
                       <option value="<%= status %>" <%= row.from[0] === status ? "selected" : "" %>><%= status %></option>
@@ -128,7 +169,7 @@
                   </select>
                 </td>
                 <td>
-                  <select class="text-input" name="actionTo__<%= index %>" data-workflow-action-status-select data-placeholder-label="To">
+                  <select class="text-input" name="actionTo__<%= index %>" data-workflow-action-status-select data-placeholder-label="To" <%= isEditable ? "" : "disabled" %>>
                     <option value="">To</option>
                     <% workflowDetail.availableStatusOptions.forEach((status) => { %>
                       <option value="<%= status %>" <%= row.to === status ? "selected" : "" %>><%= status %></option>
@@ -136,7 +177,7 @@
                   </select>
                 </td>
                 <td>
-                  <select class="text-input" name="actionRole__<%= index %>">
+                  <select class="text-input" name="actionRole__<%= index %>" <%= isEditable ? "" : "disabled" %>>
                     <option value="">Rolle</option>
                     <% workflowDetail.availableRoleOptions.forEach((roleOption) => { %>
                       <option value="<%= roleOption.value %>" <%= row.roles[0] === roleOption.value ? "selected" : "" %>><%= roleOption.label %></option>
@@ -144,13 +185,13 @@
                   </select>
                 </td>
                 <td>
-                  <select class="text-input" name="actionMode__<%= index %>">
+                  <select class="text-input" name="actionMode__<%= index %>" <%= isEditable ? "" : "disabled" %>>
                     <option value="OR" <%= row.modeLabel === "OR" ? "selected" : "" %>>OR</option>
                     <option value="AND" <%= row.modeLabel === "AND" ? "selected" : "" %>>AND</option>
                   </select>
                 </td>
-                <td><input class="text-input" type="text" name="actionApi__<%= index %>" value="<%= row.apiLabel === '—' ? '' : row.apiLabel %>" list="workflow-api-options" placeholder="optional" /></td>
-                <td><input class="text-input" type="text" name="actionCondition__<%= index %>" value="<%= row.conditionLabel === '—' ? '' : row.conditionLabel %>" placeholder='optional' /></td>
+                <td><input class="text-input" type="text" name="actionApi__<%= index %>" value="<%= row.apiLabel === '—' ? '' : row.apiLabel %>" list="workflow-api-options" placeholder="optional" <%= isEditable ? "" : "readonly" %> /></td>
+                <td><input class="text-input" type="text" name="actionCondition__<%= index %>" value="<%= row.conditionLabel === '—' ? '' : row.conditionLabel %>" placeholder='optional' <%= isEditable ? "" : "readonly" %> /></td>
               </tr>
             <% }) %>
           </tbody>
@@ -163,6 +204,55 @@
       </datalist>
     </article>
   </form>
+
+  <% if (!isEditable) { %>
+    <div class="notice-card">
+      <strong>Readonly-Ansicht</strong>
+      <p>Diese Workflow-Version ist derzeit nicht im Bearbeitungsmodus geöffnet. Bearbeiten startet oder öffnet den aktuellen Draft.</p>
+    </div>
+  <% } %>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h3>Zugeordnete Formulare</h3>
+    <span><%= workflowDetail.relatedTemplates.length %> Formulare</span>
+  </div>
+  <% if (workflowDetail.relatedTemplates.length === 0) { %>
+    <div class="empty-state">
+      <strong>Keine Formulare zugeordnet.</strong>
+      <p>Dieser Workflow ist aktuell keinem sichtbaren Formular zugewiesen.</p>
+    </div>
+  <% } else { %>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Formular</th>
+            <th>Status</th>
+            <th>Version</th>
+            <th>Vorgänge</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% workflowDetail.relatedTemplates.forEach((template) => { %>
+            <% const relatedDocumentCount = workflowDetail.relatedDocuments.filter((document) => document.templateId === template.id).length; %>
+            <tr>
+              <td>
+                <strong><%= template.name %></strong>
+                <p class="table-meta"><%= template.key %></p>
+              </td>
+              <td><span class="status-pill status-<%= template.status %>"><%= template.status %></span></td>
+              <td>v<%= template.version %></td>
+              <td><%= relatedDocumentCount %></td>
+              <td><a class="text-link" href="<%= hrefWithContext(`/templates/${template.id}`) %>">Zum Formular</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
 </section>
 
 <dialog id="workflow-json-dialog" class="workflow-json-dialog">
@@ -171,12 +261,12 @@
       <h4>Workflow JSON</h4>
       <button class="button-secondary" type="button" data-modal-close onclick="this.closest('dialog')?.close()">Schliessen</button>
     </div>
-    <form method="post" action="/workflows/<%= workflowDetail.workflow.id %>/source?user=<%= activeUser.key %>" class="stack-list">
+    <form method="post" action="<%= hrefWithContext(`/workflows/${workflowDetail.workflow.id}/source`) %>" class="stack-list">
       <input type="hidden" name="sourceMode" value="json" />
-      <textarea name="source" rows="24" class="form-runtime-source-editor" data-code-editor="json"><%= workflowDetail.workflowSourceText %></textarea>
+      <textarea name="source" rows="24" class="form-runtime-source-editor" data-code-editor="json" <%= isEditable ? "" : "readonly" %>><%= workflowDetail.workflowSourceText %></textarea>
       <div class="template-lifecycle-actions">
-        <button class="button-secondary" type="submit" name="intent" value="save_draft">Save Draft v<%= workflowDetail.nextDraftVersion %></button>
-        <button class="button-primary" type="submit" name="intent" value="publish" <%= workflowDetail.canPublishVersion ? "" : "disabled" %>>Publish v<%= workflowDetail.publishTargetVersion %></button>
+        <button class="button-secondary" type="submit" name="intent" value="save_draft" <%= isEditable ? "" : "disabled" %>>Save Draft v<%= workflowDetail.nextDraftVersion %></button>
+        <button class="button-primary" type="submit" name="intent" value="publish" <%= isEditable && workflowDetail.canPublishVersion ? "" : "disabled" %>>Publish v<%= workflowDetail.publishTargetVersion %></button>
       </div>
     </form>
   </div>

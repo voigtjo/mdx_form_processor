@@ -2,7 +2,7 @@
   <div>
     <span class="eyebrow">Admin-UI</span>
     <h2>Edit User</h2>
-    <p>Kleiner erster Edit-Pfad fuer bestehende MVP-Users.</p>
+    <p>Kleiner erster Edit-Pfad für bestehende MVP-Users.</p>
   </div>
   <div class="hero-actions">
     <a class="button-secondary" href="/admin/users/<%= adminUserEdit.user.id %>?user=<%= activeUser.key %>">Back to User</a>
@@ -12,7 +12,7 @@
 <section class="panel">
   <div class="panel-header">
     <h3>Edit User</h3>
-    <p class="panel-copy">Der Key bleibt in diesem ersten Schnitt stabil und read-only.</p>
+    <p class="panel-copy">Der Key bleibt in diesem ersten Schnitt stabil und schreibgeschützt.</p>
   </div>
   <form method="post" action="/admin/users/<%= adminUserEdit.user.id %>/edit?user=<%= activeUser.key %>" class="form-stack">
     <div class="field-block">
@@ -32,6 +32,13 @@
       <select id="user-status" name="status">
         <option value="active" <%= adminUserEdit.user.status === "active" ? "selected" : "" %>>active</option>
         <option value="inactive" <%= adminUserEdit.user.status === "inactive" ? "selected" : "" %>>inactive</option>
+      </select>
+    </div>
+    <div class="field-block">
+      <label class="field-label" for="user-locale"><%= t("admin.language") %></label>
+      <select id="user-locale" name="locale">
+        <option value="de" <%= adminUserEdit.user.locale === "de" ? "selected" : "" %>><%= t("language.de") %></option>
+        <option value="en" <%= adminUserEdit.user.locale === "en" ? "selected" : "" %>><%= t("language.en") %></option>
       </select>
     </div>
     <button class="button-primary" type="submit">Save User</button>

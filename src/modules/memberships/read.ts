@@ -1,5 +1,6 @@
 import { withDb } from "../../db/pool.js";
-import type { Membership, MembershipRights } from "../../types/domain.js";
+import type { Membership } from "../../types/domain.js";
+import { parseMembershipRights } from "./rights.js";
 
 type MembershipRow = {
   id: string;
@@ -8,17 +9,11 @@ type MembershipRow = {
   rights: string;
 };
 
-const parseRights = (value: string): MembershipRights => ({
-  read: value.includes("r"),
-  write: value.includes("w"),
-  execute: value.includes("x"),
-});
-
 const mapMembership = (row: MembershipRow): Membership => ({
   id: row.id,
   userId: row.user_id,
   groupId: row.group_id,
-  rights: parseRights(row.rights),
+  rights: parseMembershipRights(row.rights),
 });
 
 export const listMemberships = async (): Promise<Membership[]> => {

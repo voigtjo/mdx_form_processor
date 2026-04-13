@@ -1,21 +1,23 @@
 <section class="hero-card">
   <div>
-    <h2>Workflows</h2>
-    <p>Freigabe- und Bearbeitungsfluesse fuer Serviceeinsaetze, Produktion und Nachweise.</p>
+    <h2><%= t("workflows.title") %></h2>
+    <p><%= t("workflows.subtitle") %></p>
   </div>
-  <div class="hero-actions">
-    <a class="button-primary" href="/workflows/new?user=<%= activeUser.key %>">Neuer Workflow</a>
-  </div>
+  <% if (permissions.canEditTemplatesAndWorkflows) { %>
+    <div class="hero-actions">
+      <a class="button-primary" href="<%= hrefWithContext('/workflows/new') %>"><%= t("workflows.new") %></a>
+    </div>
+  <% } %>
 </section>
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Workflow-Liste</h3>
+    <h3><%= t("workflows.list") %></h3>
   </div>
   <% if (catalog.workflows.length === 0) { %>
     <div class="empty-state">
-      <strong>Keine Workflows sichtbar.</strong>
-      <p>Im aktuellen Konfigurationskontext gibt es keine sichtbaren Workflow Templates.</p>
+      <strong><%= t("workflows.noneTitle") %></strong>
+      <p><%= t("workflows.noneText") %></p>
     </div>
   <% } else { %>
     <div class="table-wrap">
@@ -26,20 +28,24 @@
             <th>Main Flow</th>
             <th>Status</th>
             <th>Version</th>
-            <th>Usage</th>
-            <th>Actions</th>
+            <th>Nutzung</th>
+            <th>Aktionen</th>
           </tr>
         </thead>
         <tbody>
           <% catalog.workflows.forEach((workflow) => { %>
             <% const relatedTemplates = catalog.templates.filter((template) => template.workflowTemplateId === workflow.id); %>
             <% const relatedDocuments = catalog.documents.filter((document) => relatedTemplates.some((template) => template.id === document.templateId)); %>
+            <% const siblingDraft = catalog.allWorkflows.find((item) => item.key === workflow.key && item.status === "draft"); %>
             <tr>
               <td>
-                <strong><a class="text-link" href="/workflows/<%= workflow.id %>?user=<%= activeUser.key %>"><%= workflow.name %></a></strong>
+                <strong><a class="text-link" href="<%= hrefWithContext(`/workflows/${workflow.id}`) %>"><%= workflow.name %></a></strong>
                 <p class="table-meta"><%= workflow.key %></p>
                 <% if (workflow.description) { %>
                   <p class="table-meta"><%= workflow.description %></p>
+                <% } %>
+                <% if (workflow.status === "published" && siblingDraft && siblingDraft.id !== workflow.id) { %>
+                  <p class="table-meta">Draft v<%= siblingDraft.version %> vorhanden</p>
                 <% } %>
               </td>
               <td>
@@ -47,16 +53,21 @@
               </td>
               <td><span class="status-pill status-<%= workflow.status %>"><%= workflow.status %></span></td>
               <td>v<%= workflow.version %></td>
-              <td><%= relatedTemplates.length %> Templates · <%= relatedDocuments.length %> Vorgaenge</td>
+              <td><%= relatedTemplates.length %> <%= t("workflows.templates") %> · <%= relatedDocuments.length %> <%= t("templates.documents") %></td>
               <td>
                 <div class="table-actions">
-                  <a class="text-link" href="/workflows/<%= workflow.id %>?user=<%= activeUser.key %>">Oeffnen</a>
-                  <% if (relatedTemplates.length > 0) { %>
-                    <a class="text-link" href="/templates/<%= relatedTemplates[0].id %>?user=<%= activeUser.key %>">Templates</a>
-                  <% } else { %>
-                    <span class="table-meta">Keine Templates</span>
+                  <a class="text-link" href="<%= hrefWithContext(`/workflows/${workflow.id}`) %>"><%= t("templates.open") %></a>
+                  <% if (permissions.canEditTemplatesAndWorkflows) { %>
+                    <form method="post" action="<%= hrefWithContext(`/workflows/${workflow.id}/edit`) %>" class="inline-form compact">
+                      <button class="button-secondary" type="submit">Bearbeiten</button>
+                    </form>
                   <% } %>
-                  <a class="text-link" href="/documents?user=<%= activeUser.key %>&q=<%= encodeURIComponent(workflow.key) %>">Vorgaenge</a>
+                  <% if (relatedTemplates.length > 0) { %>
+                    <a class="text-link" href="<%= hrefWithContext(`/templates/${relatedTemplates[0].id}`) %>"><%= t("workflows.templates") %></a>
+                  <% } else { %>
+                    <span class="table-meta"><%= t("workflows.noTemplates") %></span>
+                  <% } %>
+                  <a class="text-link" href="<%= hrefWithContext('/documents', { q: workflow.key }) %>"><%= t("templates.documents") %></a>
                 </div>
               </td>
             </tr>

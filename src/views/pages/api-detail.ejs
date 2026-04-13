@@ -5,7 +5,7 @@
     <p class="hero-inline-meta"><%= operation ? `${operation.title} · ${operation.status}` : "Draft" %></p>
   </div>
   <div class="hero-actions">
-    <a class="button-secondary" href="/apis?user=<%= activeUser.key %>">Zur API-Liste</a>
+    <a class="button-secondary" href="<%= hrefWithContext('/apis') %>">Zur API-Liste</a>
   </div>
 </section>
 
@@ -14,13 +14,31 @@
     <h3>API Detail</h3>
   </div>
 
-  <form method="post" action="<%= operation ? `/apis/${operation.id}?user=${activeUser.key}` : `/apis/new?user=${activeUser.key}` %>" class="stack-list">
+  <% if (apiDetail.operation) { %>
+    <article class="subpanel">
+      <div class="panel-header">
+        <h4>Status</h4>
+        <div class="panel-header-actions">
+          <% if (apiDetail.canStartEdit) { %>
+            <form method="post" action="<%= hrefWithContext(`/apis/${apiDetail.operation.id}/edit`) %>" class="inline-form compact">
+              <button class="button-primary" type="submit"><%= apiDetail.isEditMode ? "Bearbeiten" : "Bearbeiten" %></button>
+            </form>
+          <% } %>
+        </div>
+      </div>
+      <div class="compact-meta-block">
+        <p><strong>Aktuelle Ansicht:</strong> <%= apiDetail.operation.status %><% if (apiDetail.isEditMode) { %> · Edit-Modus<% } %></p>
+      </div>
+    </article>
+  <% } %>
+
+  <form method="post" action="<%= operation ? hrefWithContext(`/apis/${operation.id}`) : hrefWithContext('/apis/new') %>" class="stack-list">
     <article class="subpanel">
       <div class="template-lifecycle-actions">
         <button class="button-primary" type="submit" name="intent" value="publish" <%= apiDetail.canSavePublish ? "" : "disabled" %>>Save &amp; Publish</button>
         <% if (operation) { %>
-          <button class="button-secondary" type="submit" name="intent" value="unpublish" <%= operation.status === "published" ? "" : "disabled" %>>Unpublish</button>
-          <button class="button-secondary" type="submit" name="intent" value="archive" <%= operation.status === "inactive" ? "" : "disabled" %>>Archive</button>
+          <button class="button-secondary" type="submit" name="intent" value="unpublish" <%= apiDetail.isEditable && operation.status === "published" ? "" : "disabled" %>>Unpublish</button>
+          <button class="button-secondary" type="submit" name="intent" value="archive" <%= apiDetail.isEditable && operation.status === "inactive" ? "" : "disabled" %>>Archive</button>
         <% } %>
       </div>
     </article>
@@ -29,17 +47,17 @@
       <div class="grid two-up detail-grid">
         <div class="field-block">
           <label class="field-label" for="api-key">Key</label>
-          <input id="api-key" name="key" class="text-input" value="<%= apiDetail.editor.key %>" />
+          <input id="api-key" name="key" class="text-input" value="<%= apiDetail.editor.key %>" <%= apiDetail.isEditable ? "" : "readonly" %> />
         </div>
         <div class="field-block">
           <label class="field-label" for="api-title">Title</label>
-          <input id="api-title" name="title" class="text-input" value="<%= apiDetail.editor.title %>" />
+          <input id="api-title" name="title" class="text-input" value="<%= apiDetail.editor.title %>" <%= apiDetail.isEditable ? "" : "readonly" %> />
         </div>
       </div>
 
       <div class="field-block">
         <label class="field-label" for="api-description">Description</label>
-        <textarea id="api-description" name="description" rows="2" class="text-input api-description-input"><%= apiDetail.editor.description %></textarea>
+        <textarea id="api-description" name="description" rows="2" class="text-input api-description-input" <%= apiDetail.isEditable ? "" : "readonly" %>><%= apiDetail.editor.description %></textarea>
       </div>
     </article>
 
@@ -53,6 +71,7 @@
         rows="20"
         class="form-runtime-source-editor"
         data-code-editor="typescript"
+        <%= apiDetail.isEditable ? "" : "readonly" %>
       ><%= apiDetail.editor.handlerTsSource %></textarea>
     </article>
 
@@ -64,45 +83,98 @@
       <div class="grid two-up">
         <div class="field-block">
           <label class="field-label" for="api-request-schema">Request Schema JSON</label>
-          <textarea id="api-request-schema" name="requestSchemaText" rows="8" class="form-runtime-source-editor api-schema-editor" data-code-editor="json" placeholder="Optional, z. B. {&quot;fields&quot;:[...] }"><%= apiDetail.editor.requestSchemaText %></textarea>
+          <textarea id="api-request-schema" name="requestSchemaText" rows="8" class="form-runtime-source-editor api-schema-editor" data-code-editor="json" placeholder="Optional, z. B. {&quot;fields&quot;:[...] }" <%= apiDetail.isEditable ? "" : "readonly" %>><%= apiDetail.editor.requestSchemaText %></textarea>
         </div>
         <div class="field-block">
           <label class="field-label" for="api-response-schema">Response Schema JSON</label>
-          <textarea id="api-response-schema" name="responseSchemaText" rows="8" class="form-runtime-source-editor api-schema-editor" data-code-editor="json" placeholder="Optional, z. B. {&quot;fields&quot;:[...] }"><%= apiDetail.editor.responseSchemaText %></textarea>
+          <textarea id="api-response-schema" name="responseSchemaText" rows="8" class="form-runtime-source-editor api-schema-editor" data-code-editor="json" placeholder="Optional, z. B. {&quot;fields&quot;:[...] }" <%= apiDetail.isEditable ? "" : "readonly" %>><%= apiDetail.editor.responseSchemaText %></textarea>
         </div>
       </div>
     </article>
   </form>
+
+  <% if (operation && !apiDetail.isEditable) { %>
+    <div class="notice-card">
+      <strong>Readonly-Ansicht</strong>
+      <p>Diese API ist derzeit nicht im Bearbeitungsmodus geöffnet. Über Edit wechselst du in die Bearbeitung.</p>
+    </div>
+  <% } %>
 </section>
 
 <% if (apiDetail.usage) { %>
   <section class="panel">
     <div class="panel-header">
-      <h3>Usage</h3>
+      <h3>Verknüpfungen</h3>
       <span><%= apiDetail.usage.documentCount %> Vorgaenge</span>
     </div>
     <div class="grid two-up detail-grid">
       <div>
-        <h4>Templates</h4>
-        <ul class="stack-list compact">
-          <% if (apiDetail.usage.templateUsages.length === 0) { %>
-            <li>Keine</li>
-          <% } %>
-          <% apiDetail.usage.templateUsages.forEach((usage) => { %>
-            <li><a class="text-link" href="/templates/<%= usage.id %>?user=<%= activeUser.key %>"><%= usage.name %> v<%= usage.version %></a></li>
-          <% }) %>
-        </ul>
+        <h4>Zugeordnete Formulare</h4>
+        <% if (apiDetail.usage.templateUsages.length === 0) { %>
+          <div class="empty-state compact">
+            <strong>Keine Formulare zugeordnet.</strong>
+          </div>
+        <% } else { %>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Formular</th>
+                  <th>Status</th>
+                  <th>Version</th>
+                  <th>Aktion</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% apiDetail.usage.templateUsages.forEach((usage) => { %>
+                  <tr>
+                    <td>
+                      <strong><%= usage.name %></strong>
+                      <p class="table-meta"><%= usage.key %></p>
+                    </td>
+                    <td><span class="status-pill status-<%= usage.status %>"><%= usage.status %></span></td>
+                    <td>v<%= usage.version %></td>
+                    <td><a class="text-link" href="<%= hrefWithContext(`/templates/${usage.id}`) %>">Zum Formular</a></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
       </div>
       <div>
-        <h4>Workflows</h4>
-        <ul class="stack-list compact">
-          <% if (apiDetail.usage.workflowUsages.length === 0) { %>
-            <li>Keine</li>
-          <% } %>
-          <% apiDetail.usage.workflowUsages.forEach((usage) => { %>
-            <li><a class="text-link" href="/workflows/<%= usage.id %>?user=<%= activeUser.key %>"><%= usage.name %> v<%= usage.version %></a></li>
-          <% }) %>
-        </ul>
+        <h4>Zugeordnete Workflows</h4>
+        <% if (apiDetail.usage.workflowUsages.length === 0) { %>
+          <div class="empty-state compact">
+            <strong>Keine Workflows zugeordnet.</strong>
+          </div>
+        <% } else { %>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Workflow</th>
+                  <th>Status</th>
+                  <th>Version</th>
+                  <th>Aktion</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% apiDetail.usage.workflowUsages.forEach((usage) => { %>
+                  <tr>
+                    <td>
+                      <strong><%= usage.name %></strong>
+                      <p class="table-meta"><%= usage.key %></p>
+                    </td>
+                    <td><span class="status-pill status-<%= usage.status %>"><%= usage.status %></span></td>
+                    <td>v<%= usage.version %></td>
+                    <td><a class="text-link" href="<%= hrefWithContext(`/workflows/${usage.id}`) %>">Zum Workflow</a></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
       </div>
     </div>
   </section>

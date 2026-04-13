@@ -19,6 +19,8 @@ export const sampleUsers: User[] = [
     displayName: "Anna Schmidt",
     email: "anna@example.test",
     status: "active",
+    locale: "de",
+    globalRoles: { admin: false, developer: false, chef: false },
   },
   {
     id: "usr-luca",
@@ -26,6 +28,8 @@ export const sampleUsers: User[] = [
     displayName: "Luca Keller",
     email: "luca@example.test",
     status: "active",
+    locale: "de",
+    globalRoles: { admin: false, developer: false, chef: false },
   },
   {
     id: "usr-samira",
@@ -33,6 +37,8 @@ export const sampleUsers: User[] = [
     displayName: "Samira Rahman",
     email: "samira@example.test",
     status: "active",
+    locale: "de",
+    globalRoles: { admin: false, developer: false, chef: false },
   },
 ];
 
@@ -58,19 +64,19 @@ export const sampleMemberships: Membership[] = [
     id: "mem-1",
     userId: "usr-anna",
     groupId: "grp-quality",
-    rights: { read: true, write: true, execute: true },
+    rights: { read: true, write: true, execute: true, groupAdmin: false },
   },
   {
     id: "mem-2",
     userId: "usr-luca",
     groupId: "grp-quality",
-    rights: { read: true, write: true, execute: false },
+    rights: { read: true, write: true, execute: false, groupAdmin: false },
   },
   {
     id: "mem-3",
     userId: "usr-samira",
     groupId: "grp-logistics",
-    rights: { read: true, write: true, execute: true },
+    rights: { read: true, write: true, execute: true, groupAdmin: false },
   },
 ];
 

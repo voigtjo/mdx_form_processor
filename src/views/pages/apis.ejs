@@ -1,16 +1,18 @@
 <section class="hero-card hero-card-compact api-catalog-hero">
   <div>
-    <h2>API-Liste</h2>
+    <h2><%= t("apis.title") %></h2>
     <p class="hero-inline-meta"><%= apiCatalog.operations.length %> APIs</p>
   </div>
   <div class="hero-actions">
-    <a class="button-primary" href="/apis/new?user=<%= activeUser.key %>">Neue API</a>
+    <% if (permissions.canEditApis) { %>
+      <a class="button-primary" href="<%= hrefWithContext('/apis/new') %>"><%= t("apis.new") %></a>
+    <% } %>
   </div>
 </section>
 
 <section class="panel">
   <div class="panel-header">
-    <h3>API-Liste</h3>
+    <h3><%= t("apis.title") %></h3>
     <span><%= apiCatalog.operations.length %> APIs</span>
   </div>
   <div class="table-wrap">
@@ -28,17 +30,26 @@
       <tbody>
         <% if (apiCatalog.operations.length === 0) { %>
           <tr>
-            <td colspan="6"><span class="table-meta">Noch keine APIs vorhanden.</span></td>
+            <td colspan="6"><span class="table-meta"><%= t("apis.none") %></span></td>
           </tr>
         <% } %>
         <% apiCatalog.operations.forEach(({ operation, templateUsages, workflowUsages, documentCount }) => { %>
           <tr>
-            <td><strong><a class="text-link" href="/apis/<%= operation.id %>?user=<%= activeUser.key %>"><%= operation.title %></a></strong></td>
+            <td><strong><a class="text-link" href="<%= hrefWithContext(`/apis/${operation.id}`) %>"><%= operation.title %></a></strong></td>
             <td><code><%= operation.key %></code></td>
             <td><%= operation.status %></td>
             <td><%= operation.connector %></td>
-            <td><%= documentCount %> Vorg. · <%= templateUsages.length %> T · <%= workflowUsages.length %> W</td>
-            <td><a class="text-link" href="/apis/<%= operation.id %>?user=<%= activeUser.key %>">Oeffnen</a></td>
+            <td><%= documentCount %> Vorgänge · <%= templateUsages.length %> F · <%= workflowUsages.length %> W</td>
+            <td>
+              <div class="table-actions">
+                <a class="text-link" href="<%= hrefWithContext(`/apis/${operation.id}`) %>"><%= t("apis.open") %></a>
+                <% if (permissions.canEditApis && operation.status !== "archived") { %>
+                  <form method="post" action="<%= hrefWithContext(`/apis/${operation.id}/edit`) %>" class="inline-form compact">
+                    <button class="button-secondary" type="submit">Bearbeiten</button>
+                  </form>
+                <% } %>
+              </div>
+            </td>
           </tr>
         <% }) %>
       </tbody>

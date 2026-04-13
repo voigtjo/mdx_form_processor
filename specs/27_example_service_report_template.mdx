@@ -1,23 +1,27 @@
 ---
 title: Service-Report
-key: service-report
-version: 1
+form-key: service-report
+form-version: 1
+workflow-key: service-report.review
+workflow-version: 1
 attachments_enabled: true
 journal_enabled: true
+API: ref="service-report.erp-orders", request="order_number", response="customer,customer_order_status,customer_master_status"
 ---
 
-## Dokumentkopf
+## Dokumentkopf [workflow.draft]
+// Im Status draft bereitet Chef den Vorgang vor: Einsatznummer waehlen, Auftragsdaten laden, danach Editoren zuweisen.
 
-- Einsatznummer: select(order_number, required, ref="service-report.erp-orders") | Auftragsstatus: text(customer_order_status, readonly) | Auftragsdaten laden: action(ref="service-report.erp-orders", args="order_number", bind="customer,customer_order_status,customer_master_status")
+- Einsatznummer: select(order_number, required, ref="service-report.erp-orders") | Auftragsstatus: text(customer_order_status, readonly) | Auftragsdaten laden: lookup("service-report.erp-orders")
 - Kunde: text(customer, required, readonly) | Kunde gueltig: text(customer_master_status, readonly)
 
-## Inhalt
+## Inhalt [workflow.assigned]
 
 - Sachverhalt / Beschreibung: textarea(work_description, required)
 - Kundeninformationen: checkbox-group(customer_information_flags, options="Kunde informiert,Kunde vor Ort,Objekt zugaenglich,Nacharbeit erforderlich") | Statusmeldung: radio-group(service_result_status, required, options="offen,teilweise erledigt,erledigt,nicht moeglich")
 - Folgetermin: date(follow_up_date)
 
-## Fusszeile
+## Fusszeile [workflow.assigned]
 
 - Einsatzdatum: date(service_date) | Techniker / Monteur: text(technician)
 - Arbeitszeit (Std.): number(labor_hours) | Fahrzeit (Std.): number(travel_hours) | Pause (Min.): number(break_minutes)

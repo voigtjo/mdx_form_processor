@@ -1,0 +1,122 @@
+<section class="hero-card hero-card-compact">
+  <div>
+    <h2><%= t("groups.title") %></h2>
+    <p><%= t("groups.subtitle") %></p>
+  </div>
+  <% if (permissions.canManageAdmins) { %>
+    <div class="hero-actions">
+      <a class="button-primary" href="<%= hrefWithContext('/admin/groups/new') %>">Neue Gruppe</a>
+    </div>
+  <% } %>
+</section>
+
+<section class="grid two-up">
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Gruppenliste</h3>
+      <span class="chip"><%= groupsView.visibleGroups.length %></span>
+    </div>
+    <% if (groupsView.visibleGroups.length === 0) { %>
+      <div class="empty-state">
+        <strong><%= t("groups.noneTitle") %></strong>
+        <p><%= t("groups.noneText") %></p>
+      </div>
+    <% } else { %>
+      <ul class="stack-list compact">
+        <% groupsView.visibleGroups.forEach((group) => { %>
+          <li class="action-row">
+            <div>
+              <strong><a class="text-link" href="<%= hrefWithContext('/groups', { group: group.key }) %>"><%= group.name %></a></strong>
+              <p><%= group.key %> · <%= group.status %></p>
+              <p class="table-meta"><%= group.description ?? "Keine Beschreibung" %></p>
+            </div>
+            <% if (groupsView.selectedGroup?.id === group.id) { %>
+              <span class="chip">Ausgewählt</span>
+            <% } else { %>
+              <a class="text-link action-link" href="<%= hrefWithContext('/groups', { group: group.key }) %>">Anzeigen</a>
+            <% } %>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h3>Gruppendetail</h3>
+      <% if (groupsView.selectedGroup) { %>
+        <span class="chip"><%= groupsView.selectedGroup.name %></span>
+      <% } %>
+    </div>
+    <% if (!groupsView.selectedGroup) { %>
+      <div class="empty-state">
+        <strong>Keine Gruppe ausgewählt.</strong>
+        <p>Wähle links eine Gruppe aus, um Mitglieder und Gruppenrechte zu prüfen.</p>
+      </div>
+    <% } else { %>
+      <p><%= groupsView.selectedGroup.description ?? "Keine Beschreibung vorhanden." %></p>
+
+      <div class="panel-header">
+        <h3>Mitglieder</h3>
+        <span class="chip"><%= groupsView.memberships.length %></span>
+      </div>
+      <% if (groupsView.memberships.length === 0) { %>
+        <div class="empty-state">
+          <strong>Keine Mitglieder.</strong>
+          <p>In dieser Gruppe ist aktuell noch niemand zugeordnet.</p>
+        </div>
+      <% } else { %>
+        <ul class="stack-list compact">
+          <% groupsView.memberships.forEach(({ membership, user }) => { %>
+            <li>
+              <form method="post" action="<%= hrefWithContext(`/groups/${groupsView.selectedGroup.id}/memberships/${membership.id}`) %>" class="stack-form">
+                <div class="action-row">
+                  <div>
+                    <strong><%= user?.displayName ?? membership.userId %></strong>
+                    <p><%= user?.key ?? "ohne Key" %></p>
+                  </div>
+                  <% if (permissions.canManageGroup) { %>
+                    <button class="button-secondary" type="submit">Rechte speichern</button>
+                  <% } %>
+                </div>
+                <div class="choice-grid">
+                  <label class="filter-toggle"><input type="checkbox" name="rights" value="r" <%= membership.rights.read ? "checked" : "" %> <%= permissions.canManageGroup ? "" : "disabled" %> /> <span>Read</span></label>
+                  <label class="filter-toggle"><input type="checkbox" name="rights" value="w" <%= membership.rights.write ? "checked" : "" %> <%= permissions.canManageGroup ? "" : "disabled" %> /> <span>Write</span></label>
+                  <label class="filter-toggle"><input type="checkbox" name="rights" value="x" <%= membership.rights.execute ? "checked" : "" %> <%= permissions.canManageGroup ? "" : "disabled" %> /> <span>Execute</span></label>
+                  <label class="filter-toggle"><input type="checkbox" name="rights" value="g" <%= membership.rights.groupAdmin ? "checked" : "" %> <%= permissions.canManageGroup ? "" : "disabled" %> /> <span>Gruppenadmin</span></label>
+                </div>
+              </form>
+              <% if (permissions.canManageGroup) { %>
+                <form method="post" action="<%= hrefWithContext(`/groups/${groupsView.selectedGroup.id}/memberships/${membership.id}/remove`) %>">
+                  <button class="button-secondary" type="submit">Mitglied entfernen</button>
+                </form>
+              <% } %>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+
+      <% if (permissions.canManageGroup && groupsView.availableUsers.length > 0) { %>
+        <hr class="section-divider" />
+        <form method="post" action="<%= hrefWithContext(`/groups/${groupsView.selectedGroup.id}/memberships`) %>" class="stack-form">
+          <label>
+            <span class="field-label">Benutzer hinzufügen</span>
+            <select class="text-input" name="userId" required>
+              <option value="">Bitte wählen</option>
+              <% groupsView.availableUsers.forEach((user) => { %>
+                <option value="<%= user.id %>"><%= user.displayName %></option>
+              <% }) %>
+            </select>
+          </label>
+          <div class="choice-grid">
+            <label class="filter-toggle"><input type="checkbox" name="rights" value="r" checked /> <span>Read</span></label>
+            <label class="filter-toggle"><input type="checkbox" name="rights" value="w" /> <span>Write</span></label>
+            <label class="filter-toggle"><input type="checkbox" name="rights" value="x" /> <span>Execute</span></label>
+            <label class="filter-toggle"><input type="checkbox" name="rights" value="g" /> <span>Gruppenadmin</span></label>
+          </div>
+          <button class="button-primary" type="submit">Mitglied hinzufügen</button>
+        </form>
+      <% } %>
+    <% } %>
+  </article>
+</section>

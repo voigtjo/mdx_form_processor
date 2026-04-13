@@ -16,6 +16,12 @@
     ? documentDetail.formRuntimeReference.parsedForm.sections.filter((section) => qualificationPaging.visibleSectionTitles.includes(section.title))
     : documentDetail.formRuntimeReference.parsedForm.sections; %>
   <div class="form-runtime-readonly-stack">
+    <% if (documentDetail.formRuntimeReference.bootstrapError) { %>
+      <div class="notice-card notice-error notice-inline">
+        <strong>Auftragsliste nicht verfügbar</strong>
+        <p><%= documentDetail.formRuntimeReference.bootstrapError %></p>
+      </div>
+    <% } %>
     <% (documentDetail.formRuntimeReference.hiddenFieldNames ?? []).forEach((fieldName) => { %>
       <input type="hidden" name="<%= fieldName %>" value="<%= documentDetail.formRuntimeReference.fieldValues[fieldName] ?? "" %>" />
     <% }) %>
@@ -393,12 +399,27 @@
                     <% } %>
                   <% } else if (fieldUi.controlType === "select") { %>
                     <% if (isFieldEditable) { %>
-                      <select class="text-input" name="<%= element.name %>">
-                        <option value=""><%= emptyValueLabel %></option>
-                        <% optionItems.forEach((option) => { %>
-                          <option value="<%= option.value %>" <%= currentValueText === option.value ? "selected" : "" %>><%= option.label %></option>
-                        <% }) %>
-                      </select>
+                      <% if (fieldUi.runtimeRole === "lookup_input") { %>
+                        <select class="text-input" name="<%= element.name %>">
+                          <option value=""><%= emptyValueLabel %></option>
+                          <% if (currentValueText && !optionItems.some((option) => option.value === currentValueText)) { %>
+                            <option value="<%= currentValueText %>" selected><%= currentValueText %></option>
+                          <% } %>
+                          <% optionItems.forEach((option) => { %>
+                            <option value="<%= option.value %>" <%= currentValueText === option.value ? "selected" : "" %>><%= option.label %></option>
+                          <% }) %>
+                        </select>
+                        <% if (optionItems.length === 0) { %>
+                          <p class="field-help">Noch keine Dropdown-Werte geladen. Bitte die zugehörige ERP-Aktion ausführen.</p>
+                        <% } %>
+                      <% } else { %>
+                        <select class="text-input" name="<%= element.name %>">
+                          <option value=""><%= emptyValueLabel %></option>
+                          <% optionItems.forEach((option) => { %>
+                            <option value="<%= option.value %>" <%= currentValueText === option.value ? "selected" : "" %>><%= option.label %></option>
+                          <% }) %>
+                        </select>
+                      <% } %>
                     <% } else { %>
                       <div class="form-runtime-value form-runtime-value-readonly"><%= displayValue || emptyValueLabel %></div>
                     <% } %>

@@ -76,6 +76,11 @@ const formatDocumentTitle = (templateKey: string, dataJson: Record<string, unkno
     return typeof batchId === "string" ? `Produktion ${batchId}` : templateName;
   }
 
+  if (templateKey === "production-report") {
+    const batchId = dataJson.batch_id;
+    return typeof batchId === "string" ? `Produktion ${batchId}` : templateName;
+  }
+
   if (templateKey === "qualification-record") {
     const qualificationRecordNumber = dataJson.qualification_record_number;
     const qualificationTitle = dataJson.qualification_title;

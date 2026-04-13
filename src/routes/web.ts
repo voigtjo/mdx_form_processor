@@ -11,11 +11,13 @@ import {
   createAdminGroupDetailViewModel,
   createAdminGroupEditViewModel,
   createAdminGroupNewViewModel,
+  createAdminOverviewViewModel,
   createAdminUserDetailViewModel,
   createAdminUserEditViewModel,
   createAdminUserNewViewModel,
   createBaseViewModel,
   createDocumentDetailViewModel,
+  createGroupsViewModel,
   createTemplateDetailViewModel,
   createTemplateNewViewModel,
   createWorkflowDetailViewModel,
@@ -24,9 +26,12 @@ import {
 import { findAttachmentAssetVisibleToUser } from "../modules/attachments/read.js";
 import { parseSingleAttachmentUpload, uploadAttachmentForUser } from "../modules/attachments/upload.js";
 import { createGroup } from "../modules/groups/create.js";
+import { findGroupById } from "../modules/groups/read.js";
 import { updateGroup } from "../modules/groups/update.js";
 import { createMembership } from "../modules/memberships/create.js";
+import { listMembershipsForGroup, listMembershipsForUser } from "../modules/memberships/read.js";
 import { removeMembership } from "../modules/memberships/remove.js";
+import { updateMembershipRights } from "../modules/memberships/update.js";
 import { assignDocumentForUser } from "../modules/documents/assign.js";
 import { approveDocumentForUser } from "../modules/documents/approve.js";
 import { archiveDocumentForUser } from "../modules/documents/archive.js";
@@ -50,13 +55,16 @@ import {
 } from "../modules/documents/typed-records-read.js";
 import { addJournalEntryForUser } from "../modules/journal/add.js";
 import { getActiveUser } from "../services/app-context.js";
+import { canEditApis, canManageAdmins, canManageGroup, getMembershipForGroup } from "../services/permissions.js";
 import { serializeCsv } from "../modules/data-exchange/csv.js";
 import { importReferenceEntitiesFromCsv } from "../modules/entities/import.js";
 import { findReferenceEntityByKey, listReferenceEntities } from "../modules/entities/read.js";
 import { findTemplateFormDataRecordVisibleToUser, listTemplateFormDataRecordsVisibleToUser } from "../modules/form-data/read.js";
 import { createTemplateDraft } from "../modules/templates/create.js";
-import { applyFormRuntimeApiBindings } from "../modules/forms/api-bindings.js";
-import { isFormRuntimeReferenceTemplate } from "../modules/forms/document-bridge.js";
+import { applyFormRuntimeApiBindings, listFormRuntimeApiDefinitions, normalizeFormRuntimeApiActionCalls } from "../modules/forms/api-bindings.js";
+import { getReferenceFormRuntimeRequiredFieldNamesForStatus } from "../modules/forms/document-ui.js";
+import { parseFormRuntimeSource } from "../modules/forms/read.js";
+import { isFormRuntimeReferenceTemplate, mapDocumentDataToFormRuntimeValues } from "../modules/forms/document-bridge.js";
 import { archiveOperation, saveOperationDraft, unpublishOperation } from "../modules/operations/write.js";
 import { createTemplateAssignment, removeTemplateAssignment } from "../modules/templates/assign.js";
 import {
@@ -65,10 +73,11 @@ import {
   saveReferenceTemplateDraft,
   unpublishReferenceTemplateVersion,
 } from "../modules/templates/lifecycle.js";
-import { setTemplateSourceFrontmatterValue } from "../modules/templates/source.js";
+import { findFormTemplateById } from "../modules/templates/read.js";
+import { rewriteFormRuntimeTemplateHeader, setTemplateSourceFrontmatterValue } from "../modules/templates/source.js";
 import { createUser } from "../modules/users/create.js";
 import { listUsers } from "../modules/users/read.js";
-import { updateUser } from "../modules/users/update.js";
+import { updateUser, updateUserPreferences } from "../modules/users/update.js";
 import { createWorkflowDraft } from "../modules/workflows/create.js";
 import {
   archiveWorkflowVersion,
@@ -80,6 +89,10 @@ import { findWorkflowTemplateById } from "../modules/workflows/read.js";
 
 type UserQuery = {
   user?: string;
+  group?: string;
+  selectedUser?: string;
+  mode?: string;
+  version?: string;
   q?: string;
   fields?: string;
   template?: string;
@@ -119,6 +132,10 @@ type UserQuery = {
 const query = (request: FastifyRequest): UserQuery => request.query as UserQuery;
 
 const queryValue = (request: FastifyRequest): string | undefined => query(request).user;
+const groupQueryValue = (request: FastifyRequest): string | undefined => query(request).group;
+const selectedUserValue = (request: FastifyRequest): string | undefined => query(request).selectedUser;
+const modeValue = (request: FastifyRequest): string | undefined => query(request).mode;
+const versionValue = (request: FastifyRequest): string | undefined => query(request).version;
 const searchValue = (request: FastifyRequest): string | undefined => query(request).q;
 const statusFilterValue = (request: FastifyRequest): string | undefined => query(request).status;
 const showArchivedValue = (request: FastifyRequest): string | undefined => query(request).showArchived;
@@ -211,6 +228,57 @@ const buildDocumentFeedbackStateFromRequest = (request: FastifyRequest): Documen
   uploadError: uploadErrorValue(request),
   uploadStatus: uploadStatusValue(request),
 });
+
+const collectSubmittedFieldValues = (body: Record<string, unknown> | undefined): Record<string, string | undefined> => {
+  return Object.fromEntries(
+    Object.entries(body ?? {}).flatMap(([key, value]) => {
+      if (typeof value === "string") {
+        return [[key, value]];
+      }
+
+      return [];
+    }),
+  ) as Record<string, string | undefined>;
+};
+
+const collectSubmittedStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === "string").map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized.length > 0 ? [normalized] : [];
+  }
+
+  return [];
+};
+
+const getMissingCurrentStatusRequiredFields = (document: NonNullable<Awaited<ReturnType<typeof findDocumentDetailVisibleToUser>>>): string[] => {
+  if (!isFormRuntimeReferenceTemplate(document.templateKey)) {
+    return [];
+  }
+
+  let parsedForm;
+
+  try {
+    parsedForm = parseFormRuntimeSource(document.formTemplateMdxBody);
+  } catch {
+    return [];
+  }
+
+  const requiredFieldNames = getReferenceFormRuntimeRequiredFieldNamesForStatus({
+    templateKey: document.templateKey,
+    documentStatus: document.status,
+    parsedForm,
+  });
+  const fieldValues = mapDocumentDataToFormRuntimeValues(document.templateKey, document.documentDataJson, {});
+
+  return requiredFieldNames.filter((fieldName) => {
+    const value = fieldValues[fieldName];
+    return typeof value !== "string" || value.trim().length === 0;
+  }).map((fieldName) => parsedForm.controls.find((entry) => entry.name === fieldName)?.label ?? fieldName);
+};
 
 const renderEjsTemplate = async (templatePath: string, data: Record<string, unknown>): Promise<string> => {
   return ejs.renderFile(path.join(viewsRoot, templatePath), data, { async: true }) as Promise<string>;
@@ -558,6 +626,7 @@ const filterDocumentsViewModel = (input: {
   workflows: Array<{ id: string; key?: string; name?: string }>;
   users: User[];
   searchTerm: string;
+  templateFilterKey: string;
   statusFilter: string | undefined;
   showArchived: boolean;
 }) => {
@@ -566,8 +635,16 @@ const filterDocumentsViewModel = (input: {
   const normalizedSearch = input.searchTerm.toLowerCase();
   const validStatuses = Array.from(new Set(input.documents.map((document) => document.status))).sort();
   const normalizedStatusFilter = input.statusFilter && validStatuses.includes(input.statusFilter) ? input.statusFilter : "";
+  const validTemplateKeys = new Set(input.templates.map((template) => template.key));
+  const normalizedTemplateFilterKey = input.templateFilterKey && validTemplateKeys.has(input.templateFilterKey) ? input.templateFilterKey : "";
   const filteredDocuments = input.documents.filter((document) => {
     if (!input.showArchived && document.status === "archived") {
+      return false;
+    }
+
+    const template = templateById.get(document.templateId);
+
+    if (normalizedTemplateFilterKey && template?.key !== normalizedTemplateFilterKey) {
       return false;
     }
 
@@ -579,7 +656,6 @@ const filterDocumentsViewModel = (input: {
       return true;
     }
 
-    const template = templateById.get(document.templateId);
     const workflow = template ? workflowById.get(template.workflowTemplateId) : undefined;
     const assignedUsers = input.users
       .filter((user) => document.assignedUserIds.includes(user.id))
@@ -608,6 +684,7 @@ const filterDocumentsViewModel = (input: {
     availableStatuses: validStatuses,
     filterState: {
       q: input.searchTerm,
+      templateKey: normalizedTemplateFilterKey,
       status: normalizedStatusFilter,
       showArchived: input.showArchived,
     },
@@ -618,6 +695,40 @@ const filterDocumentsViewModel = (input: {
       filteredCount: filteredDocuments.length,
     },
   };
+};
+
+const selectTemplateRepresentatives = (templates: FormTemplate[], workflows: Array<{ id: string; key?: string; name?: string }>) => {
+  const templatesByKey = new Map<string, FormTemplate[]>();
+
+  templates.forEach((template) => {
+    const existing = templatesByKey.get(template.key) ?? [];
+    existing.push(template);
+    templatesByKey.set(template.key, existing);
+  });
+
+  return Array.from(templatesByKey.entries())
+    .map(([key, versions]) => {
+      const sortedVersions = [...versions].sort((left, right) => right.version - left.version);
+      const representative =
+        sortedVersions.find((template) => template.status === "published")
+        ?? sortedVersions.find((template) => template.status === "draft")
+        ?? sortedVersions[0];
+
+      if (!representative) {
+        return null;
+      }
+
+      return {
+        key,
+        representative,
+        versions: sortedVersions,
+        workflow: workflows.find((workflow) => workflow.id === representative.workflowTemplateId),
+        hasDraft: sortedVersions.some((template) => template.status === "draft"),
+        hasPublished: sortedVersions.some((template) => template.status === "published"),
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .sort((left, right) => left.representative.name.localeCompare(right.representative.name));
 };
 
 const buildDialogRedirect = (targetUrl: string, input: { type?: "error" | "info"; title: string; message: string; anchor?: string }) => {
@@ -641,14 +752,49 @@ const typedRecordCsvHeaders = {
 const renderPage = async (
   request: FastifyRequest,
   reply: FastifyReply,
-  section: "workspace" | "templates" | "workflows" | "documents" | "apis" | "admin",
+  section: "workspace" | "templates" | "workflows" | "documents" | "apis" | "groups" | "admin",
   page: string,
   title: string,
 ) => {
+  const viewModel = await createBaseViewModel(section, queryValue(request), groupQueryValue(request));
+
+  if (!viewModel.visibleSections.includes(section)) {
+    return reply.redirect(
+      buildDialogRedirect(viewModel.hrefWithContext("/workspace"), {
+        title: "Kein Zugriff",
+        message: "Dieser Bereich ist im aktuellen Benutzer- und Gruppenkontext nicht sichtbar.",
+      }),
+      303,
+    );
+  }
+
   return reply.view(`pages/${page}.ejs`, await withDialog(request, {
     title,
-    ...(await createBaseViewModel(section, queryValue(request))),
+    ...viewModel,
   }));
+};
+
+const redirectIfSectionHidden = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+  section: "workspace" | "templates" | "workflows" | "documents" | "apis" | "groups" | "admin",
+  message?: string,
+): Promise<boolean> => {
+  const viewModel = await createBaseViewModel(section, queryValue(request), groupQueryValue(request));
+
+  if (viewModel.visibleSections.includes(section)) {
+    return false;
+  }
+
+  await reply.redirect(
+    buildDialogRedirect(viewModel.hrefWithContext("/workspace"), {
+      title: "Kein Zugriff",
+      message: message ?? "Dieser Bereich ist im aktuellen Benutzer- und Gruppenkontext nicht sichtbar.",
+    }),
+    303,
+  );
+
+  return true;
 };
 
 export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => {
@@ -684,7 +830,12 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
   app.get("/", async (request, reply) => {
     const user = queryValue(request);
-    const suffix = user ? `?user=${encodeURIComponent(user)}` : "";
+    const group = groupQueryValue(request);
+    const queryParts = [
+      user ? `user=${encodeURIComponent(user)}` : "",
+      group ? `group=${encodeURIComponent(group)}` : "",
+    ].filter((value) => value.length > 0);
+    const suffix = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
     return reply.redirect(`/workspace${suffix}`);
   });
 
@@ -693,7 +844,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   }));
 
   app.get("/workspace", async (request, reply) => {
-    return renderPage(request, reply, "workspace", "workspace", "My Workspace");
+    return renderPage(request, reply, "workspace", "workspace", "Start");
   });
 
   app.get("/templates", async (request, reply) => {
@@ -701,7 +852,22 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/templates/new", async (request, reply) => {
-    return reply.view("pages/template-new.ejs", await withDialog(request, await createTemplateNewViewModel(queryValue(request))));
+    if (await redirectIfSectionHidden(request, reply, "templates")) {
+      return reply;
+    }
+
+    const baseViewModel = await createBaseViewModel("templates", queryValue(request), groupQueryValue(request));
+    if (!baseViewModel.permissions.canEditTemplatesAndWorkflows) {
+      return reply.redirect(
+        buildDialogRedirect(baseViewModel.hrefWithContext("/templates"), {
+          title: "Kein Zugriff",
+          message: "Formulare können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
+
+    return reply.view("pages/template-new.ejs", await withDialog(request, await createTemplateNewViewModel(queryValue(request), groupQueryValue(request))));
   });
 
   app.post<{
@@ -713,8 +879,23 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       formType?: "customer_order" | "production_record" | "qualification_record" | "generic_form";
     };
   }>("/templates/new", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "templates")) {
+      return reply;
+    }
+
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
+    const templateContextViewModel = await createBaseViewModel("templates", activeUser.key, groupQueryValue(request));
+
+    if (!templateContextViewModel.permissions.canEditTemplatesAndWorkflows) {
+      return reply.redirect(
+        buildDialogRedirect(templateContextViewModel.hrefWithContext("/templates"), {
+          title: "Kein Zugriff",
+          message: "Formulare können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
 
     try {
       const result = await createTemplateDraft({
@@ -746,17 +927,70 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/templates/:id", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "templates")) {
+      return reply;
+    }
+
     const params = request.params as { id: string };
-    const viewModel = await createTemplateDetailViewModel(queryValue(request), params.id);
+    const viewModel = await createTemplateDetailViewModel(queryValue(request), groupQueryValue(request), params.id, {
+      selectedVersionId: versionValue(request),
+      editMode: modeValue(request) === "edit",
+    });
 
     if (!viewModel) {
       return reply.code(404).view("pages/template-not-found.ejs", await withDialog(request, {
         title: "Template Not Found",
-        ...(await createBaseViewModel("templates", queryValue(request))),
+        ...(await createBaseViewModel("templates", queryValue(request), groupQueryValue(request))),
       }));
     }
 
     return reply.view("pages/template-detail.ejs", await withDialog(request, viewModel));
+  });
+
+  app.post("/templates/:id/edit", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "templates")) {
+      return reply;
+    }
+
+    const params = request.params as { id: string };
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const templateContextViewModel = await createBaseViewModel("templates", activeUser.key, groupQueryValue(request));
+
+    if (!templateContextViewModel.permissions.canEditTemplatesAndWorkflows) {
+      return reply.redirect(
+        buildDialogRedirect(templateContextViewModel.hrefWithContext(`/templates/${params.id}`), {
+          title: "Kein Zugriff",
+          message: "Formulare können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
+
+    const template = await findFormTemplateById(params.id);
+
+    if (!template) {
+      return reply.code(404).view("pages/template-not-found.ejs", await withDialog(request, {
+        title: "Template Not Found",
+        ...(await createBaseViewModel("templates", queryValue(request), groupQueryValue(request))),
+      }));
+    }
+
+    const editTarget = template.status === "draft"
+      ? { id: template.id, version: template.version }
+      : await saveReferenceTemplateDraft({
+          templateId: template.id,
+          sourceText: template.mdxBody,
+          workflowTemplateId: template.workflowTemplateId,
+        });
+
+    return reply.redirect(
+      templateContextViewModel.hrefWithContext(`/templates/${editTarget.id}`, {
+        mode: "edit",
+        version: editTarget.id,
+      }),
+      303,
+    );
   });
 
   app.post<{
@@ -771,9 +1005,25 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       [key: string]: string | undefined;
     };
   }>("/templates/:id/source", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "templates")) {
+      return reply;
+    }
+
     const params = request.params as { id: string };
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
+    const templateContextViewModel = await createBaseViewModel("templates", activeUser.key, groupQueryValue(request));
+
+    if (!templateContextViewModel.permissions.canEditTemplatesAndWorkflows) {
+      return reply.redirect(
+        buildDialogRedirect(templateContextViewModel.hrefWithContext(`/templates/${params.id}`), {
+          title: "Kein Zugriff",
+          message: "Formulare können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
+
     const requestedSourceText = request.body?.source ?? "";
     const intent = request.body?.intent ?? "save_draft";
     const workflowTemplateId = request.body?.workflowTemplateId ?? "";
@@ -787,29 +1037,33 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         })
       : requestedSourceText;
 
-    if (request.body?.attachmentsEnabledPresent) {
-      sourceText = setTemplateSourceFrontmatterValue(
-        sourceText,
-        "attachments_enabled",
-        request.body?.attachmentsEnabled ? "true" : "false",
-      );
-    }
-
-    if (request.body?.journalEnabledPresent) {
-      sourceText = setTemplateSourceFrontmatterValue(
-        sourceText,
-        "journal_enabled",
-        request.body?.journalEnabled ? "true" : "false",
-      );
-    }
-
     const selectedWorkflow = workflowTemplateId ? await findWorkflowTemplateById(workflowTemplateId) : null;
-    if (selectedWorkflow) {
-      sourceText = setTemplateSourceFrontmatterValue(sourceText, "workflow_key", selectedWorkflow.key);
-      sourceText = setTemplateSourceFrontmatterValue(sourceText, "workflow_version", String(selectedWorkflow.version));
-    }
 
     try {
+      const parsedForm = parseFormRuntimeSource(sourceText);
+      const attachmentsEnabled = request.body?.attachmentsEnabledPresent
+        ? Boolean(request.body?.attachmentsEnabled)
+        : sourceText.includes("attachments_enabled: true");
+      const journalEnabled = request.body?.journalEnabledPresent
+        ? Boolean(request.body?.journalEnabled)
+        : sourceText.includes("journal_enabled: true");
+      const nextMeta = {
+        ...parsedForm.meta,
+        ...(selectedWorkflow ? { workflowKey: selectedWorkflow.key, workflowVersion: String(selectedWorkflow.version) } : {}),
+        apiDefinitions: listFormRuntimeApiDefinitions(parsedForm),
+      };
+
+      sourceText = rewriteFormRuntimeTemplateHeader({
+        source: sourceText,
+        meta: nextMeta,
+        attachmentsEnabled,
+        journalEnabled,
+      });
+      sourceText = normalizeFormRuntimeApiActionCalls({
+        sourceText,
+        parsedForm,
+      });
+
       const result = intent === "publish"
         ? await publishReferenceTemplateVersion({
             templateId: params.id,
@@ -857,15 +1111,17 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Die Template-Quelle konnte nicht verarbeitet werden.";
-      const viewModel = await createTemplateDetailViewModel(queryValue(request), params.id, {
+      const viewModel = await createTemplateDetailViewModel(queryValue(request), groupQueryValue(request), params.id, {
         sourceText,
         workflowTemplateId,
+        selectedVersionId: params.id,
+        editMode: true,
       });
 
       if (!viewModel) {
         return reply.code(404).view("pages/template-not-found.ejs", await withDialog(request, {
           title: "Template Not Found",
-          ...(await createBaseViewModel("templates", queryValue(request))),
+          ...(await createBaseViewModel("templates", queryValue(request), groupQueryValue(request))),
         }));
       }
 
@@ -892,12 +1148,42 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/workflows/new", async (request, reply) => {
-    return reply.view("pages/workflow-new.ejs", await withDialog(request, await createWorkflowNewViewModel(queryValue(request))));
+    if (await redirectIfSectionHidden(request, reply, "workflows")) {
+      return reply;
+    }
+
+    const baseViewModel = await createBaseViewModel("workflows", queryValue(request), groupQueryValue(request));
+    if (!baseViewModel.permissions.canEditTemplatesAndWorkflows) {
+      return reply.redirect(
+        buildDialogRedirect(baseViewModel.hrefWithContext("/workflows"), {
+          title: "Kein Zugriff",
+          message: "Workflows können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
+
+    return reply.view("pages/workflow-new.ejs", await withDialog(request, await createWorkflowNewViewModel(queryValue(request), groupQueryValue(request))));
   });
 
   app.post<{ Body: { name?: string; key?: string; description?: string } }>("/workflows/new", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "workflows")) {
+      return reply;
+    }
+
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
+    const workflowContextViewModel = await createBaseViewModel("workflows", activeUser.key, groupQueryValue(request));
+
+    if (!workflowContextViewModel.permissions.canEditTemplatesAndWorkflows) {
+      return reply.redirect(
+        buildDialogRedirect(workflowContextViewModel.hrefWithContext("/workflows"), {
+          title: "Kein Zugriff",
+          message: "Workflows können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
 
     try {
       const result = await createWorkflowDraft({
@@ -927,17 +1213,69 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/workflows/:id", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "workflows")) {
+      return reply;
+    }
+
     const params = request.params as { id: string };
-    const viewModel = await createWorkflowDetailViewModel(queryValue(request), params.id);
+    const viewModel = await createWorkflowDetailViewModel(queryValue(request), groupQueryValue(request), params.id, {
+      selectedVersionId: versionValue(request),
+      editMode: modeValue(request) === "edit",
+    });
 
     if (!viewModel) {
       return reply.code(404).view("pages/workflow-not-found.ejs", await withDialog(request, {
         title: "Workflow Not Found",
-        ...(await createBaseViewModel("workflows", queryValue(request))),
+        ...(await createBaseViewModel("workflows", queryValue(request), groupQueryValue(request))),
       }));
     }
 
     return reply.view("pages/workflow-detail.ejs", await withDialog(request, viewModel));
+  });
+
+  app.post("/workflows/:id/edit", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "workflows")) {
+      return reply;
+    }
+
+    const params = request.params as { id: string };
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const workflowContextViewModel = await createBaseViewModel("workflows", activeUser.key, groupQueryValue(request));
+
+    if (!workflowContextViewModel.permissions.canEditTemplatesAndWorkflows) {
+      return reply.redirect(
+        buildDialogRedirect(workflowContextViewModel.hrefWithContext(`/workflows/${params.id}`), {
+          title: "Kein Zugriff",
+          message: "Workflows können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
+
+    const workflow = await findWorkflowTemplateById(params.id);
+
+    if (!workflow) {
+      return reply.code(404).view("pages/workflow-not-found.ejs", await withDialog(request, {
+        title: "Workflow Not Found",
+        ...(await createBaseViewModel("workflows", queryValue(request), groupQueryValue(request))),
+      }));
+    }
+
+    const editTarget = workflow.status === "draft"
+      ? { id: workflow.id, version: workflow.version }
+      : await saveWorkflowDraftSource({
+          workflowId: workflow.id,
+          sourceText: JSON.stringify(workflow.workflowJson, null, 2),
+        });
+
+    return reply.redirect(
+      workflowContextViewModel.hrefWithContext(`/workflows/${editTarget.id}`, {
+        mode: "edit",
+        version: editTarget.id,
+      }),
+      303,
+    );
   });
 
   app.post<{
@@ -956,9 +1294,25 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       actionCondition?: string | string[];
     };
   }>("/workflows/:id/source", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "workflows")) {
+      return reply;
+    }
+
     const params = request.params as { id: string };
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
+    const workflowContextViewModel = await createBaseViewModel("workflows", activeUser.key, groupQueryValue(request));
+
+    if (!workflowContextViewModel.permissions.canEditTemplatesAndWorkflows) {
+      return reply.redirect(
+        buildDialogRedirect(workflowContextViewModel.hrefWithContext(`/workflows/${params.id}`), {
+          title: "Kein Zugriff",
+          message: "Workflows können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
+
     const intent = request.body?.intent ?? "save_draft";
 
     try {
@@ -1008,14 +1362,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     } catch (error) {
       const message = error instanceof Error ? error.message : "Die Workflow-Quelle konnte nicht verarbeitet werden.";
       const fallbackSourceText = typeof request.body?.source === "string" ? request.body.source : "";
-      const viewModel = await createWorkflowDetailViewModel(queryValue(request), params.id, {
+      const viewModel = await createWorkflowDetailViewModel(queryValue(request), groupQueryValue(request), params.id, {
         sourceText: fallbackSourceText,
+        selectedVersionId: params.id,
+        editMode: true,
       });
 
       if (!viewModel) {
         return reply.code(404).view("pages/workflow-not-found.ejs", await withDialog(request, {
           title: "Workflow Not Found",
-          ...(await createBaseViewModel("workflows", queryValue(request))),
+          ...(await createBaseViewModel("workflows", queryValue(request), groupQueryValue(request))),
         }));
       }
 
@@ -1038,12 +1394,34 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/apis", async (request, reply) => {
-    const viewModel = await createApiCatalogViewModel(queryValue(request));
+    const viewModel = await createApiCatalogViewModel(queryValue(request), groupQueryValue(request));
+
+    if (!viewModel.visibleSections.includes("apis")) {
+      return reply.redirect(
+        buildDialogRedirect(viewModel.hrefWithContext("/workspace"), {
+          title: "Kein Zugriff",
+          message: "Die API-Sicht ist im aktuellen Kontext nicht sichtbar.",
+        }),
+        303,
+      );
+    }
+
     return reply.view("pages/apis.ejs", await withDialog(request, viewModel));
   });
 
   app.get("/apis/new", async (request, reply) => {
-    const viewModel = await createApiNewViewModel(queryValue(request));
+    const viewModel = await createApiNewViewModel(queryValue(request), groupQueryValue(request));
+
+    if (!viewModel.permissions.canEditApis) {
+      return reply.redirect(
+        buildDialogRedirect(viewModel.hrefWithContext("/apis"), {
+          title: "Kein Zugriff",
+          message: "APIs können in diesem Kontext nur gelesen, aber nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
+
     return reply.view("pages/api-detail.ejs", await withDialog(request, viewModel));
   });
 
@@ -1064,6 +1442,17 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
     const intent = "publish";
+    const apiContextViewModel = await createBaseViewModel("apis", activeUser.key, groupQueryValue(request));
+
+    if (!apiContextViewModel.permissions.canEditApis) {
+      return reply.redirect(
+        buildDialogRedirect(apiContextViewModel.hrefWithContext("/apis"), {
+          title: "Kein Zugriff",
+          message: "APIs können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
 
     try {
       const result = await saveOperationDraft({
@@ -1089,7 +1478,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Die API konnte nicht gespeichert werden.";
-      const viewModel = await createApiNewViewModel(queryValue(request), {
+      const viewModel = await createApiNewViewModel(queryValue(request), groupQueryValue(request), {
         key: request.body?.key,
         title: request.body?.title,
         description: request.body?.description,
@@ -1112,17 +1501,51 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/apis/:id", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "apis", "Die API-Sicht ist im aktuellen Kontext nicht sichtbar.")) {
+      return reply;
+    }
+
     const params = request.params as { id: string };
-    const viewModel = await createApiDetailViewModel(queryValue(request), params.id);
+    const viewModel = await createApiDetailViewModel(queryValue(request), groupQueryValue(request), params.id, {
+      editMode: modeValue(request) === "edit",
+    });
 
     if (!viewModel) {
       return reply.code(404).view("pages/template-not-found.ejs", await withDialog(request, {
         title: "API Not Found",
-        ...(await createBaseViewModel("apis", queryValue(request))),
+        ...(await createBaseViewModel("apis", queryValue(request), groupQueryValue(request))),
       }));
     }
 
     return reply.view("pages/api-detail.ejs", await withDialog(request, viewModel));
+  });
+
+  app.post("/apis/:id/edit", async (request, reply) => {
+    if (await redirectIfSectionHidden(request, reply, "apis", "Die API-Sicht ist im aktuellen Kontext nicht sichtbar.")) {
+      return reply;
+    }
+
+    const params = request.params as { id: string };
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const apiContextViewModel = await createBaseViewModel("apis", activeUser.key, groupQueryValue(request));
+
+    if (!apiContextViewModel.permissions.canEditApis) {
+      return reply.redirect(
+        buildDialogRedirect(apiContextViewModel.hrefWithContext(`/apis/${params.id}`), {
+          title: "Kein Zugriff",
+          message: "APIs können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
+
+    return reply.redirect(
+      apiContextViewModel.hrefWithContext(`/apis/${params.id}`, {
+        mode: "edit",
+      }),
+      303,
+    );
   });
 
   app.post<{
@@ -1144,6 +1567,17 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
     const intent = request.body?.intent ?? "publish";
+    const apiContextViewModel = await createBaseViewModel("apis", activeUser.key, groupQueryValue(request));
+
+    if (!apiContextViewModel.permissions.canEditApis) {
+      return reply.redirect(
+        buildDialogRedirect(apiContextViewModel.hrefWithContext(`/apis/${params.id}`), {
+          title: "Kein Zugriff",
+          message: "APIs können in diesem Kontext nicht bearbeitet werden.",
+        }),
+        303,
+      );
+    }
 
     try {
       const result = intent === "publish"
@@ -1193,7 +1627,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Die API konnte nicht verarbeitet werden.";
-      const viewModel = await createApiDetailViewModel(queryValue(request), params.id, {
+      const viewModel = await createApiDetailViewModel(queryValue(request), groupQueryValue(request), params.id, {
         key: request.body?.key,
         title: request.body?.title,
         description: request.body?.description,
@@ -1598,30 +2032,187 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/documents", async (request, reply) => {
-    const baseViewModel = await createBaseViewModel("documents", queryValue(request));
+    const baseViewModel = await createBaseViewModel("documents", queryValue(request), groupQueryValue(request));
+    const selectableTemplates = selectTemplateRepresentatives(
+      baseViewModel.catalog.templates.filter((template) => template.status !== "archived"),
+      baseViewModel.catalog.workflows,
+    );
+    const requestedTemplateValue = typeof query(request).template === "string" ? query(request).template ?? "" : "";
+    const requestedTemplateKey =
+      selectableTemplates.find(({ key }) => key === requestedTemplateValue)?.key
+      ?? baseViewModel.catalog.templates.find((template) => template.id === requestedTemplateValue)?.key
+      ?? "";
+    const preferredTemplateKey = baseViewModel.workspaceSummary.preferredTemplateKey
+      ? selectableTemplates.find(({ key }) => key === baseViewModel.workspaceSummary.preferredTemplateKey)?.key ?? ""
+      : "";
+    const selectedTemplateKey = requestedTemplateKey || preferredTemplateKey || selectableTemplates[0]?.key || "";
+    const selectedTemplate = selectableTemplates.find(({ key }) => key === selectedTemplateKey);
+    const selectedTemplateIdForStart = selectedTemplate ? selectedTemplate.representative.id : "";
     const documentsList = filterDocumentsViewModel({
       documents: baseViewModel.catalog.documents,
       templates: baseViewModel.catalog.templates,
       workflows: baseViewModel.catalog.workflows,
       users: baseViewModel.users,
       searchTerm: normalizeSearchTerm(searchValue(request)),
+      templateFilterKey: selectedTemplateKey,
       statusFilter: statusFilterValue(request),
       showArchived: normalizeShowArchived(showArchivedValue(request)),
     });
 
     return reply.view("pages/documents.ejs", await withDialog(request, {
-      title: "Documents",
+      title: "Vorgaenge",
       ...baseViewModel,
       documentsList,
+      selectableTemplates,
+      selectedTemplateKey,
+      selectedTemplateIdForStart,
       startError: startErrorValue(request),
     }));
   });
 
-  app.get("/admin/users/new", async (request, reply) => {
-    return reply.view("pages/admin-user-new.ejs", await withDialog(request, await createAdminUserNewViewModel(queryValue(request))));
+  app.get("/groups", async (request, reply) => {
+    const viewModel = await createGroupsViewModel(queryValue(request), groupQueryValue(request));
+
+    if (!viewModel.visibleSections.includes("groups")) {
+      return reply.redirect(
+        buildDialogRedirect(viewModel.hrefWithContext("/workspace"), {
+          title: "Kein Zugriff",
+          message: "Die Gruppenverwaltung ist in diesem Kontext nicht sichtbar.",
+        }),
+        303,
+      );
+    }
+
+    return reply.view("pages/groups.ejs", await withDialog(request, viewModel));
   });
 
-  app.post<{ Body: { displayName?: string; key?: string; email?: string } }>("/admin/users/new", async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: { userId?: string; rights?: string | string[] } }>("/groups/:id/memberships", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { id: string };
+    const group = await findGroupById(params.id);
+    const membershipsForUser = await listMembershipsForUser(activeUser.id);
+    const membership = getMembershipForGroup(membershipsForUser, params.id);
+
+    if (!canManageGroup(activeUser, membership?.rights)) {
+      return reply.redirect(buildDialogRedirect(`/groups?user=${encodeURIComponent(activeUser.key)}`, {
+        title: "Kein Zugriff",
+        message: "Die ausgewählte Gruppe kann in diesem Kontext nicht gepflegt werden.",
+      }), 303);
+    }
+
+    const rights = Array.isArray(request.body?.rights) ? request.body.rights : request.body?.rights ? [request.body.rights] : [];
+
+    try {
+      await createMembership({
+        userId: request.body?.userId ?? "",
+        groupId: params.id,
+        rights: {
+          read: rights.includes("r"),
+          write: rights.includes("w"),
+          execute: rights.includes("x"),
+          groupAdmin: rights.includes("g"),
+        },
+      });
+
+      return reply.redirect(buildDialogRedirect(`/groups?user=${encodeURIComponent(activeUser.key)}&group=${encodeURIComponent(group?.key ?? "")}`, {
+        type: "info",
+        title: "Mitglied hinzugefügt",
+        message: "Die Gruppenzuordnung wurde gespeichert.",
+      }), 303);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die Gruppenzuordnung konnte nicht gespeichert werden.";
+      return reply.redirect(buildDialogRedirect(`/groups?user=${encodeURIComponent(activeUser.key)}&group=${encodeURIComponent(group?.key ?? "")}`, {
+        title: "Mitglied konnte nicht hinzugefügt werden",
+        message,
+      }), 303);
+    }
+  });
+
+  app.post<{ Params: { id: string; membershipId: string }; Body: { rights?: string | string[] } }>("/groups/:id/memberships/:membershipId", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { id: string; membershipId: string };
+    const group = await findGroupById(params.id);
+    const membershipsForUser = await listMembershipsForUser(activeUser.id);
+    const membership = getMembershipForGroup(membershipsForUser, params.id);
+
+    if (!canManageGroup(activeUser, membership?.rights)) {
+      return reply.redirect(buildDialogRedirect(`/groups?user=${encodeURIComponent(activeUser.key)}`, {
+        title: "Kein Zugriff",
+        message: "Die Gruppenrechte können in diesem Kontext nicht bearbeitet werden.",
+      }), 303);
+    }
+
+    const rights = Array.isArray(request.body?.rights) ? request.body.rights : request.body?.rights ? [request.body.rights] : [];
+
+    try {
+      await updateMembershipRights({
+        membershipId: params.membershipId,
+        rights: {
+          read: rights.includes("r"),
+          write: rights.includes("w"),
+          execute: rights.includes("x"),
+          groupAdmin: rights.includes("g"),
+        },
+      });
+
+      return reply.redirect(buildDialogRedirect(`/groups?user=${encodeURIComponent(activeUser.key)}&group=${encodeURIComponent(group?.key ?? "")}`, {
+        type: "info",
+        title: "Gruppenrechte aktualisiert",
+        message: "Die Rechte innerhalb der Gruppe wurden aktualisiert.",
+      }), 303);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die Gruppenrechte konnten nicht aktualisiert werden.";
+      return reply.redirect(buildDialogRedirect(`/groups?user=${encodeURIComponent(activeUser.key)}&group=${encodeURIComponent(group?.key ?? "")}`, {
+        title: "Gruppenrechte konnten nicht aktualisiert werden",
+        message,
+      }), 303);
+    }
+  });
+
+  app.post("/groups/:id/memberships/:membershipId/remove", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+    const params = request.params as { id: string; membershipId: string };
+    const group = await findGroupById(params.id);
+    const membershipsForUser = await listMembershipsForUser(activeUser.id);
+    const membership = getMembershipForGroup(membershipsForUser, params.id);
+    const membershipsForGroup = await listMembershipsForGroup(params.id);
+    const targetMembership = membershipsForGroup.find((entry) => entry.id === params.membershipId);
+
+    if (!canManageGroup(activeUser, membership?.rights)) {
+      return reply.redirect(buildDialogRedirect(`/groups?user=${encodeURIComponent(activeUser.key)}`, {
+        title: "Kein Zugriff",
+        message: "Mitglieder können in diesem Kontext nicht entfernt werden.",
+      }), 303);
+    }
+
+    try {
+      await removeMembership({
+        membershipId: params.membershipId,
+        userId: targetMembership?.userId ?? "",
+      });
+
+      return reply.redirect(buildDialogRedirect(`/groups?user=${encodeURIComponent(activeUser.key)}&group=${encodeURIComponent(group?.key ?? "")}`, {
+        type: "info",
+        title: "Mitglied entfernt",
+        message: "Das Mitglied wurde aus der Gruppe entfernt.",
+      }), 303);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Das Mitglied konnte nicht entfernt werden.";
+      return reply.redirect(buildDialogRedirect(`/groups?user=${encodeURIComponent(activeUser.key)}&group=${encodeURIComponent(group?.key ?? "")}`, {
+        title: "Mitglied konnte nicht entfernt werden",
+        message,
+      }), 303);
+    }
+  });
+
+  app.get("/admin/users/new", async (request, reply) => {
+    return reply.view("pages/admin-user-new.ejs", await withDialog(request, await createAdminUserNewViewModel(queryValue(request), groupQueryValue(request))));
+  });
+
+  app.post<{ Body: { displayName?: string; key?: string; email?: string; locale?: string } }>("/admin/users/new", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
 
@@ -1630,6 +2221,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         displayName: request.body?.displayName ?? "",
         key: request.body?.key ?? "",
         ...(request.body?.email ? { email: request.body.email } : {}),
+        locale: request.body?.locale === "en" ? "en" : "de",
       });
 
       return reply.redirect(
@@ -1654,12 +2246,12 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
   app.get("/admin/users/:id", async (request, reply) => {
     const params = request.params as { id: string };
-    const viewModel = await createAdminUserDetailViewModel(queryValue(request), params.id);
+    const viewModel = await createAdminUserDetailViewModel(queryValue(request), groupQueryValue(request), params.id);
 
     if (!viewModel) {
       return reply.code(404).view("pages/admin-user-not-found.ejs", await withDialog(request, {
         title: "User Not Found",
-        ...(await createBaseViewModel("admin", queryValue(request))),
+        ...(await createBaseViewModel("admin", queryValue(request), groupQueryValue(request))),
       }));
     }
 
@@ -1668,19 +2260,29 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
   app.get("/admin/users/:id/edit", async (request, reply) => {
     const params = request.params as { id: string };
-    const viewModel = await createAdminUserEditViewModel(queryValue(request), params.id);
+    const viewModel = await createAdminUserEditViewModel(queryValue(request), groupQueryValue(request), params.id);
 
     if (!viewModel) {
       return reply.code(404).view("pages/admin-user-not-found.ejs", await withDialog(request, {
         title: "User Not Found",
-        ...(await createBaseViewModel("admin", queryValue(request))),
+        ...(await createBaseViewModel("admin", queryValue(request), groupQueryValue(request))),
       }));
     }
 
     return reply.view("pages/admin-user-edit.ejs", await withDialog(request, viewModel));
   });
 
-  app.post<{ Body: { displayName?: string; email?: string; status?: string } }>("/admin/users/:id/edit", async (request, reply) => {
+  app.post<{
+    Body: {
+      displayName?: string;
+      email?: string;
+      status?: string;
+      locale?: string;
+      roleAdmin?: string;
+      roleDeveloper?: string;
+      roleChef?: string;
+    };
+  }>("/admin/users/:id/edit", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
     const params = request.params as { id: string };
@@ -1692,10 +2294,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         displayName: request.body?.displayName ?? "",
         ...(request.body?.email ? { email: request.body.email } : {}),
         status,
+        locale: request.body?.locale === "en" ? "en" : "de",
+        globalRoles: {
+          admin: canManageAdmins(activeUser) ? Boolean(request.body?.roleAdmin) : false,
+          developer: Boolean(request.body?.roleDeveloper),
+          chef: Boolean(request.body?.roleChef),
+        },
       });
 
       return reply.redirect(
-        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+        buildDialogRedirect(`/admin?user=${encodeURIComponent(activeUser.key)}${groupQueryValue(request) ? `&group=${encodeURIComponent(groupQueryValue(request) ?? "")}` : ""}&selectedUser=${encodeURIComponent(params.id)}`, {
           type: "info",
           title: "User aktualisiert",
           message: "Der User wurde aktualisiert.",
@@ -1705,8 +2313,70 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     } catch (error) {
       const message = error instanceof Error ? error.message : "Der User konnte nicht aktualisiert werden.";
       return reply.redirect(
-        buildDialogRedirect(`/admin/users/${params.id}/edit?user=${encodeURIComponent(activeUser.key)}`, {
+        buildDialogRedirect(`/admin?user=${encodeURIComponent(activeUser.key)}${groupQueryValue(request) ? `&group=${encodeURIComponent(groupQueryValue(request) ?? "")}` : ""}&selectedUser=${encodeURIComponent(params.id)}`, {
           title: "User konnte nicht aktualisiert werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.post<{ Body: { templateKey?: string } }>("/preferences/primary-template", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+
+    try {
+      await updateUserPreferences({
+        id: activeUser.id,
+        preferredTemplateKey: request.body?.templateKey ?? "",
+        ...(activeUser.preferredGroupId ? { preferredGroupId: activeUser.preferredGroupId } : {}),
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/workspace?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Primaeres Formular gespeichert",
+          message: "Das bevorzugte Formular wurde fuer diesen User aktualisiert.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Das primaere Formular konnte nicht gespeichert werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/workspace?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Primaeres Formular konnte nicht gespeichert werden",
+          message,
+        }),
+        303,
+      );
+    }
+  });
+
+  app.post<{ Body: { groupId?: string } }>("/preferences/primary-group", async (request, reply) => {
+    const users = await listUsers();
+    const activeUser = await getActiveUser(queryValue(request), users);
+
+    try {
+      await updateUserPreferences({
+        id: activeUser.id,
+        ...(activeUser.preferredTemplateKey ? { preferredTemplateKey: activeUser.preferredTemplateKey } : {}),
+        preferredGroupId: request.body?.groupId ?? "",
+      });
+
+      return reply.redirect(
+        buildDialogRedirect(`/workspace?user=${encodeURIComponent(activeUser.key)}`, {
+          type: "info",
+          title: "Primäre Gruppe gespeichert",
+          message: "Die bevorzugte Gruppe wurde für diesen Benutzer aktualisiert.",
+        }),
+        303,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die primäre Gruppe konnte nicht gespeichert werden.";
+      return reply.redirect(
+        buildDialogRedirect(`/workspace?user=${encodeURIComponent(activeUser.key)}`, {
+          title: "Primäre Gruppe konnte nicht gespeichert werden",
           message,
         }),
         303,
@@ -1732,11 +2402,12 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
           read: rights.includes("r"),
           write: rights.includes("w"),
           execute: rights.includes("x"),
+          groupAdmin: rights.includes("g"),
         },
       });
 
       return reply.redirect(
-        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+        buildDialogRedirect(`/admin?user=${encodeURIComponent(activeUser.key)}${groupQueryValue(request) ? `&group=${encodeURIComponent(groupQueryValue(request) ?? "")}` : ""}&selectedUser=${encodeURIComponent(params.id)}`, {
           type: "info",
           title: "Membership angelegt",
           message: "Die Membership wurde angelegt.",
@@ -1746,7 +2417,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     } catch (error) {
       const message = error instanceof Error ? error.message : "Die Membership konnte nicht angelegt werden.";
       return reply.redirect(
-        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+        buildDialogRedirect(`/admin?user=${encodeURIComponent(activeUser.key)}${groupQueryValue(request) ? `&group=${encodeURIComponent(groupQueryValue(request) ?? "")}` : ""}&selectedUser=${encodeURIComponent(params.id)}`, {
           title: "Membership konnte nicht angelegt werden",
           message,
         }),
@@ -1767,7 +2438,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       });
 
       return reply.redirect(
-        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+        buildDialogRedirect(`/admin?user=${encodeURIComponent(activeUser.key)}${groupQueryValue(request) ? `&group=${encodeURIComponent(groupQueryValue(request) ?? "")}` : ""}&selectedUser=${encodeURIComponent(params.id)}`, {
           type: "info",
           title: "Membership entfernt",
           message: "Die Membership wurde entfernt.",
@@ -1777,7 +2448,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     } catch (error) {
       const message = error instanceof Error ? error.message : "Die Membership konnte nicht entfernt werden.";
       return reply.redirect(
-        buildDialogRedirect(`/admin/users/${params.id}?user=${encodeURIComponent(activeUser.key)}`, {
+        buildDialogRedirect(`/admin?user=${encodeURIComponent(activeUser.key)}${groupQueryValue(request) ? `&group=${encodeURIComponent(groupQueryValue(request) ?? "")}` : ""}&selectedUser=${encodeURIComponent(params.id)}`, {
           title: "Membership konnte nicht entfernt werden",
           message,
         }),
@@ -1787,7 +2458,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/admin/groups/new", async (request, reply) => {
-    return reply.view("pages/admin-group-new.ejs", await withDialog(request, await createAdminGroupNewViewModel(queryValue(request))));
+    return reply.view("pages/admin-group-new.ejs", await withDialog(request, await createAdminGroupNewViewModel(queryValue(request), groupQueryValue(request))));
   });
 
   app.post<{ Body: { name?: string; key?: string; description?: string } }>("/admin/groups/new", async (request, reply) => {
@@ -1823,12 +2494,12 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
   app.get("/admin/groups/:id", async (request, reply) => {
     const params = request.params as { id: string };
-    const viewModel = await createAdminGroupDetailViewModel(queryValue(request), params.id);
+    const viewModel = await createAdminGroupDetailViewModel(queryValue(request), groupQueryValue(request), params.id);
 
     if (!viewModel) {
       return reply.code(404).view("pages/admin-group-not-found.ejs", await withDialog(request, {
         title: "Group Not Found",
-        ...(await createBaseViewModel("admin", queryValue(request))),
+        ...(await createBaseViewModel("admin", queryValue(request), groupQueryValue(request))),
       }));
     }
 
@@ -1837,12 +2508,12 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
   app.get("/admin/groups/:id/edit", async (request, reply) => {
     const params = request.params as { id: string };
-    const viewModel = await createAdminGroupEditViewModel(queryValue(request), params.id);
+    const viewModel = await createAdminGroupEditViewModel(queryValue(request), groupQueryValue(request), params.id);
 
     if (!viewModel) {
       return reply.code(404).view("pages/admin-group-not-found.ejs", await withDialog(request, {
         title: "Group Not Found",
-        ...(await createBaseViewModel("admin", queryValue(request))),
+        ...(await createBaseViewModel("admin", queryValue(request), groupQueryValue(request))),
       }));
     }
 
@@ -1945,10 +2616,10 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
   });
 
-  app.post<{ Body: { templateId?: string } }>("/documents/start", async (request, reply) => {
+  app.post<{ Body: { templateId?: string; template?: string } }>("/documents/start", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
-    const templateId = request.body?.templateId;
+    const templateId = request.body?.templateId ?? request.body?.template;
 
     if (!templateId) {
       return reply.redirect(`/documents?user=${encodeURIComponent(activeUser.key)}&startError=${encodeURIComponent("Bitte ein Template auswaehlen.")}`);
@@ -1969,13 +2640,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get<{ Params: { id: string } }>("/documents/:id", async (request, reply) => {
-    const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+    const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id);
 
     if (!viewModel) {
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
@@ -2039,11 +2710,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       qualification_result?: string;
       qualification_topics?: string;
       qualification_current_page?: string;
+      product_number?: string;
+      product_status?: string;
+      product_options_json?: string;
       batch_id?: string;
+      batch_status?: string;
       serial_number?: string;
       product_name?: string;
       production_line?: string;
       process_steps?: string;
+      status?: string;
       approval_status?: string;
       labor_hours?: string;
       travel_hours?: string;
@@ -2088,11 +2764,16 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       qualification_result: request.body.qualification_result,
       qualification_topics: request.body.qualification_topics,
       qualification_current_page: request.body.qualification_current_page,
+      product_number: request.body.product_number,
+      product_status: request.body.product_status,
+      product_options_json: request.body.product_options_json,
       batch_id: request.body.batch_id,
+      batch_status: request.body.batch_status,
       serial_number: request.body.serial_number,
       product_name: request.body.product_name,
       production_line: request.body.production_line,
       process_steps: request.body.process_steps,
+      status: request.body.status,
       approval_status: request.body.approval_status,
       labor_hours: request.body.labor_hours,
       travel_hours: request.body.travel_hours,
@@ -2101,6 +2782,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       generic_form_description: request.body.generic_form_description,
       generic_form_note: request.body.generic_form_note,
     };
+    const selectedEditorUserIds = collectSubmittedStringArray((request.body as Record<string, unknown> | undefined)?.editorUserIds);
     const requestedQualificationPage = request.body.page ?? query(request).page ?? request.body.qualification_current_page;
 
     if (formRuntimeIntent === "run-action") {
@@ -2115,20 +2797,21 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: request.params.id,
         });
       }
 
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id, {
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id, {
         formRuntimeFieldValues: result.ok ? result.fieldValues : formRuntimeFieldValues,
+        selectedEditorUserIds,
       });
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: request.params.id,
         });
       }
@@ -2185,7 +2868,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: request.params.id,
         });
       }
@@ -2197,13 +2880,14 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
         );
       }
 
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), navigationResult.documentId);
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), navigationResult.documentId);
+      
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: navigationResult.documentId,
         });
       }
@@ -2212,8 +2896,21 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       const statusText = `Seite ${pageLabel} gespeichert.`;
 
       if (isHtmxRequest(request)) {
+        const htmxViewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), navigationResult.documentId, {
+          selectedEditorUserIds,
+        });
+
+        if (!htmxViewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
+            missingDocumentId: navigationResult.documentId,
+          });
+        }
+
         return reply.type("text/html").send(await renderDocumentFormBodyFragment({
-          ...viewModel,
+          ...htmxViewModel,
           saveError: saveErrorValue(request),
           saveStatus: saveStatusValue(request),
           journalError: journalErrorValue(request),
@@ -2258,22 +2955,23 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
 
     if (!saveResult.ok) {
       if (isHtmxRequest(request)) {
-        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id, {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id, {
           formRuntimeFieldValues,
+          selectedEditorUserIds,
         });
 
         if (!viewModel) {
           return reply.code(404).view("pages/document-not-found.ejs", {
             ...(await withDialog(request, {})),
             title: "Document Not Found",
-            ...(await createBaseViewModel("documents", queryValue(request))),
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
             missingDocumentId: request.params.id,
           });
         }
@@ -2315,13 +3013,15 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (isHtmxRequest(request)) {
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), saveResult.documentId);
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), saveResult.documentId, {
+        selectedEditorUserIds,
+      });
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: saveResult.documentId,
         });
       }
@@ -2374,7 +3074,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
@@ -2407,20 +3107,20 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
 
     if (!result.ok) {
       if (isHtmxRequest(request)) {
-        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id);
 
         if (!viewModel) {
           return reply.code(404).view("pages/document-not-found.ejs", {
             ...(await withDialog(request, {})),
             title: "Document Not Found",
-            ...(await createBaseViewModel("documents", queryValue(request))),
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
             missingDocumentId: request.params.id,
           });
         }
@@ -2460,13 +3160,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (isHtmxRequest(request)) {
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), result.documentId);
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: result.documentId,
         });
       }
@@ -2508,11 +3208,96 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   app.post<{ Params: { id: string }; Body: { editorUserIds?: string | string[] } }>("/documents/:id/assign", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
-    const editorUserIds = Array.isArray(request.body?.editorUserIds)
-      ? request.body?.editorUserIds
-      : typeof request.body?.editorUserIds === "string"
-        ? [request.body.editorUserIds]
-        : [];
+    const editorUserIds = collectSubmittedStringArray(request.body?.editorUserIds);
+    const submittedFieldValues = collectSubmittedFieldValues(request.body ?? {});
+    const visibleDocument = await findDocumentDetailVisibleToUser(request.params.id, activeUser.id);
+
+    if (visibleDocument && isFormRuntimeReferenceTemplate(visibleDocument.templateKey)) {
+      const saveResult = await saveDocumentFormRuntimeValuesForUser({
+        documentId: request.params.id,
+        userId: activeUser.id,
+        activeUserDisplayName: activeUser.displayName,
+        submittedValues: request.body ?? {},
+      });
+
+      if (!saveResult.ok && saveResult.reason !== "document_not_visible") {
+        const message = saveResult.details ?? "Formularwerte konnten vor dem Zuweisen nicht gespeichert werden.";
+
+        if (isHtmxRequest(request)) {
+          const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id, {
+            formRuntimeFieldValues: submittedFieldValues,
+            selectedEditorUserIds: editorUserIds,
+          });
+
+          if (!viewModel) {
+            return reply.code(404).view("pages/document-not-found.ejs", {
+              ...(await withDialog(request, {})),
+              title: "Document Not Found",
+              ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
+              missingDocumentId: request.params.id,
+            });
+          }
+
+          return reply
+            .code(400)
+            .type("text/html")
+            .send(await renderDocumentFormBodyFragment({
+              ...viewModel,
+              ...buildDocumentFeedbackStateFromRequest(request),
+              assignError: message,
+              assignStatus: undefined,
+            }, {
+              includeWorkflowZoneOob: true,
+            }));
+        }
+
+        return reply.redirect(
+          `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&assignError=${encodeURIComponent(message)}`,
+          303,
+        );
+      }
+    }
+
+    const refreshedDocument = await findDocumentDetailVisibleToUser(request.params.id, activeUser.id);
+    const missingRequiredFields = refreshedDocument ? getMissingCurrentStatusRequiredFields(refreshedDocument) : [];
+
+    if (missingRequiredFields.length > 0) {
+      const message = `Pflichtfelder fehlen fuer Zuweisen: ${missingRequiredFields.join(", ")}.`;
+
+      if (isHtmxRequest(request)) {
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id, {
+          formRuntimeFieldValues: submittedFieldValues,
+          selectedEditorUserIds: editorUserIds,
+        });
+
+        if (!viewModel) {
+          return reply.code(404).view("pages/document-not-found.ejs", {
+            ...(await withDialog(request, {})),
+            title: "Document Not Found",
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
+            missingDocumentId: request.params.id,
+          });
+        }
+
+        return reply
+          .code(400)
+          .type("text/html")
+          .send(await renderDocumentFormBodyFragment({
+            ...viewModel,
+            ...buildDocumentFeedbackStateFromRequest(request),
+            assignError: message,
+            assignStatus: undefined,
+          }, {
+            includeWorkflowZoneOob: true,
+          }));
+      }
+
+      return reply.redirect(
+        `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&assignError=${encodeURIComponent(message)}`,
+        303,
+      );
+    }
+
     const result = await assignDocumentForUser({
       documentId: request.params.id,
       userId: activeUser.id,
@@ -2523,20 +3308,23 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
 
     if (!result.ok) {
       if (isHtmxRequest(request)) {
-        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id, {
+          formRuntimeFieldValues: submittedFieldValues,
+          selectedEditorUserIds: editorUserIds,
+        });
 
         if (!viewModel) {
           return reply.code(404).view("pages/document-not-found.ejs", {
             ...(await withDialog(request, {})),
             title: "Document Not Found",
-            ...(await createBaseViewModel("documents", queryValue(request))),
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
             missingDocumentId: request.params.id,
           });
         }
@@ -2561,13 +3349,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (isHtmxRequest(request)) {
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), result.documentId);
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: result.documentId,
         });
       }
@@ -2594,15 +3382,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
     const visibleDocument = await findDocumentDetailVisibleToUser(request.params.id, activeUser.id);
-    const submittedFieldValues = Object.fromEntries(
-      Object.entries(request.body ?? {}).flatMap(([key, value]) => {
-        if (typeof value === "string") {
-          return [[key, value]];
-        }
-
-        return [];
-      }),
-    ) as Record<string, string | undefined>;
+    const submittedFieldValues = collectSubmittedFieldValues(request.body ?? {});
 
     if (visibleDocument) {
       if (isFormRuntimeReferenceTemplate(visibleDocument.templateKey)) {
@@ -2617,7 +3397,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
           const message = saveResult.details ?? "Formularwerte konnten vor dem Submit nicht gespeichert werden.";
 
           if (isHtmxRequest(request)) {
-            const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id, {
+            const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id, {
               formRuntimeFieldValues: submittedFieldValues,
             });
 
@@ -2625,7 +3405,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
               return reply.code(404).view("pages/document-not-found.ejs", {
                 ...(await withDialog(request, {})),
                 title: "Document Not Found",
-                ...(await createBaseViewModel("documents", queryValue(request))),
+                ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
                 missingDocumentId: request.params.id,
               });
             }
@@ -2674,7 +3454,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
@@ -2686,13 +3466,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
           : result.details ?? "Submit ist im aktuellen Status nicht verfuegbar.";
 
       if (isHtmxRequest(request)) {
-        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id);
 
         if (!viewModel) {
           return reply.code(404).view("pages/document-not-found.ejs", {
             ...(await withDialog(request, {})),
             title: "Document Not Found",
-            ...(await createBaseViewModel("documents", queryValue(request))),
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
             missingDocumentId: request.params.id,
           });
         }
@@ -2716,13 +3496,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (isHtmxRequest(request)) {
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), result.documentId);
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: request.params.id,
         });
       }
@@ -2759,20 +3539,20 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
 
     if (!result.ok) {
       if (isHtmxRequest(request)) {
-        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id);
 
         if (!viewModel) {
           return reply.code(404).view("pages/document-not-found.ejs", {
             ...(await withDialog(request, {})),
             title: "Document Not Found",
-            ...(await createBaseViewModel("documents", queryValue(request))),
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
             missingDocumentId: request.params.id,
           });
         }
@@ -2796,13 +3576,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (isHtmxRequest(request)) {
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), result.documentId);
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: request.params.id,
         });
       }
@@ -2830,11 +3610,55 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   app.post<{ Params: { id: string }; Body: { editorUserIds?: string | string[] } }>("/documents/:id/reassign", async (request, reply) => {
     const users = await listUsers();
     const activeUser = await getActiveUser(queryValue(request), users);
-    const editorUserIds = Array.isArray(request.body?.editorUserIds)
-      ? request.body?.editorUserIds
-      : typeof request.body?.editorUserIds === "string"
-        ? [request.body.editorUserIds]
-        : [];
+    const editorUserIds = collectSubmittedStringArray(request.body?.editorUserIds);
+    const submittedFieldValues = collectSubmittedFieldValues(request.body ?? {});
+    const visibleDocument = await findDocumentDetailVisibleToUser(request.params.id, activeUser.id);
+
+    if (visibleDocument && isFormRuntimeReferenceTemplate(visibleDocument.templateKey)) {
+      const saveResult = await saveDocumentFormRuntimeValuesForUser({
+        documentId: request.params.id,
+        userId: activeUser.id,
+        activeUserDisplayName: activeUser.displayName,
+        submittedValues: request.body ?? {},
+      });
+
+      if (!saveResult.ok && saveResult.reason !== "document_not_visible") {
+        const message = saveResult.details ?? "Formularwerte konnten vor dem Neu-Zuweisen nicht gespeichert werden.";
+
+        if (isHtmxRequest(request)) {
+          const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id, {
+            formRuntimeFieldValues: submittedFieldValues,
+            selectedEditorUserIds: editorUserIds,
+          });
+
+          if (!viewModel) {
+            return reply.code(404).view("pages/document-not-found.ejs", {
+              ...(await withDialog(request, {})),
+              title: "Document Not Found",
+              ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
+              missingDocumentId: request.params.id,
+            });
+          }
+
+          return reply.type("text/html").send(
+            await renderDocumentFormBodyFragment({
+              ...viewModel,
+              ...buildDocumentFeedbackStateFromRequest(request),
+              reassignError: message,
+              reassignStatus: undefined,
+            }, {
+              includeWorkflowZoneOob: true,
+            }),
+          );
+        }
+
+        return reply.redirect(
+          `/documents/${encodeURIComponent(request.params.id)}?user=${encodeURIComponent(activeUser.key)}&reassignError=${encodeURIComponent(message)}`,
+          303,
+        );
+      }
+    }
+
     const result = await reassignDocumentForUser({
       documentId: request.params.id,
       userId: activeUser.id,
@@ -2845,20 +3669,23 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
 
     if (!result.ok) {
       if (isHtmxRequest(request)) {
-        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id, {
+          formRuntimeFieldValues: submittedFieldValues,
+          selectedEditorUserIds: editorUserIds,
+        });
 
         if (!viewModel) {
           return reply.code(404).view("pages/document-not-found.ejs", {
             ...(await withDialog(request, {})),
             title: "Document Not Found",
-            ...(await createBaseViewModel("documents", queryValue(request))),
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
             missingDocumentId: request.params.id,
           });
         }
@@ -2882,13 +3709,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (isHtmxRequest(request)) {
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), result.documentId);
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: request.params.id,
         });
       }
@@ -2925,20 +3752,20 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
 
     if (!result.ok) {
       if (isHtmxRequest(request)) {
-        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id);
 
         if (!viewModel) {
           return reply.code(404).view("pages/document-not-found.ejs", {
             ...(await withDialog(request, {})),
             title: "Document Not Found",
-            ...(await createBaseViewModel("documents", queryValue(request))),
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
             missingDocumentId: request.params.id,
           });
         }
@@ -2962,13 +3789,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (isHtmxRequest(request)) {
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), result.documentId);
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), result.documentId);
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: request.params.id,
         });
       }
@@ -3004,7 +3831,7 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     if (!result.ok && result.reason === "document_not_visible") {
       return reply.code(404).view("pages/document-not-found.ejs", {
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
@@ -3029,13 +3856,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
 
     if (!file) {
       if (isHtmxRequest(request)) {
-        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id);
 
         if (!viewModel) {
           return reply.code(404).view("pages/document-not-found.ejs", {
             ...(await withDialog(request, {})),
             title: "Document Not Found",
-            ...(await createBaseViewModel("documents", queryValue(request))),
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
             missingDocumentId: request.params.id,
           });
         }
@@ -3088,20 +3915,20 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
       return reply.code(404).view("pages/document-not-found.ejs", {
         ...(await withDialog(request, {})),
         title: "Document Not Found",
-        ...(await createBaseViewModel("documents", queryValue(request))),
+        ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
         missingDocumentId: request.params.id,
       });
     }
 
     if (!result.ok) {
       if (isHtmxRequest(request)) {
-        const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+        const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id);
 
         if (!viewModel) {
           return reply.code(404).view("pages/document-not-found.ejs", {
             ...(await withDialog(request, {})),
             title: "Document Not Found",
-            ...(await createBaseViewModel("documents", queryValue(request))),
+            ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
             missingDocumentId: request.params.id,
           });
         }
@@ -3145,13 +3972,13 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (isHtmxRequest(request)) {
-      const viewModel = await createDocumentDetailViewModel(queryValue(request), request.params.id);
+      const viewModel = await createDocumentDetailViewModel(queryValue(request), groupQueryValue(request), request.params.id);
 
       if (!viewModel) {
         return reply.code(404).view("pages/document-not-found.ejs", {
           ...(await withDialog(request, {})),
           title: "Document Not Found",
-          ...(await createBaseViewModel("documents", queryValue(request))),
+          ...(await createBaseViewModel("documents", queryValue(request), groupQueryValue(request))),
           missingDocumentId: request.params.id,
         });
       }
@@ -3214,6 +4041,18 @@ export const registerWebRoutes = async (app: FastifyInstance): Promise<void> => 
   });
 
   app.get("/admin", async (request, reply) => {
-    return renderPage(request, reply, "admin", "admin", "Admin");
+    const viewModel = await createAdminOverviewViewModel(queryValue(request), groupQueryValue(request), selectedUserValue(request));
+
+    if (!viewModel.permissions.canViewAdmin) {
+      return reply.redirect(
+        buildDialogRedirect(viewModel.hrefWithContext("/workspace"), {
+          title: "Kein Zugriff",
+          message: "Die Adminsicht ist nur für globale Admins und den Chef sichtbar.",
+        }),
+        303,
+      );
+    }
+
+    return reply.view("pages/admin.ejs", await withDialog(request, viewModel));
   });
 };

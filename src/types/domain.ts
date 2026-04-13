@@ -6,6 +6,13 @@ export type MembershipRights = {
   read: boolean;
   write: boolean;
   execute: boolean;
+  groupAdmin: boolean;
+};
+
+export type UserGlobalRoles = {
+  admin: boolean;
+  developer: boolean;
+  chef: boolean;
 };
 
 export type User = {
@@ -15,6 +22,10 @@ export type User = {
   email?: string;
   description?: string;
   status: EntityStatus;
+  locale: "de" | "en";
+  preferredTemplateKey?: string;
+  preferredGroupId?: string;
+  globalRoles: UserGlobalRoles;
 };
 
 export type Group = {

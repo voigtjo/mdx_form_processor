@@ -99,6 +99,19 @@
 <% const formRuntimeEditState = documentDetail.formRuntimeReference?.editState ?? documentDetail.editState; %>
 <% const participantProgress = documentDetail.formRuntimeReference?.participantProgress; %>
 <% const assignableEditors = documentDetail.assignableEditors ?? []; %>
+<% const missingRequiredFieldLabels = documentDetail.formRuntimeReference?.missingCurrentStatusRequiredFieldLabels ?? []; %>
+<% const currentRequiredFieldNames = documentDetail.formRuntimeReference?.currentStatusRequiredFieldNames ?? []; %>
+<% const hasSelectedEditors = assignableEditors.some((editor) => editor.isSelected); %>
+<% const assignBlockedByFields = missingRequiredFieldLabels.length > 0; %>
+<% const assignBlockedByEditors = (documentDetail.assignState?.isAvailable || documentDetail.reassignState?.isAvailable) && !hasSelectedEditors; %>
+<% const assignDisabledReason = assignBlockedByFields
+  ? `Pflichtfelder fehlen: ${missingRequiredFieldLabels.join(", ")}`
+  : assignBlockedByEditors
+    ? "Bitte mindestens einen Editor fuer die Zuweisung auswaehlen."
+    : ""; %>
+<% const canRunAssign = Boolean(documentDetail.assignState?.isAvailable) && !assignBlockedByFields && !assignBlockedByEditors; %>
+<% const canRunReassign = Boolean(documentDetail.reassignState?.isAvailable) && !assignBlockedByFields && !assignBlockedByEditors; %>
+<% const canRunSubmit = documentDetail.submitState.isAvailable && missingRequiredFieldLabels.length === 0; %>
 
 <div class="form-runtime-toolbar">
   <% if (participantProgress) { %>
@@ -137,11 +150,16 @@
       <button
         class="button-secondary"
         type="submit"
+        data-workflow-action="assign"
+        data-required-fields="<%= currentRequiredFieldNames.join(",") %>"
+        data-requires-editors="true"
         formaction="/documents/<%= documentDetail.document.id %>/assign?user=<%= activeUser.key %>"
         hx-post="/documents/<%= documentDetail.document.id %>/assign?user=<%= activeUser.key %>"
         hx-target="#document-form-body-fragment"
         hx-swap="outerHTML"
         data-preserve-form-position="true"
+        <%= canRunAssign ? "" : "disabled" %>
+        title="<%= assignDisabledReason %>"
       >Zuweisen</button>
     <% } else if (documentDetail.document.status === "draft") { %>
       <button class="button-secondary" type="button" disabled>Zuweisen</button>
@@ -150,11 +168,15 @@
       <button
         class="button-secondary"
         type="submit"
+        data-workflow-action="submit"
+        data-required-fields="<%= currentRequiredFieldNames.join(",") %>"
         formaction="/documents/<%= documentDetail.document.id %>/submit?user=<%= activeUser.key %>"
         hx-post="/documents/<%= documentDetail.document.id %>/submit?user=<%= activeUser.key %>"
         hx-target="#document-form-body-fragment"
         hx-swap="outerHTML"
         data-preserve-form-position="true"
+        <%= canRunSubmit ? "" : "disabled" %>
+        title="<%= missingRequiredFieldLabels.length > 0 ? `Pflichtfelder fehlen: ${missingRequiredFieldLabels.join(", ")}` : "" %>"
       >Einreichen und speichern</button>
     <% } else if (documentDetail.document.status === "created") { %>
       <button class="button-secondary" type="button" disabled>Einreichen</button>
@@ -174,11 +196,16 @@
       <button
         class="button-secondary"
         type="submit"
+        data-workflow-action="reassign"
+        data-required-fields="<%= currentRequiredFieldNames.join(",") %>"
+        data-requires-editors="true"
         formaction="/documents/<%= documentDetail.document.id %>/reassign?user=<%= activeUser.key %>"
         hx-post="/documents/<%= documentDetail.document.id %>/reassign?user=<%= activeUser.key %>"
         hx-target="#document-form-body-fragment"
         hx-swap="outerHTML"
         data-preserve-form-position="true"
+        <%= canRunReassign ? "" : "disabled" %>
+        title="<%= assignDisabledReason %>"
       >Neu zuweisen</button>
     <% } %>
     <% if (documentDetail.rejectState.isAvailable) { %>
@@ -193,4 +220,13 @@
       >Zurueckweisen</button>
     <% } %>
   </div>
+  <% if (assignDisabledReason && (documentDetail.assignState?.isAvailable || documentDetail.reassignState?.isAvailable)) { %>
+    <div class="workflow-action-strip workflow-action-strip-meta">
+      <span data-workflow-action-hint="assign"><%= assignDisabledReason %></span>
+    </div>
+  <% } else if (missingRequiredFieldLabels.length > 0 && documentDetail.submitState.isAvailable) { %>
+    <div class="workflow-action-strip workflow-action-strip-meta">
+      <span data-workflow-action-hint="submit">Pflichtfelder fehlen: <%= missingRequiredFieldLabels.join(", ") %></span>
+    </div>
+  <% } %>
 </div>

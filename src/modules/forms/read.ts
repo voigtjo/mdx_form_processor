@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type {
+  FormRuntimeApiDefinition,
   FormRuntimeElement,
   FormRuntimeControlType,
   FormRuntimeDefinition,
@@ -11,7 +12,11 @@ import type {
 } from "./types.js";
 import { formRuntimeControlTypes } from "./types.js";
 
-const metaKeys = ["title", "key", "version"] as const;
+const metaKeys = ["title", "key", "form-key", "version", "form-version", "workflow-key", "workflow-version"] as const;
+
+const workflowStatusAliases: Record<string, string> = {
+  created: "draft",
+};
 
 const isCommentOrEmpty = (line: string): boolean => {
   const trimmed = line.trim();
@@ -51,11 +56,6 @@ const splitRowIntoSlots = (source: string): string[] => {
   }
 
   return slots;
-};
-
-const readSectionTitle = (line: string): string | null => {
-  const heading = line.match(/^##\s+(.+)$/);
-  return heading?.[1]?.trim() ?? null;
 };
 
 const splitPropertyList = (source: string): string[] => {
@@ -106,6 +106,61 @@ const splitCommaSeparatedValue = (value: string | undefined): string[] | undefin
   return parts.length > 0 ? parts : undefined;
 };
 
+const normalizeWorkflowStatusValue = (value: string): string => {
+  const normalized = value.trim().toLowerCase();
+  return workflowStatusAliases[normalized] ?? normalized;
+};
+
+const parseWorkflowStatusScope = (value: string | undefined): string[] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const statuses = value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .flatMap((entry) => {
+      if (!entry.startsWith("workflow.")) {
+        return [];
+      }
+
+      const normalized = normalizeWorkflowStatusValue(entry.slice("workflow.".length));
+      return normalized ? [normalized] : [];
+    });
+
+  return statuses.length > 0 ? Array.from(new Set(statuses)) : undefined;
+};
+
+const extractScopedLabel = (value: string): { label: string; editableIn?: string[] } => {
+  const match = value.match(/^(.*?)(?:\s+\[([^\]]+)\])?$/);
+  const label = match?.[1]?.trim() ?? value.trim();
+  const editableIn = parseWorkflowStatusScope(match?.[2]);
+
+  return {
+    label,
+    ...(editableIn ? { editableIn } : {}),
+  };
+};
+
+const readSectionTitle = (line: string): { title: string; editableIn?: string[] } | null => {
+  const heading = line.match(/^##\s+(.+)$/);
+  const rawTitle = heading?.[1]?.trim();
+
+  if (!rawTitle) {
+    return null;
+  }
+
+  const scoped = extractScopedLabel(rawTitle);
+
+  return {
+    title: scoped.label,
+    ...(scoped.editableIn ? { editableIn: scoped.editableIn } : {}),
+  };
+};
+
+const unquoteToken = (value: string): string => value.replace(/^"(.*)"$/, "$1").trim();
+
 const parsePropertyToken = (token: string, properties: FormRuntimePropertyMap): void => {
   const separatorIndex = token.indexOf("=");
 
@@ -128,6 +183,7 @@ const parseControlSlot = (
   source: string,
   context: {
     nextGeneratedActionName: (controlType: Extract<FormRuntimeControlType, "action" | "lookup">) => string;
+    apiDefinitionsByRef: Map<string, FormRuntimeApiDefinition>;
   },
 ): FormRuntimeSlot => {
   const match = source.match(/^(.+?):\s*([a-zA-Z][a-zA-Z0-9_-]*)\((.*)\)$/);
@@ -151,15 +207,20 @@ const parseControlSlot = (
   const propertyTokens = splitPropertyList(rawArgs);
   const properties: FormRuntimePropertyMap = {};
   const kind = controlType === "action" ? "action" : controlType === "lookup" ? "lookup" : "field";
+  const scopedLabel = extractScopedLabel(rawLabel);
   let name = "";
   let authoredName: string | undefined;
+  let shorthandRef: string | undefined;
 
   if (kind === "action" || kind === "lookup") {
     const firstToken = propertyTokens[0];
-    const hasExplicitName = typeof firstToken === "string" && !firstToken.includes("=");
+    const isQuotedRef = typeof firstToken === "string" && /^".*"$/.test(firstToken.trim());
+    const hasExplicitName = typeof firstToken === "string" && !firstToken.includes("=") && !isQuotedRef;
     const actionControlType = kind;
 
-    if (hasExplicitName) {
+    if (isQuotedRef) {
+      shorthandRef = unquoteToken(propertyTokens.shift() ?? "");
+    } else if (hasExplicitName) {
       authoredName = propertyTokens.shift()?.trim();
     }
 
@@ -178,24 +239,87 @@ const parseControlSlot = (
     parsePropertyToken(token, properties);
   }
 
-  const args = splitCommaSeparatedValue(typeof properties.args === "string" ? properties.args : undefined);
-  const bind = splitCommaSeparatedValue(typeof properties.bind === "string" ? properties.bind : undefined);
+  const ref = typeof properties.ref === "string" ? properties.ref : shorthandRef;
+  const referencedApiDefinition = ref ? context.apiDefinitionsByRef.get(ref) : undefined;
+  const args = splitCommaSeparatedValue(
+    typeof properties.request === "string"
+      ? properties.request
+      : typeof properties.args === "string"
+        ? properties.args
+        : undefined,
+  ) ?? referencedApiDefinition?.request;
+  const bind = splitCommaSeparatedValue(
+    typeof properties.response === "string"
+      ? properties.response
+      : typeof properties.bind === "string"
+        ? properties.bind
+        : undefined,
+  ) ?? referencedApiDefinition?.response;
   const control: FormRuntimeElement = {
     kind,
     controlType,
     name,
     ...(authoredName ? { authoredName } : {}),
-    label: rawLabel,
+    label: scopedLabel.label,
     properties,
-    ...(typeof properties.ref === "string" ? { ref: properties.ref } : {}),
+    ...(ref ? { ref } : {}),
     ...(args ? { args } : {}),
     ...(bind ? { bind } : {}),
+    ...(scopedLabel.editableIn ? { editableIn: scopedLabel.editableIn } : {}),
     sourceText: source,
   };
 
   return {
     source,
     element: control,
+  };
+};
+
+const parseApiDefinitionLine = (line: string): FormRuntimeApiDefinition | null => {
+  const separatorIndex = line.indexOf(":");
+
+  if (separatorIndex < 0) {
+    return null;
+  }
+
+  const key = line.slice(0, separatorIndex).trim().toLowerCase();
+
+  if (key !== "api") {
+    return null;
+  }
+
+  const rawValue = line.slice(separatorIndex + 1).trim();
+  const properties: FormRuntimePropertyMap = {};
+
+  for (const token of splitPropertyList(rawValue)) {
+    parsePropertyToken(token, properties);
+  }
+
+  const ref = typeof properties.ref === "string" ? properties.ref : undefined;
+
+  if (!ref) {
+    return null;
+  }
+
+  const request = splitCommaSeparatedValue(
+    typeof properties.request === "string"
+      ? properties.request
+      : typeof properties.args === "string"
+        ? properties.args
+        : undefined,
+  );
+  const response = splitCommaSeparatedValue(
+    typeof properties.response === "string"
+      ? properties.response
+      : typeof properties.bind === "string"
+        ? properties.bind
+        : undefined,
+  );
+
+  return {
+    ref,
+    ...(request ? { request } : {}),
+    ...(response ? { response } : {}),
   };
 };
 
@@ -218,12 +342,22 @@ const parseMetaLine = (line: string, meta: Partial<FormRuntimeMeta>): boolean =>
     return true;
   }
 
-  if (key === "key") {
+  if (key === "key" || key === "form-key") {
     meta.key = rawValue;
     return true;
   }
 
-  meta.version = rawValue;
+  if (key === "version" || key === "form-version") {
+    meta.version = rawValue;
+    return true;
+  }
+
+  if (key === "workflow-key") {
+    meta.workflowKey = rawValue;
+    return true;
+  }
+
+  meta.workflowVersion = rawValue;
   return true;
 };
 
@@ -249,6 +383,9 @@ const finalizeMeta = (meta: Partial<FormRuntimeMeta>): FormRuntimeMeta => {
     title: meta.title,
     key: meta.key,
     version: meta.version,
+    ...(meta.workflowKey ? { workflowKey: meta.workflowKey } : {}),
+    ...(meta.workflowVersion ? { workflowVersion: meta.workflowVersion } : {}),
+    apiDefinitions: meta.apiDefinitions ?? [],
   };
 };
 
@@ -269,8 +406,17 @@ export const parseFormRuntimeSource = (source: string): FormRuntimeDefinition =>
       continue;
     }
 
+    const apiDefinition = parseApiDefinitionLine(trimmed);
+
+    if (apiDefinition) {
+      meta.apiDefinitions = [...(meta.apiDefinitions ?? []), apiDefinition];
+      continue;
+    }
+
     parseMetaLine(trimmed, meta);
   }
+
+  const apiDefinitionsByRef = new Map((meta.apiDefinitions ?? []).map((definition) => [definition.ref, definition] as const));
 
   for (const line of lines) {
     if (isCommentOrEmpty(line)) {
@@ -283,8 +429,9 @@ export const parseFormRuntimeSource = (source: string): FormRuntimeDefinition =>
 
     if (sectionTitle) {
       currentSection = {
-        title: sectionTitle,
+        title: sectionTitle.title,
         rows: [],
+        ...(sectionTitle.editableIn ? { editableIn: sectionTitle.editableIn } : {}),
       };
       sections.push(currentSection);
       continue;
@@ -300,6 +447,7 @@ export const parseFormRuntimeSource = (source: string): FormRuntimeDefinition =>
         generatedActionCounter += 1;
         return `${controlType}_${generatedActionCounter}`;
       },
+      apiDefinitionsByRef,
     }));
     const row: FormRuntimeRow = {
       source: rowSource,

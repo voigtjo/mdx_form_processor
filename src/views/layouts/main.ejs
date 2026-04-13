@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="<%= locale %>">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -15,19 +15,28 @@
         <div class="brand-block">
           <span class="eyebrow">Handwerker App</span>
           <h1><%= appName %></h1>
-          <p>Serviceeinsaetze, Produktion und Nachweise</p>
+          <p><%= t("app.tagline") %></p>
         </div>
 
-        <form class="user-select" method="get" action="">
-          <label for="user-switcher">Aktiver User</label>
-          <select id="user-switcher" name="user" data-user-switcher onchange="this.form.requestSubmit()">
+        <div class="user-select">
+          <label for="user-switcher"><%= t("header.activeUser") %></label>
+          <select id="user-switcher" name="user" data-context-switcher data-context-param="user">
             <% users.forEach((user) => { %>
               <option value="<%= user.key %>" <%= user.key === activeUser.key ? "selected" : "" %>>
                 <%= user.displayName %>
               </option>
             <% }) %>
           </select>
-        </form>
+          <label for="group-switcher"><%= t("header.activeGroup") %></label>
+          <select id="group-switcher" name="group" data-context-switcher data-context-param="group">
+            <option value="__all__" <%= !selectedGroup ? "selected" : "" %>><%= t("header.allGroups") %></option>
+            <% availableGroups.forEach((group) => { %>
+              <option value="<%= group.key %>" <%= selectedGroup?.id === group.id ? "selected" : "" %>>
+                <%= group.name %>
+              </option>
+            <% }) %>
+          </select>
+        </div>
       </header>
 
       <nav class="main-nav" aria-label="Hauptnavigation">

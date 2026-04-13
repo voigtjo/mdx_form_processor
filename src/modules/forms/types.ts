@@ -29,6 +29,16 @@ export type FormRuntimeControlType = (typeof formRuntimeControlTypes)[number];
 export type FormRuntimeElementKind = "field" | "action" | "lookup";
 export type FormRuntimeFieldControlType = Exclude<FormRuntimeControlType, "action" | "lookup">;
 
+export type FormRuntimeApiDefinition = {
+  ref: string;
+  request?: string[];
+  response?: string[];
+};
+
+export type FormRuntimeWorkflowStatusScope = {
+  editableIn?: string[];
+};
+
 export type FormRuntimeElement = {
   kind: FormRuntimeElementKind;
   controlType: FormRuntimeControlType;
@@ -39,6 +49,7 @@ export type FormRuntimeElement = {
   ref?: string;
   args?: string[];
   bind?: string[];
+  editableIn?: string[];
   sourceText?: string;
 };
 
@@ -55,12 +66,16 @@ export type FormRuntimeRow = {
 export type FormRuntimeSection = {
   title: string;
   rows: FormRuntimeRow[];
+  editableIn?: string[];
 };
 
 export type FormRuntimeMeta = {
   title: string;
   key: string;
   version: string;
+  workflowKey?: string;
+  workflowVersion?: string;
+  apiDefinitions: FormRuntimeApiDefinition[];
 };
 
 export type FormRuntimeDefinition = {

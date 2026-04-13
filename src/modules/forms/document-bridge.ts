@@ -29,6 +29,7 @@ const normalizeStringArray = (value: unknown): string[] => {
 const supportedFormRuntimeTemplateKeys = new Set([
   "customer-order-test",
   "service-report",
+  "production-report",
   "production-batch",
   "qualification-record",
   "generic-form",
@@ -105,10 +106,15 @@ const mapGenericFormDocumentDataToFormRuntimeValues = (data: Record<string, unkn
 
 const mapProductionBatchDocumentDataToFormRuntimeValues = (data: Record<string, unknown>): FormRuntimeFieldValues => {
   return {
+    product_number: normalizeText(data.product_number),
+    product_status: normalizeText(data.product_status),
+    product_options_json: normalizeText(data.product_options_json),
     batch_id: normalizeText(data.batch_id),
+    batch_status: normalizeText(data.batch_status),
     serial_number: normalizeText(data.serial_number),
     product_name: normalizeText(data.product_name),
     production_line: normalizeText(data.production_line),
+    status: normalizeText(data.status),
     process_steps: serializeFormRuntimeGridRows({
       rows: parseFormRuntimeGridRows({
         value: data.process_steps,
@@ -149,6 +155,10 @@ export const mapDocumentDataToFormRuntimeValues = (
   }
 
   if (templateKey === "production-batch") {
+    return mapProductionBatchDocumentDataToFormRuntimeValues(dataForRead);
+  }
+
+  if (templateKey === "production-report") {
     return mapProductionBatchDocumentDataToFormRuntimeValues(dataForRead);
   }
 
@@ -262,7 +272,13 @@ const mergeProductionBatchFormRuntimeValues = (
 ): Record<string, unknown> => {
   return {
     ...existingData,
+    product_number: hasOwnFieldValue(fieldValues, "product_number") ? normalizeText(fieldValues.product_number) : existingData.product_number,
+    product_status: hasOwnFieldValue(fieldValues, "product_status") ? normalizeText(fieldValues.product_status) : existingData.product_status,
+    product_options_json: hasOwnFieldValue(fieldValues, "product_options_json")
+      ? normalizeText(fieldValues.product_options_json)
+      : existingData.product_options_json,
     batch_id: hasOwnFieldValue(fieldValues, "batch_id") ? normalizeText(fieldValues.batch_id) : existingData.batch_id,
+    batch_status: hasOwnFieldValue(fieldValues, "batch_status") ? normalizeText(fieldValues.batch_status) : existingData.batch_status,
     serial_number: hasOwnFieldValue(fieldValues, "serial_number") ? normalizeText(fieldValues.serial_number) : existingData.serial_number,
     product_name: hasOwnFieldValue(fieldValues, "product_name") ? normalizeText(fieldValues.product_name) : existingData.product_name,
     production_line: hasOwnFieldValue(fieldValues, "production_line") ? normalizeText(fieldValues.production_line) : existingData.production_line,
@@ -273,6 +289,7 @@ const mergeProductionBatchFormRuntimeValues = (
         })
       : existingData.process_steps,
     approval_status: hasOwnFieldValue(fieldValues, "approval_status") ? normalizeText(fieldValues.approval_status) : existingData.approval_status,
+    status: hasOwnFieldValue(fieldValues, "status") ? normalizeText(fieldValues.status) : existingData.status,
     work_signature: hasOwnFieldValue(fieldValues, "work_signature") ? normalizeText(fieldValues.work_signature) : existingData.work_signature,
     work_signature_at: hasOwnFieldValue(fieldValues, "work_signature_at") ? normalizeText(fieldValues.work_signature_at) : existingData.work_signature_at,
   };
@@ -326,6 +343,10 @@ export const mergeFormRuntimeValuesIntoDocumentData = (
   }
 
   if (templateKey === "production-batch") {
+    return mergeProductionBatchFormRuntimeValues(existingData, fieldValues);
+  }
+
+  if (templateKey === "production-report") {
     return mergeProductionBatchFormRuntimeValues(existingData, fieldValues);
   }
 

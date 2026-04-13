@@ -1,16 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { withDbTransaction } from "../../db/pool.js";
+import { serializeMembershipRights } from "./rights.js";
 
 const normalizeRights = (input: {
   read?: boolean;
   write?: boolean;
   execute?: boolean;
+  groupAdmin?: boolean;
 }): string => {
-  const rights = [
-    input.read ? "r" : "",
-    input.write ? "w" : "",
-    input.execute ? "x" : "",
-  ].join("");
+  const rights = serializeMembershipRights(input);
 
   if (!rights) {
     throw new Error("Bitte mindestens ein Membership-Recht auswaehlen.");
@@ -26,6 +24,7 @@ export const createMembership = async (input: {
     read?: boolean;
     write?: boolean;
     execute?: boolean;
+    groupAdmin?: boolean;
   };
 }): Promise<{ id: string }> => {
   const userId = input.userId.trim();

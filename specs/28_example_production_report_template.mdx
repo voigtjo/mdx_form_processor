@@ -1,0 +1,24 @@
+---
+title: Produktionsauftrag
+form-key: production-report
+form-version: 1
+workflow-key: production-report.review
+workflow-version: 1
+attachments_enabled: true
+journal_enabled: true
+API: ref="service-report.erp-products", request="product_number", response="product_name,production_line,product_status"
+API: ref="service-report.erp-batches", request="product_number", response="batch_id,batch_status"
+---
+
+## Dokumentkopf [workflow.draft]
+// Im Status draft bereitet Chef den Produktionsvorgang vor: Produktnummer waehlen, Produktdaten laden, Batchnummer erzeugen und danach Editoren zuweisen.
+
+- Produktnummer: select(product_number, required, ref="service-report.erp-products") | Produktdaten laden: lookup("service-report.erp-products") | Batchnummer erzeugen: action("service-report.erp-batches")
+- Produkt: text(product_name, required, readonly) | Produkttyp: text(production_line, readonly)
+- Batchnummer: text(batch_id, required, readonly) | Batchstatus: text(batch_status, readonly)
+
+## Inhalt [workflow.assigned]
+
+- Seriennummer: text(serial_number)
+- Produktionsstatus: radio-group(status, required, options="gestartet,in arbeit,abgeschlossen,gestoert")
+- Arbeitsschritte: grid(process_steps, columns="step:Arbeitsschritt|station:Station|target_qty:Sollmenge|actual_qty:Istmenge|result:Ergebnis", numberColumns="target_qty,actual_qty", rows=4)

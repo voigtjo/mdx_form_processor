@@ -2,7 +2,7 @@
   <div>
     <span class="eyebrow">Admin-UI</span>
     <h2><%= adminUserDetail.user.displayName %></h2>
-    <p>Kleine Einzelansicht fuer einen verwaltbaren MVP-User.</p>
+    <p>Kleine Einzelansicht für einen verwaltbaren MVP-User.</p>
   </div>
   <div class="hero-actions">
     <a class="button-secondary" href="/admin?user=<%= activeUser.key %>">Back to Admin</a>
@@ -31,6 +31,10 @@
       <h4>Status</h4>
       <p><span class="status-pill status-<%= adminUserDetail.user.status %>"><%= adminUserDetail.user.status %></span></p>
     </article>
+    <article class="subpanel">
+      <h4><%= t("admin.language") %></h4>
+      <p><%= adminUserDetail.user.locale === "en" ? t("language.en") : t("language.de") %></p>
+    </article>
   </div>
 </section>
 
@@ -43,7 +47,7 @@
     <% if (adminUserDetail.memberships.length === 0) { %>
       <div class="empty-state">
         <strong>Keine Memberships vorhanden.</strong>
-        <p>Dieser User ist aktuell keiner Group zugeordnet.</p>
+        <p>Dieser User ist aktuell keiner Gruppe zugeordnet.</p>
       </div>
     <% } else { %>
       <ul class="stack-list compact">
@@ -80,15 +84,15 @@
     </div>
     <% if (adminUserDetail.availableGroups.length === 0) { %>
       <div class="empty-state">
-        <strong>Keine weiteren Groups verfuegbar.</strong>
-        <p>Alle aktuellen Groups sind diesem User bereits zugeordnet.</p>
+        <strong>Keine weiteren Gruppen verfügbar.</strong>
+        <p>Alle aktuellen Gruppen sind diesem User bereits zugeordnet.</p>
       </div>
     <% } else { %>
       <form method="post" action="/admin/users/<%= adminUserDetail.user.id %>/memberships?user=<%= activeUser.key %>" class="form-stack">
         <div class="field-block">
           <label class="field-label" for="membership-group-id">Group</label>
           <select id="membership-group-id" name="groupId" required>
-            <option value="">Bitte Group auswaehlen</option>
+            <option value="">Bitte Gruppe auswählen</option>
             <% adminUserDetail.availableGroups.forEach((group) => { %>
               <option value="<%= group.id %>"><%= group.name %> (<%= group.key %>)</option>
             <% }) %>

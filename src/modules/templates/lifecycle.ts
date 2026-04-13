@@ -123,7 +123,7 @@ const ensureReferenceTemplate = (template: TemplateBaseRow | null): TemplateBase
 
 const normalizeReferenceSource = (sourceText: string, version: number): string => {
   parseFormRuntimeSource(sourceText);
-  return setTemplateSourceFrontmatterValue(sourceText, "version", String(version));
+  return setTemplateSourceFrontmatterValue(sourceText, "form-version", String(version));
 };
 
 const readReferencedOperations = (sourceText: string): string[] => {

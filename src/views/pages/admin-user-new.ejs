@@ -2,7 +2,7 @@
   <div>
     <span class="eyebrow">Admin-UI</span>
     <h2>New User</h2>
-    <p>Kleiner erster Pflegepfad fuer einen auswaehlbaren MVP-User ohne Auth- oder Identity-Architektur.</p>
+    <p>Kleiner erster Pflegepfad für einen auswählbaren MVP-User ohne Auth- oder Identity-Architektur.</p>
   </div>
   <div class="hero-actions">
     <a class="button-secondary" href="/admin?user=<%= activeUser.key %>">Back to Admin</a>
@@ -12,7 +12,7 @@
 <section class="panel">
   <div class="panel-header">
     <h3>Create User</h3>
-    <p class="panel-copy">Im ersten Schnitt werden nur die fuer den MVP noetigen Basisfelder angelegt.</p>
+    <p class="panel-copy">Im ersten Schnitt werden nur die für den MVP nötigen Basisfelder angelegt.</p>
   </div>
   <form method="post" action="/admin/users/new?user=<%= activeUser.key %>" class="form-stack">
     <div class="field-block">
@@ -26,6 +26,13 @@
     <div class="field-block">
       <label class="field-label" for="user-email">E-Mail</label>
       <input id="user-email" name="email" type="text" />
+    </div>
+    <div class="field-block">
+      <label class="field-label" for="user-locale"><%= t("admin.language") %></label>
+      <select id="user-locale" name="locale">
+        <option value="de"><%= t("language.de") %></option>
+        <option value="en"><%= t("language.en") %></option>
+      </select>
     </div>
     <button class="button-primary" type="submit">Create User</button>
   </form>

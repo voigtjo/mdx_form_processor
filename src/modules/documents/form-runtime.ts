@@ -37,16 +37,21 @@ const normalizeFieldValues = (values: Record<string, unknown>): FormRuntimeField
     service_order_options_json: values.service_order_options_json,
     work_description: typeof values.work_description === "string" ? sanitizeRichTextHtml(values.work_description) : values.work_description,
     material: values.material,
+    product_number: values.product_number,
+    product_status: values.product_status,
+    product_options_json: values.product_options_json,
     product_master_id: values.product_master_id,
     product_master_type: values.product_master_type,
     product_master_status: values.product_master_status,
     work_signature: values.work_signature,
     work_signature_at: values.work_signature_at,
     batch_id: values.batch_id,
+    batch_status: values.batch_status,
     serial_number: values.serial_number,
     product_name: values.product_name,
     production_line: values.production_line,
     process_steps: values.process_steps,
+    status: values.status,
     qualification_record_number: values.qualification_record_number,
     qualification_title: values.qualification_title,
     owner_user_id: values.owner_user_id,
@@ -147,6 +152,7 @@ export const runDocumentFormRuntimeActionForUser = async (input: {
   const baseEditState = await getDocumentEditStateForUser(input.documentId, input.userId);
   const editState = getReferenceFormRuntimeEditState({
     documentStatus: visible.context.status,
+    canPrepareDraft: visible.context.status === "draft" && visible.context.canExecute,
     baseEditState,
   });
 
@@ -218,6 +224,7 @@ export const saveDocumentFormRuntimeValuesForUser = async (input: {
   const baseEditState = await getDocumentEditStateForUser(input.documentId, input.userId);
   const editState = getReferenceFormRuntimeEditState({
     documentStatus: visible.context.status,
+    canPrepareDraft: visible.context.status === "draft" && visible.context.canExecute,
     baseEditState,
   });
 

@@ -28,11 +28,12 @@ import { getDocumentJournalWriteStateForUser } from "../modules/journal/add.js";
 import { buildReferenceFormRuntimeJournalDefinition } from "../modules/journal/reference.js";
 import { findOperationById, listOperations } from "../modules/operations/read.js";
 import { sanitizeOperationSchemaJson } from "../modules/operations/schema.js";
-import { listFormRuntimeApiBindings } from "../modules/forms/api-bindings.js";
+import { listFormRuntimeApiBindings, listFormRuntimeApiDefinitions } from "../modules/forms/api-bindings.js";
 import {
   buildReferenceFormRuntimeActionUi,
   buildReferenceFormRuntimeFieldUi,
   buildReferenceFormRuntimeMasterDataSections,
+  getReferenceFormRuntimeRequiredFieldNamesForStatus,
   getReferenceFormRuntimeEditState,
   getReferenceFormRuntimeHiddenFieldNames,
   getReferenceFormRuntimeSubmitRequiredFieldNames,
@@ -67,10 +68,56 @@ import { parseWorkflowSourceText, serializeWorkflowSource } from "../modules/wor
 import type { User } from "../types/domain.js";
 import type { NavItem } from "../types/navigation.js";
 import type { FormRuntimeDefinition } from "../modules/forms/types.js";
+import { translate, type SupportedLocale, type TranslationKey } from "../i18n/translations.js";
+import {
+  canManageAdmins,
+  canManageGroup,
+  canViewAdmin,
+  canViewApis,
+  canViewAllFunctionalTabs,
+  canViewGroupScopedAdminTabs,
+  canEditApis,
+  canEditTemplatesAndWorkflows,
+  canViewGroups,
+  canViewTemplatesAndWorkflows,
+  getMembershipForGroup,
+  getVisibleSections,
+  type AppSectionKey,
+} from "./permissions.js";
 
-type SectionKey = "workspace" | "templates" | "workflows" | "documents" | "apis" | "admin";
+type SectionKey = AppSectionKey;
 
-const buildHref = (path: string, activeUserKey: string): string => `${path}?user=${encodeURIComponent(activeUserKey)}`;
+const buildHref = (
+  path: string,
+  activeUserKey: string,
+  selectedGroupKey?: string,
+  extraParams?: Record<string, string | number | undefined>,
+): string => {
+  const url = new URL(path, "http://localhost");
+  url.searchParams.set("user", activeUserKey);
+
+  if (selectedGroupKey) {
+    url.searchParams.set("group", selectedGroupKey);
+  }
+
+  Object.entries(extraParams ?? {}).forEach(([key, value]) => {
+    if (value === undefined || value === "") {
+      return;
+    }
+
+    url.searchParams.set(key, String(value));
+  });
+
+  return `${url.pathname}${url.search}`;
+};
+
+const normalizeSelectedGroupKey = (groupKey?: string): string | undefined => {
+  if (!groupKey) {
+    return undefined;
+  }
+
+  return groupKey === "__all__" ? "" : groupKey;
+};
 
 export const getActiveUser = async (userKey: string | undefined, users: User[]): Promise<User> => {
   const fallbackUser = users[0];
@@ -86,19 +133,28 @@ export const getActiveUser = async (userKey: string | undefined, users: User[]):
   return (await findUserByKey(userKey)) ?? fallbackUser;
 };
 
-export const getNavigation = (section: SectionKey, activeUserKey: string): NavItem[] => {
+export const getNavigation = (
+  section: SectionKey,
+  activeUserKey: string,
+  locale: SupportedLocale,
+  visibleSections: SectionKey[],
+  selectedGroupKey?: string,
+): NavItem[] => {
   const items = [
-    { key: "workspace" as const, label: "Start", path: "/workspace" },
-    { key: "templates" as const, label: "Templates", path: "/templates" },
-    { key: "workflows" as const, label: "Workflows", path: "/workflows" },
-    { key: "documents" as const, label: "Einsaetze", path: "/documents" },
-    { key: "apis" as const, label: "APIs", path: "/apis" },
-    { key: "admin" as const, label: "Admin", path: "/admin" },
+    { key: "workspace" as const, label: translate(locale, "nav.workspace"), path: "/workspace" },
+    { key: "documents" as const, label: translate(locale, "nav.documents"), path: "/documents" },
+    { key: "templates" as const, label: translate(locale, "nav.templates"), path: "/templates" },
+    { key: "workflows" as const, label: translate(locale, "nav.workflows"), path: "/workflows" },
+    { key: "apis" as const, label: translate(locale, "nav.apis"), path: "/apis" },
+    { key: "groups" as const, label: translate(locale, "nav.groups"), path: "/groups" },
+    { key: "admin" as const, label: translate(locale, "nav.admin"), path: "/admin" },
   ];
 
-  return items.map((item) => ({
+  return items
+    .filter((item) => visibleSections.includes(item.key))
+    .map((item) => ({
     label: item.label,
-    href: buildHref(item.path, activeUserKey),
+    href: buildHref(item.path, activeUserKey, selectedGroupKey),
     isActive: item.key === section,
   }));
 };
@@ -112,48 +168,122 @@ const getWorkflowLifecycleLabel = (status: string): string => {
   return status === "inactive" ? "unpublished" : status;
 };
 
-const createShellContext = async (section: SectionKey, userKey: string | undefined) => {
+const createShellContext = async (section: SectionKey, userKey: string | undefined, groupKey?: string | undefined) => {
   const users = await listUsers();
   const activeUser = await getActiveUser(userKey, users);
+  const normalizedGroupKey = normalizeSelectedGroupKey(groupKey);
+  const [memberships, allGroups, userGroups] = await Promise.all([
+    listMembershipsForUser(activeUser.id),
+    listGroups(),
+    listGroupsForUser(activeUser.id),
+  ]);
+  const canSeeAllGroups = canViewAdmin(activeUser) || canViewAllFunctionalTabs(activeUser);
+  const availableGroups = (canSeeAllGroups ? allGroups : userGroups).filter((group) => group.status === "active");
+  const preferredGroup =
+    activeUser.preferredGroupId
+      ? availableGroups.find((group) => group.id === activeUser.preferredGroupId)
+      : undefined;
+  const selectedGroup =
+    normalizedGroupKey === ""
+      ? undefined
+      : (normalizedGroupKey ? availableGroups.find((group) => group.key === normalizedGroupKey) : undefined)
+        ?? (groupKey === undefined ? preferredGroup : undefined)
+        ?? undefined;
+  const selectedMembership = getMembershipForGroup(memberships, selectedGroup?.id);
+  const activeGroupContextKey = groupKey === "__all__" ? "__all__" : selectedGroup?.key;
+  const locale = activeUser.locale ?? "de";
+  const t = (key: TranslationKey): string => translate(locale, key);
+  const visibleSections = getVisibleSections({
+    user: activeUser,
+    ...(selectedGroup ? { selectedGroup } : {}),
+    ...(selectedMembership ? { selectedMembership } : {}),
+  });
+  const membershipRights = selectedMembership?.rights;
 
   return {
     appName: env.appName,
     activeUser,
+    availableGroups,
+    selectedGroup,
+    selectedMembership,
+    currentUserMemberships: memberships,
+    locale,
+    t,
     users,
-    navigation: getNavigation(section, activeUser.key),
+    hrefWithContext: (path: string, extraParams?: Record<string, string | number | undefined>) =>
+      buildHref(path, activeUser.key, activeGroupContextKey, extraParams),
+    contextQuery: buildHref("/", activeUser.key, activeGroupContextKey).slice(1),
+    navigation: getNavigation(section, activeUser.key, locale, visibleSections, activeGroupContextKey),
+    visibleSections,
+    permissions: {
+      canViewAdmin: canViewAdmin(activeUser),
+      canManageAdmins: canManageAdmins(activeUser),
+      canViewAllFunctionalTabs: canViewAllFunctionalTabs(activeUser),
+      canViewGroupScopedAdminTabs: canViewGroupScopedAdminTabs(selectedMembership?.rights),
+      canManageGroup: canManageGroup(activeUser, selectedMembership?.rights),
+      canViewTemplatesAndWorkflows: canViewTemplatesAndWorkflows(activeUser, membershipRights),
+      canEditTemplatesAndWorkflows: canEditTemplatesAndWorkflows(activeUser, membershipRights),
+      canViewGroups: canViewGroups(activeUser, membershipRights),
+      canViewApis: canViewApis(activeUser, membershipRights),
+      canEditApis: canEditApis(activeUser),
+    },
   };
 };
 
 export const createTemplateDetailViewModel = async (
   userKey: string | undefined,
+  groupKey: string | undefined,
   templateId: string,
   input?: {
     sourceText?: string | undefined;
     workflowTemplateId?: string | undefined;
+    selectedVersionId?: string | undefined;
+    editMode?: boolean;
   },
 ) => {
-  const shellContext = await createShellContext("templates", userKey);
+  const shellContext = await createShellContext("templates", userKey, groupKey);
   const { activeUser } = shellContext;
 
   const unrestrictedTemplate = await findFormTemplateById(templateId);
+  if (!unrestrictedTemplate) {
+    return null;
+  }
+
+  const [groups, workflows, documents, versions, operations, availableOperations] = await Promise.all([
+    listGroups(),
+    listWorkflowTemplates(),
+    listDocumentsVisibleToUser(activeUser.id),
+    listFormTemplateVersions(unrestrictedTemplate.key),
+    listOperations(),
+    listOperations({ statuses: ["published"] }),
+  ]);
+  const selectedTemplateSummary =
+    (input?.selectedVersionId ? versions.find((version) => version.id === input.selectedVersionId) : undefined)
+    ?? versions.find((version) => version.status === "published")
+    ?? versions.find((version) => version.status === "draft")
+    ?? versions.find((version) => version.id === unrestrictedTemplate.id)
+    ?? versions[0];
+
+  if (!selectedTemplateSummary) {
+    return null;
+  }
+
   const template =
-    unrestrictedTemplate?.status === "published"
-      ? await findVisiblePublishedFormTemplateById(templateId, activeUser.id)
-      : unrestrictedTemplate;
+    selectedTemplateSummary.status === "published"
+      ? await findVisiblePublishedFormTemplateById(selectedTemplateSummary.id, activeUser.id)
+      : await findFormTemplateById(selectedTemplateSummary.id);
 
   if (!template) {
     return null;
   }
 
-  const [groups, templateAssignments, workflows, documents, versions, operations, availableOperations] = await Promise.all([
-    listGroups(),
-    listTemplateAssignmentsForTemplate(template.id),
-    listWorkflowTemplates(),
-    listDocumentsVisibleToUser(activeUser.id),
-    listFormTemplateVersions(template.key),
-    listOperations(),
-    listOperations({ statuses: ["published"] }),
-  ]);
+  const templateAssignments = await listTemplateAssignmentsForTemplate(template.id);
+  const draftVersion = versions.find((version) => version.status === "draft");
+  const publishedVersion = versions.find((version) => version.status === "published");
+  const isEditable =
+    shellContext.permissions.canEditTemplatesAndWorkflows
+    && Boolean(input?.editMode)
+    && template.status === "draft";
 
   const selectedWorkflowTemplateId = input?.workflowTemplateId ?? template.workflowTemplateId;
   const workflow = workflows.find((item) => item.id === selectedWorkflowTemplateId) ?? null;
@@ -191,10 +321,18 @@ export const createTemplateDetailViewModel = async (
   let formRuntimeReference:
     | {
         sourceFilePath: string;
-        sourceText: string;
-        apiBindings: Array<{
-          actionName: string;
-          label: string;
+      sourceText: string;
+      apiDefinitions: Array<{
+        ref: string;
+        request?: string[];
+        response?: string[];
+        operationTitle?: string;
+        operationStatus?: string;
+        labels: string[];
+      }>;
+      apiBindings: Array<{
+        actionName: string;
+        label: string;
           controlType: "action" | "lookup";
           operationRef?: string;
           args?: string[];
@@ -211,11 +349,25 @@ export const createTemplateDetailViewModel = async (
     formRuntimeReference = {
       sourceFilePath: "form_templates.mdx_body",
       sourceText: sourceTextForReference,
+      apiDefinitions: [],
       apiBindings: [],
     };
 
     try {
       formRuntimeReference.parsedForm = parseFormRuntimeSource(sourceTextForReference);
+      formRuntimeReference.apiDefinitions = listFormRuntimeApiDefinitions(formRuntimeReference.parsedForm).map((definition) => {
+        const selectedOperation = operations.find((operation) => operation.key === definition.ref);
+        const labels = formRuntimeReference?.parsedForm?.actions
+          .filter((action) => action.ref === definition.ref)
+          .map((action) => action.label ?? action.name) ?? [];
+
+        return {
+          ...definition,
+          labels,
+          ...(selectedOperation?.title ? { operationTitle: selectedOperation.title } : {}),
+          ...(selectedOperation?.status ? { operationStatus: selectedOperation.status } : {}),
+        };
+      });
       formRuntimeReference.apiBindings = listFormRuntimeApiBindings(formRuntimeReference.parsedForm).map((binding) => {
         const actionDefinition = formRuntimeReference?.parsedForm?.actions.find((action) => action.name === binding.actionName);
         const selectedOperation = operations.find((operation) => operation.key === binding.operationRef);
@@ -244,15 +396,21 @@ export const createTemplateDetailViewModel = async (
       assignments: relatedAssignments,
       assignmentsWithGroups,
       versions,
+      draftVersion,
+      publishedVersion,
+      selectedVersionId: template.id,
+      isEditMode: Boolean(input?.editMode) && template.status === "draft",
       relatedDocuments,
       availableWorkflows: workflows,
       selectedWorkflowTemplateId,
       canPublishVersion,
+      canStartEdit: shellContext.permissions.canEditTemplatesAndWorkflows,
       workflowPublishBlockedReason,
       formDefinition,
       templateFeatures,
       ...(formRuntimeReference ? { formRuntimeReference } : {}),
       availableOperations,
+      isEditable,
       integrations: {
         actions: formDefinition.actions.filter((action) => action.operationRef),
         fields: formDefinition.fields.filter((field) => field.operationRef),
@@ -261,8 +419,8 @@ export const createTemplateDetailViewModel = async (
   };
 };
 
-export const createTemplateNewViewModel = async (userKey: string | undefined) => {
-  const shellContext = await createShellContext("templates", userKey);
+export const createTemplateNewViewModel = async (userKey: string | undefined, groupKey?: string | undefined) => {
+  const shellContext = await createShellContext("templates", userKey, groupKey);
   const workflows = await listWorkflowTemplates();
 
   return {
@@ -281,28 +439,46 @@ export const createTemplateNewViewModel = async (userKey: string | undefined) =>
 
 export const createWorkflowDetailViewModel = async (
   userKey: string | undefined,
+  groupKey: string | undefined,
   workflowId: string,
   input?: {
     sourceText?: string | undefined;
+    selectedVersionId?: string | undefined;
+    editMode?: boolean;
   },
 ) => {
-  const shellContext = await createShellContext("workflows", userKey);
+  const shellContext = await createShellContext("workflows", userKey, groupKey);
   const { activeUser } = shellContext;
+  const initialWorkflow = await findWorkflowTemplateById(workflowId);
 
-  const workflow = await findWorkflowTemplateById(workflowId);
-
-  if (!workflow) {
+  if (!initialWorkflow) {
     return null;
   }
 
   const [templates, allTemplates, versions, documents, operations, availableOperations] = await Promise.all([
     listFormTemplates(),
     listFormTemplates({ includeArchived: true }),
-    listWorkflowTemplateVersions(workflow.key),
+    listWorkflowTemplateVersions(initialWorkflow.key),
     listDocumentsVisibleToUser(activeUser.id),
     listOperations(),
     listOperations({ statuses: ["published"] }),
   ]);
+  const selectedWorkflowSummary =
+    (input?.selectedVersionId ? versions.find((version) => version.id === input.selectedVersionId) : undefined)
+    ?? versions.find((version) => version.status === "published")
+    ?? versions.find((version) => version.status === "draft")
+    ?? versions.find((version) => version.id === initialWorkflow.id)
+    ?? versions[0];
+
+  if (!selectedWorkflowSummary) {
+    return null;
+  }
+
+  const workflow = await findWorkflowTemplateById(selectedWorkflowSummary.id);
+
+  if (!workflow) {
+    return null;
+  }
 
   const relatedTemplates = templates.filter((template) => template.workflowTemplateId === workflow.id);
   const publishedTemplateUsages = allTemplates.filter(
@@ -311,6 +487,10 @@ export const createWorkflowDetailViewModel = async (
   const relatedDocuments = documents.filter((document) => relatedTemplates.some((template) => template.id === document.templateId));
   const currentDraftVersion = versions.find((version) => version.status === "draft");
   const currentPublishedVersion = versions.find((version) => version.status === "published");
+  const isEditable =
+    shellContext.permissions.canEditTemplatesAndWorkflows
+    && Boolean(input?.editMode)
+    && workflow.status === "draft";
   const workflowSourceText = input?.sourceText ?? serializeWorkflowSource(workflow.workflowJson);
   let transitionRows = [] as ReturnType<typeof parseWorkflowSourceText>["transitionRows"];
   let sourceStatuses = Array.isArray(workflow.statuses) ? workflow.statuses : [];
@@ -364,6 +544,8 @@ export const createWorkflowDetailViewModel = async (
     workflowDetail: {
       workflow,
       versions,
+      selectedVersionId: workflow.id,
+      isEditMode: Boolean(input?.editMode) && workflow.status === "draft",
       relatedTemplates,
       relatedDocuments,
       lifecycleLabel: getWorkflowLifecycleLabel(workflow.status),
@@ -388,12 +570,14 @@ export const createWorkflowDetailViewModel = async (
       workflowSourceText,
       sourceError,
       availableOperations,
+      canStartEdit: shellContext.permissions.canEditTemplatesAndWorkflows,
+      isEditable,
     },
   };
 };
 
-export const createWorkflowNewViewModel = async (userKey: string | undefined) => {
-  const shellContext = await createShellContext("workflows", userKey);
+export const createWorkflowNewViewModel = async (userKey: string | undefined, groupKey?: string | undefined) => {
+  const shellContext = await createShellContext("workflows", userKey, groupKey);
 
   return {
     ...shellContext,
@@ -440,27 +624,43 @@ const readWorkflowOperationRefs = (workflowJson: Record<string, unknown>): strin
   }
 };
 
-const loadApiUsageData = async (activeUserId: string) => {
-  const [operations, visibleTemplates, visibleWorkflows, documents, importedCustomers, importedProducts] = await Promise.all([
+const loadApiUsageData = async (activeUserId: string, selectedGroupId?: string) => {
+  const [operations, visibleTemplates, visibleWorkflows, documents, importedCustomers, importedProducts, templateAssignments] = await Promise.all([
     listOperations(),
     listFormTemplatesForUser(activeUserId),
     listWorkflowTemplates(),
     listDocumentsVisibleToUser(activeUserId),
     listReferenceEntities("customer"),
     listReferenceEntities("product"),
+    listTemplateAssignments(),
   ]);
+  const filteredTemplateIds = selectedGroupId
+    ? new Set(
+        templateAssignments
+          .filter((assignment) => assignment.groupId === selectedGroupId && assignment.status === "active")
+          .map((assignment) => assignment.templateId),
+      )
+    : null;
   const templates = (
     await Promise.all(visibleTemplates.map((template) => findFormTemplateById(template.id)))
-  ).filter((template): template is NonNullable<typeof template> => Boolean(template));
+  )
+    .filter((template): template is NonNullable<typeof template> => Boolean(template))
+    .filter((template) => !filteredTemplateIds || filteredTemplateIds.has(template.id));
+  const templateIdSet = new Set(templates.map((template) => template.id));
   const workflows = (
     await Promise.all(visibleWorkflows.map((workflow) => findWorkflowTemplateById(workflow.id)))
-  ).filter((workflow): workflow is NonNullable<typeof workflow> => Boolean(workflow));
+  )
+    .filter((workflow): workflow is NonNullable<typeof workflow> => Boolean(workflow))
+    .filter((workflow) => templates.some((template) => template.workflowTemplateId === workflow.id));
+  const filteredDocuments = selectedGroupId
+    ? documents.filter((document) => templateIdSet.has(document.templateId))
+    : documents;
 
   return {
     operations,
     templates,
     workflows,
-    documents,
+    documents: filteredDocuments,
     importedCustomers,
     importedProducts,
   };
@@ -504,11 +704,12 @@ const buildOperationUsageSummary = (input: {
   });
 };
 
-export const createApiCatalogViewModel = async (userKey: string | undefined) => {
-  const shellContext = await createShellContext("apis", userKey);
-  const { activeUser } = shellContext;
-  const usageData = await loadApiUsageData(activeUser.id);
-  const operationsWithUsage = buildOperationUsageSummary(usageData);
+export const createApiCatalogViewModel = async (userKey: string | undefined, groupKey?: string | undefined) => {
+  const shellContext = await createShellContext("apis", userKey, groupKey);
+  const { activeUser, selectedGroup } = shellContext;
+  const usageData = await loadApiUsageData(activeUser.id, selectedGroup?.id);
+  const operationsWithUsage = buildOperationUsageSummary(usageData)
+    .filter((entry) => !selectedGroup || entry.templateUsages.length > 0 || entry.workflowUsages.length > 0);
   const visibleTemplateFamilies = Array.from(new Map(usageData.templates.map((template) => [template.key, template])).values())
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((template) => ({
@@ -609,14 +810,15 @@ type ApiEditorInput = NonNullable<Parameters<typeof buildOperationEditorState>[0
 
 export const createApiDetailViewModel = async (
   userKey: string | undefined,
+  groupKey: string | undefined,
   operationId: string,
-  input?: ApiEditorInput,
+  input?: ApiEditorInput & { editMode?: boolean },
 ) => {
-  const shellContext = await createShellContext("apis", userKey);
-  const { activeUser } = shellContext;
+  const shellContext = await createShellContext("apis", userKey, groupKey);
+  const { activeUser, selectedGroup } = shellContext;
   const [operation, usageData] = await Promise.all([
     findOperationById(operationId),
-    loadApiUsageData(activeUser.id),
+    loadApiUsageData(activeUser.id, selectedGroup?.id),
   ]);
 
   if (!operation) {
@@ -631,7 +833,10 @@ export const createApiDetailViewModel = async (
     pageSection: "apis" as const,
     apiDetail: {
       operation,
-      canSavePublish: operation.status !== "archived",
+      isEditable: canEditApis(activeUser) && Boolean(input?.editMode) && operation.status !== "archived",
+      isEditMode: Boolean(input?.editMode) && operation.status !== "archived",
+      canStartEdit: canEditApis(activeUser) && operation.status !== "archived",
+      canSavePublish: canEditApis(activeUser) && Boolean(input?.editMode) && operation.status !== "archived",
       editor: buildOperationEditorState({
         operation,
         ...(input ? { values: input } : {}),
@@ -643,9 +848,10 @@ export const createApiDetailViewModel = async (
 
 export const createApiNewViewModel = async (
   userKey: string | undefined,
+  groupKey?: string | undefined,
   input?: ApiEditorInput,
 ) => {
-  const shellContext = await createShellContext("apis", userKey);
+  const shellContext = await createShellContext("apis", userKey, groupKey);
 
   return {
     ...shellContext,
@@ -653,15 +859,16 @@ export const createApiNewViewModel = async (
     pageSection: "apis" as const,
     apiDetail: {
       operation: null,
-      canSavePublish: true,
+      isEditable: canEditApis(shellContext.activeUser),
+      canSavePublish: canEditApis(shellContext.activeUser),
       editor: buildOperationEditorState(input ? { values: input } : undefined),
       usage: null,
     },
   };
 };
 
-export const createAdminUserNewViewModel = async (userKey: string | undefined) => {
-  const shellContext = await createShellContext("admin", userKey);
+export const createAdminUserNewViewModel = async (userKey: string | undefined, groupKey?: string | undefined) => {
+  const shellContext = await createShellContext("admin", userKey, groupKey);
 
   return {
     ...shellContext,
@@ -670,8 +877,8 @@ export const createAdminUserNewViewModel = async (userKey: string | undefined) =
   };
 };
 
-export const createAdminGroupNewViewModel = async (userKey: string | undefined) => {
-  const shellContext = await createShellContext("admin", userKey);
+export const createAdminGroupNewViewModel = async (userKey: string | undefined, groupKey?: string | undefined) => {
+  const shellContext = await createShellContext("admin", userKey, groupKey);
 
   return {
     ...shellContext,
@@ -680,8 +887,8 @@ export const createAdminGroupNewViewModel = async (userKey: string | undefined) 
   };
 };
 
-export const createAdminUserDetailViewModel = async (userKey: string | undefined, targetUserId: string) => {
-  const shellContext = await createShellContext("admin", userKey);
+export const createAdminUserDetailViewModel = async (userKey: string | undefined, groupKey: string | undefined, targetUserId: string) => {
+  const shellContext = await createShellContext("admin", userKey, groupKey);
   const targetUser = await findUserById(targetUserId);
 
   if (!targetUser) {
@@ -711,8 +918,8 @@ export const createAdminUserDetailViewModel = async (userKey: string | undefined
   };
 };
 
-export const createAdminUserEditViewModel = async (userKey: string | undefined, targetUserId: string) => {
-  const shellContext = await createShellContext("admin", userKey);
+export const createAdminUserEditViewModel = async (userKey: string | undefined, groupKey: string | undefined, targetUserId: string) => {
+  const shellContext = await createShellContext("admin", userKey, groupKey);
   const targetUser = await findUserById(targetUserId);
 
   if (!targetUser) {
@@ -729,8 +936,8 @@ export const createAdminUserEditViewModel = async (userKey: string | undefined, 
   };
 };
 
-export const createAdminGroupDetailViewModel = async (userKey: string | undefined, groupId: string) => {
-  const shellContext = await createShellContext("admin", userKey);
+export const createAdminGroupDetailViewModel = async (userKey: string | undefined, groupKey: string | undefined, groupId: string) => {
+  const shellContext = await createShellContext("admin", userKey, groupKey);
   const group = await findGroupById(groupId);
 
   if (!group) {
@@ -767,8 +974,8 @@ export const createAdminGroupDetailViewModel = async (userKey: string | undefine
   };
 };
 
-export const createAdminGroupEditViewModel = async (userKey: string | undefined, groupId: string) => {
-  const shellContext = await createShellContext("admin", userKey);
+export const createAdminGroupEditViewModel = async (userKey: string | undefined, groupKey: string | undefined, groupId: string) => {
+  const shellContext = await createShellContext("admin", userKey, groupKey);
   const group = await findGroupById(groupId);
 
   if (!group) {
@@ -785,9 +992,9 @@ export const createAdminGroupEditViewModel = async (userKey: string | undefined,
   };
 };
 
-export const createBaseViewModel = async (section: SectionKey, userKey: string | undefined) => {
-  const shellContext = await createShellContext(section, userKey);
-  const { activeUser, users } = shellContext;
+export const createBaseViewModel = async (section: SectionKey, userKey: string | undefined, groupKey?: string | undefined) => {
+  const shellContext = await createShellContext(section, userKey, groupKey);
+  const { activeUser, users, selectedGroup } = shellContext;
 
   const [
     userGroups,
@@ -819,14 +1026,44 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
     listAuditEvents(),
   ]);
 
-  const catalogTemplates = section === "admin" ? templates : userTemplates;
+  const selectedGroupId = selectedGroup?.id;
+  const filterTemplatesByGroup = <T extends { id: string }>(items: T[]): T[] => {
+    if (!selectedGroupId) {
+      return items;
+    }
+
+    const allowedTemplateIds = new Set(
+      templateAssignments
+        .filter((assignment) => assignment.groupId === selectedGroupId && assignment.status === "active")
+        .map((assignment) => assignment.templateId),
+    );
+
+    return items.filter((item) => allowedTemplateIds.has(item.id));
+  };
+  const filteredUserTemplates = filterTemplatesByGroup(userTemplates);
+  const filteredTemplates = filterTemplatesByGroup(templates);
+  const visibleTemplateIds = new Set(filteredTemplates.map((template) => template.id));
+  const filteredVisibleDocuments = selectedGroupId
+    ? visibleDocuments.filter((document) => visibleTemplateIds.has(document.templateId))
+    : visibleDocuments;
+  const filteredUserDocuments = selectedGroupId
+    ? userDocuments.filter((document) => visibleTemplateIds.has(document.templateId))
+    : userDocuments;
+  const filteredUserTasks = selectedGroupId
+    ? userTasks.filter((task) => filteredVisibleDocuments.some((document) => document.id === task.documentId))
+    : userTasks;
+  const filteredTasks = selectedGroupId
+    ? tasks.filter((task) => filteredVisibleDocuments.some((document) => document.id === task.documentId))
+    : tasks;
+
+  const catalogTemplates = section === "admin" ? filteredTemplates : filteredUserTemplates;
   const catalogTemplateIds = new Set(catalogTemplates.map((template) => template.id));
   const catalogWorkflows = section === "admin" ? workflows : workflowsForTemplates(catalogTemplates, workflows);
   const catalogTemplateAssignments =
     section === "admin"
       ? templateAssignments
       : templateAssignments.filter((assignment) => catalogTemplateIds.has(assignment.templateId));
-  const workspaceDocuments = userDocuments.filter((document) => document.status !== "archived");
+  const workspaceDocuments = filteredUserDocuments.filter((document) => document.status !== "archived");
   const activeMemberships = memberships.filter((membership) => membership.userId === activeUser.id);
   const executableGroupIds = new Set(
     activeMemberships
@@ -834,14 +1071,15 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
       .map((membership) => membership.groupId),
   );
   const startableTemplateIds = new Set(
-    userTemplates
+    filteredUserTemplates
       .filter((template) => {
         const workflow = workflows.find((item) => item.id === template.workflowTemplateId);
         const isAssignedToExecutableGroup = templateAssignments.some(
           (assignment) =>
             assignment.templateId === template.id
             && assignment.status === "active"
-            && executableGroupIds.has(assignment.groupId),
+            && executableGroupIds.has(assignment.groupId)
+            && (!selectedGroupId || assignment.groupId === selectedGroupId),
         );
 
         return template.status === "published" && workflow?.status === "published" && isAssignedToExecutableGroup;
@@ -854,11 +1092,13 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
     pageSection: section,
     workspaceSummary: {
       groups: userGroups,
-      tasks: userTasks,
-      templates: userTemplates,
+      tasks: filteredUserTasks,
+      templates: filteredUserTemplates,
       startableTemplateIds: Array.from(startableTemplateIds),
+      preferredTemplateKey: activeUser.preferredTemplateKey,
+      preferredGroupId: activeUser.preferredGroupId,
       documents: workspaceDocuments,
-      workflows: workflowsForTemplates(userTemplates, workflows),
+      workflows: workflowsForTemplates(filteredUserTemplates, workflows),
     },
     catalog: {
       groups,
@@ -866,22 +1106,86 @@ export const createBaseViewModel = async (section: SectionKey, userKey: string |
       templates: catalogTemplates,
       templateAssignments: catalogTemplateAssignments,
       workflows: catalogWorkflows,
-      documents: visibleDocuments,
-      tasks,
+      allWorkflows: workflows,
+      documents: filteredVisibleDocuments,
+      tasks: filteredTasks,
       assignments,
       auditEvents,
     },
   };
 };
 
+export const createAdminOverviewViewModel = async (
+  userKey: string | undefined,
+  groupKey?: string | undefined,
+  selectedUserId?: string | undefined,
+) => {
+  const baseViewModel = await createBaseViewModel("admin", userKey, groupKey);
+  const targetUser = selectedUserId
+    ? baseViewModel.users.find((user) => user.id === selectedUserId)
+    : baseViewModel.users[0];
+
+  const membershipsForUser = targetUser
+    ? baseViewModel.catalog.memberships.filter((membership) => membership.userId === targetUser.id)
+    : [];
+  const assignedGroupIds = new Set(membershipsForUser.map((membership) => membership.groupId));
+  const availableGroups = baseViewModel.catalog.groups.filter((group) => !assignedGroupIds.has(group.id));
+
+  return {
+    ...baseViewModel,
+    title: "Admin",
+    selectedAdminUserId: targetUser?.id,
+    adminOverview: {
+      selectedUser: targetUser,
+      memberships: membershipsForUser.map((membership) => ({
+        membership,
+        group: baseViewModel.catalog.groups.find((group) => group.id === membership.groupId) ?? null,
+      })),
+      availableGroups,
+    },
+  };
+};
+
+export const createGroupsViewModel = async (
+  userKey: string | undefined,
+  groupKey?: string | undefined,
+) => {
+  const baseViewModel = await createBaseViewModel("groups", userKey, groupKey);
+  const visibleGroups = baseViewModel.permissions.canViewAdmin || baseViewModel.permissions.canViewAllFunctionalTabs
+    ? baseViewModel.catalog.groups
+    : baseViewModel.workspaceSummary.groups;
+  const effectiveGroup = baseViewModel.selectedGroup ?? visibleGroups[0];
+  const membershipsForGroup = effectiveGroup
+    ? baseViewModel.catalog.memberships.filter((membership) => membership.groupId === effectiveGroup.id)
+    : [];
+  const assignedUserIds = new Set(membershipsForGroup.map((membership) => membership.userId));
+  const availableUsers = baseViewModel.users.filter((user) => !assignedUserIds.has(user.id));
+
+  return {
+    ...baseViewModel,
+    title: "Gruppen",
+    groupsView: {
+      visibleGroups,
+      selectedGroup: effectiveGroup,
+      memberships: membershipsForGroup.map((membership) => ({
+        membership,
+        user: baseViewModel.users.find((user) => user.id === membership.userId) ?? null,
+      })),
+      availableUsers,
+    },
+  };
+};
+
 export const createDocumentDetailViewModel = async (
   userKey: string | undefined,
+  groupKey: string | undefined,
   documentId: string,
   input?: {
     formRuntimeFieldValues?: Record<string, string | undefined>;
+    selectedEditorUserIds?: string[];
   },
 ) => {
-  const shellContext = await createShellContext("documents", userKey);
+  const shellContext = await createShellContext("documents", userKey, groupKey);
   const { activeUser, users } = shellContext;
 
   const document = await findDocumentDetailVisibleToUser(documentId, activeUser.id);
@@ -1017,6 +1321,10 @@ export const createDocumentDetailViewModel = async (
           evaluatedAt?: string;
         };
         submitRequiredFieldNames: string[];
+        currentStatusRequiredFieldNames: string[];
+        missingCurrentStatusRequiredFieldNames: string[];
+        missingCurrentStatusRequiredFieldLabels: string[];
+        bootstrapError?: string;
         parsedForm?: FormRuntimeDefinition;
         parseError?: string;
       }
@@ -1025,6 +1333,7 @@ export const createDocumentDetailViewModel = async (
   if (isFormRuntimeReferenceTemplate(document.templateKey)) {
     const formRuntimeEditState = getReferenceFormRuntimeEditState({
       documentStatus: document.status,
+      canPrepareDraft: document.status === "draft" && assignState.isAvailable,
       baseEditState: editState,
     });
     let parsedFormForRuntime: FormRuntimeDefinition | undefined;
@@ -1044,6 +1353,10 @@ export const createDocumentDetailViewModel = async (
     }
 
     const bootstrapActions = (parsedFormForRuntime?.actions ?? []).filter((action) => {
+      if (action.controlType !== "lookup") {
+        return false;
+      }
+
       if (!action.ref || !Array.isArray(action.args) || action.args.length === 0) {
         return false;
       }
@@ -1053,6 +1366,7 @@ export const createDocumentDetailViewModel = async (
         return control?.controlType === "select";
       });
     });
+    let bootstrapError: string | undefined;
 
     for (const action of bootstrapActions) {
       try {
@@ -1067,15 +1381,18 @@ export const createDocumentDetailViewModel = async (
           },
         });
         formRuntimeFieldValues = bootstrapResult.fieldValues;
-      } catch {
-        // The form should still render when dependent APIs are temporarily unavailable.
+      } catch (error) {
+        bootstrapError = error instanceof Error ? error.message : "Auftragsdaten konnten nicht vorbereitet werden.";
+        break;
       }
     }
     const formRuntimeFieldUi = buildReferenceFormRuntimeFieldUi({
       templateKey: document.templateKey,
       canEdit: formRuntimeEditState.isAvailable,
+      documentStatus: document.status,
       fieldValues: formRuntimeFieldValues,
       availableUsers: users,
+      ...(parsedFormForRuntime ? { parsedForm: parsedFormForRuntime } : {}),
     });
     if (document.templateKey === "qualification-record" && activeUser.id !== getQualificationOwnerUserId(document.documentDataJson)) {
       for (const fieldName of [
@@ -1098,6 +1415,7 @@ export const createDocumentDetailViewModel = async (
     const formRuntimeActionUi = buildReferenceFormRuntimeActionUi({
       ...(parsedFormForRuntime ? { parsedForm: parsedFormForRuntime } : {}),
       canEdit: formRuntimeEditState.isAvailable,
+      documentStatus: document.status,
     });
     const linkedProductionBatchReference = await findVisibleProductionBatchReferenceByMaterial({
       userId: activeUser.id,
@@ -1135,6 +1453,19 @@ export const createDocumentDetailViewModel = async (
     const qualificationEvaluation = document.templateKey === "qualification-record"
       ? evaluateQualificationDocumentData(document.documentDataJson)
       : undefined;
+    const currentStatusRequiredFieldNames = getReferenceFormRuntimeRequiredFieldNamesForStatus({
+      templateKey: document.templateKey,
+      documentStatus: document.status,
+      ...(parsedFormForRuntime ? { parsedForm: parsedFormForRuntime } : {}),
+    });
+    const missingCurrentStatusRequiredFieldNames = currentStatusRequiredFieldNames.filter((fieldName) => {
+      const value = formRuntimeFieldValues[fieldName];
+      return typeof value !== "string" || value.trim().length === 0;
+    });
+    const missingCurrentStatusRequiredFieldLabels = missingCurrentStatusRequiredFieldNames.map((fieldName) => {
+      const control = parsedFormForRuntime?.controls.find((entry) => entry.name === fieldName);
+      return control?.label ?? fieldName;
+    });
 
     const currentFormRuntimeReference: NonNullable<typeof formRuntimeReference> = {
       sourceFilePath: "documents.template_mdx_body",
@@ -1153,6 +1484,10 @@ export const createDocumentDetailViewModel = async (
       ...(qualificationPaging ? { qualificationPaging } : {}),
       ...(qualificationEvaluation ? { qualificationEvaluation } : {}),
       submitRequiredFieldNames: getReferenceFormRuntimeSubmitRequiredFieldNames(document.templateKey),
+      currentStatusRequiredFieldNames,
+      missingCurrentStatusRequiredFieldNames,
+      missingCurrentStatusRequiredFieldLabels,
+      ...(bootstrapError ? { bootstrapError } : {}),
     };
 
     if (parsedFormForRuntime) {
@@ -1199,7 +1534,9 @@ export const createDocumentDetailViewModel = async (
       assignState,
       assignableEditors: assignableEditors.map((editor) => ({
         ...editor,
-        isSelected: assignments.some((assignment) => assignment.active && assignment.role === "editor" && assignment.userId === editor.userId),
+        isSelected: Array.isArray(input?.selectedEditorUserIds)
+          ? input.selectedEditorUserIds.includes(editor.userId)
+          : assignments.some((assignment) => assignment.active && assignment.role === "editor" && assignment.userId === editor.userId),
       })),
       submitState,
       approveState,

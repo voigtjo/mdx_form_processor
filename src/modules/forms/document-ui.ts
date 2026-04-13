@@ -21,6 +21,7 @@ export type ReferenceFormRuntimeFieldSemantic = {
   lookupRole: ReferenceFormRuntimeLookupRole;
   isSubmitRequired: boolean;
   isEditableWhenOpen: boolean;
+  optionsSourceField?: string;
   emptyValueLabel?: string;
   helpText?: string;
 };
@@ -164,6 +165,7 @@ const serviceReportFieldSemantics = {
     lookupRole: "input",
     isSubmitRequired: true,
     isEditableWhenOpen: true,
+    optionsSourceField: "service_order_options_json",
     emptyValueLabel: "Bitte einen Auftrag aus ERP-SIM waehlen",
   },
   customer_order_status: {
@@ -256,6 +258,96 @@ const serviceReportFieldSemantics = {
     lookupRole: "none",
     isSubmitRequired: false,
     isEditableWhenOpen: true,
+  },
+  approval_status: {
+    controlType: "select",
+    runtimeRole: "workflow_readonly",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: false,
+  },
+  work_signature: {
+    controlType: "signature",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Noch nicht signiert",
+  },
+} as const satisfies Record<string, ReferenceFormRuntimeFieldSemantic>;
+
+const productionReportFieldSemantics = {
+  product_number: {
+    controlType: "select",
+    runtimeRole: "lookup_input",
+    lookupRole: "input",
+    isSubmitRequired: true,
+    isEditableWhenOpen: true,
+    optionsSourceField: "product_options_json",
+    emptyValueLabel: "Bitte ein Produkt aus ERP-SIM waehlen",
+  },
+  product_name: {
+    controlType: "text",
+    runtimeRole: "derived_readonly",
+    lookupRole: "result",
+    isSubmitRequired: true,
+    isEditableWhenOpen: false,
+    emptyValueLabel: "Wird durch Produktdaten laden gefuellt",
+  },
+  production_line: {
+    controlType: "text",
+    runtimeRole: "derived_readonly",
+    lookupRole: "result",
+    isSubmitRequired: false,
+    isEditableWhenOpen: false,
+    emptyValueLabel: "Wird durch Produktdaten laden gefuellt",
+  },
+  product_status: {
+    controlType: "text",
+    runtimeRole: "derived_readonly",
+    lookupRole: "result",
+    isSubmitRequired: false,
+    isEditableWhenOpen: false,
+    emptyValueLabel: "Wird durch Produktdaten laden gefuellt",
+  },
+  batch_id: {
+    controlType: "text",
+    runtimeRole: "derived_readonly",
+    lookupRole: "result",
+    isSubmitRequired: true,
+    isEditableWhenOpen: false,
+    emptyValueLabel: "Wird durch Batchnummer erzeugen gefuellt",
+  },
+  batch_status: {
+    controlType: "text",
+    runtimeRole: "derived_readonly",
+    lookupRole: "result",
+    isSubmitRequired: false,
+    isEditableWhenOpen: false,
+    emptyValueLabel: "Wird durch Batchnummer erzeugen gefuellt",
+  },
+  serial_number: {
+    controlType: "text",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+  },
+  status: {
+    controlType: "radio-group",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: true,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Bitte einen Produktionsstatus waehlen",
+  },
+  process_steps: {
+    controlType: "grid",
+    runtimeRole: "manual_input",
+    lookupRole: "none",
+    isSubmitRequired: false,
+    isEditableWhenOpen: true,
+    emptyValueLabel: "Noch keine Arbeitsschritte erfasst",
   },
   approval_status: {
     controlType: "select",
@@ -512,6 +604,10 @@ const formRuntimeTemplateConfigs = {
     fieldSemantics: serviceReportFieldSemantics,
     hiddenFieldNames: ["service_order_options_json"],
   },
+  "production-report": {
+    fieldSemantics: productionReportFieldSemantics,
+    hiddenFieldNames: ["product_options_json"],
+  },
   "qualification-record": {
     fieldSemantics: qualificationFieldSemantics,
     hiddenFieldNames: [],
@@ -536,6 +632,63 @@ export const referenceFormRuntimeSubmitRequiredFieldNames = Object.fromEntries(
 ) as Record<string, string[]>;
 
 const formRuntimeLockedStatuses = new Set(["submitted", "approved", "rejected", "archived"]);
+
+const workflowStatusAliases: Record<string, string> = {
+  created: "draft",
+};
+
+const normalizeWorkflowStatus = (value: string): string => {
+  const normalized = value.trim().toLowerCase();
+  return workflowStatusAliases[normalized] ?? normalized;
+};
+
+const buildFormRuntimeEditableStatusMaps = (parsedForm?: FormRuntimeDefinition) => {
+  const fieldStatuses = new Map<string, string[]>();
+  const actionStatuses = new Map<string, string[]>();
+  let hasScopedEditability = false;
+
+  for (const section of parsedForm?.sections ?? []) {
+    const sectionStatuses = section.editableIn?.map(normalizeWorkflowStatus) ?? [];
+
+    if (sectionStatuses.length > 0) {
+      hasScopedEditability = true;
+    }
+
+    for (const row of section.rows) {
+      for (const slot of row.slots) {
+        const ownStatuses = slot.element.editableIn?.map(normalizeWorkflowStatus) ?? [];
+        const effectiveStatuses = ownStatuses.length > 0 ? ownStatuses : sectionStatuses;
+
+        if (ownStatuses.length > 0) {
+          hasScopedEditability = true;
+        }
+
+        if (effectiveStatuses.length === 0) {
+          continue;
+        }
+
+        const targetMap = slot.element.kind === "field" ? fieldStatuses : actionStatuses;
+        const existingStatuses = targetMap.get(slot.element.name) ?? [];
+        targetMap.set(slot.element.name, Array.from(new Set([...existingStatuses, ...effectiveStatuses])));
+      }
+    }
+  }
+
+  return {
+    fieldStatuses,
+    actionStatuses,
+    hasScopedEditability,
+  };
+};
+
+const isEditableInDocumentStatus = (editableStatuses: string[] | undefined, documentStatus: string): boolean => {
+  if (!editableStatuses || editableStatuses.length === 0) {
+    return false;
+  }
+
+  const normalizedDocumentStatus = normalizeWorkflowStatus(documentStatus);
+  return editableStatuses.some((status) => normalizeWorkflowStatus(status) === normalizedDocumentStatus);
+};
 
 export type ReferenceFormRuntimeEditState = {
   isAvailable: boolean;
@@ -629,16 +782,49 @@ export const getReferenceFormRuntimeSubmitRequiredFieldNames = (templateKey: str
   return [...(referenceFormRuntimeSubmitRequiredFieldNames[templateKey] ?? [])];
 };
 
+export const getReferenceFormRuntimeRequiredFieldNamesForStatus = (input: {
+  templateKey: string;
+  documentStatus: string;
+  parsedForm?: FormRuntimeDefinition;
+}): string[] => {
+  const { templateKey, documentStatus, parsedForm } = input;
+  const config = getTemplateConfig(templateKey);
+
+  if (!config) {
+    return [];
+  }
+
+  const editableStatusMaps = buildFormRuntimeEditableStatusMaps(parsedForm);
+
+  return Object.entries(config.fieldSemantics)
+    .filter(([, definition]) => definition.isSubmitRequired)
+    .filter(([name, definition]) => {
+      if (!editableStatusMaps.hasScopedEditability) {
+        return definition.isEditableWhenOpen;
+      }
+
+      return isEditableInDocumentStatus(editableStatusMaps.fieldStatuses.get(name), documentStatus);
+    })
+    .map(([name]) => name);
+};
+
 export const getReferenceFormRuntimeEditState = (input: {
   documentStatus: string;
+  canPrepareDraft?: boolean;
   baseEditState: {
     isAvailable: boolean;
     reason?: string;
   };
 }): ReferenceFormRuntimeEditState => {
-  const { documentStatus, baseEditState } = input;
+  const { documentStatus, canPrepareDraft = false, baseEditState } = input;
 
   if (!baseEditState.isAvailable) {
+    if (canPrepareDraft && normalizeWorkflowStatus(documentStatus) === "draft") {
+      return {
+        isAvailable: true,
+      };
+    }
+
     return baseEditState;
   }
 
@@ -664,10 +850,12 @@ export const getReferenceFormRuntimeEditState = (input: {
 export const buildReferenceFormRuntimeFieldUi = (input: {
   templateKey: string;
   canEdit: boolean;
+  documentStatus: string;
   fieldValues: Record<string, string>;
   availableUsers: User[];
+  parsedForm?: FormRuntimeDefinition;
 }): Record<string, ReferenceFormRuntimeFieldUi> => {
-  const { templateKey, canEdit, fieldValues, availableUsers } = input;
+  const { templateKey, canEdit, documentStatus, fieldValues, availableUsers, parsedForm } = input;
   const config = getTemplateConfig(templateKey);
 
   if (!config) {
@@ -675,18 +863,23 @@ export const buildReferenceFormRuntimeFieldUi = (input: {
   }
 
   const userOptionItems = buildUserOptionItems(availableUsers);
+  const editableStatusMaps = buildFormRuntimeEditableStatusMaps(parsedForm);
 
   return Object.fromEntries(
     Object.entries(config.fieldSemantics).map(([name, definition]) => {
-      const isEditable = definition.isEditableWhenOpen && canEdit;
+      const scopedStatuses = editableStatusMaps.fieldStatuses.get(name);
+      const isEditableByWorkflow = editableStatusMaps.hasScopedEditability
+        ? isEditableInDocumentStatus(scopedStatuses, documentStatus)
+        : definition.isEditableWhenOpen;
+      const isEditable = definition.isEditableWhenOpen && canEdit && isEditableByWorkflow;
       const isReadOnly = !isEditable;
       const fieldValue = fieldValues[name] ?? "";
       const emptyValueLabel = "emptyValueLabel" in definition ? definition.emptyValueLabel : undefined;
       const helpText = "helpText" in definition ? definition.helpText : undefined;
       const optionItems = definition.controlType === "user-select" || definition.controlType === "user-multiselect"
         ? userOptionItems
-        : templateKey === "service-report" && name === "order_number"
-          ? parseDynamicOptionItems(fieldValues.service_order_options_json)
+        : definition.optionsSourceField
+          ? parseDynamicOptionItems(fieldValues[definition.optionsSourceField])
           : undefined;
       const displayValue = definition.controlType === "user-select"
         ? resolveSingleUserDisplayValue(fieldValue, userOptionItems)
@@ -722,12 +915,15 @@ export const buildReferenceFormRuntimeFieldUi = (input: {
 export const buildReferenceFormRuntimeActionUi = (input: {
   parsedForm?: FormRuntimeDefinition;
   canEdit: boolean;
+  documentStatus: string;
 }): Record<string, ReferenceFormRuntimeActionUi> => {
-  const { parsedForm, canEdit } = input;
+  const { parsedForm, canEdit, documentStatus } = input;
 
   if (!parsedForm) {
     return {};
   }
+
+  const editableStatusMaps = buildFormRuntimeEditableStatusMaps(parsedForm);
 
   return Object.fromEntries(
     parsedForm.actions.map((action) => [
@@ -738,7 +934,10 @@ export const buildReferenceFormRuntimeActionUi = (input: {
         lookupRole: "trigger",
         args: [...(action.args ?? [])],
         bind: [...(action.bind ?? [])],
-        isEnabled: canEdit,
+        isEnabled: canEdit && (
+          !editableStatusMaps.hasScopedEditability
+          || isEditableInDocumentStatus(editableStatusMaps.actionStatuses.get(action.name), documentStatus)
+        ),
         ...(typeof action.properties.hint === "string" && action.properties.hint.trim().length > 0
           ? { hint: action.properties.hint.trim() }
           : {}),

@@ -1,7 +1,7 @@
 <section class="hero-card">
   <div>
-    <h2>Einsaetze und Nachweise</h2>
-    <p>Operative Vorgangsliste fuer Kundenservice, Produktion, Qualifikation und generische Freigaben.</p>
+    <h2><%= t("documents.title") %></h2>
+    <p><%= t("documents.subtitle") %></p>
   </div>
   <div class="hero-metrics">
     <article>
@@ -21,32 +21,37 @@
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Neuen Vorgang starten</h3>
-    <span class="chip"><%= activeUser.displayName %></span>
+    <h3><%= t("documents.selection") %></h3>
+    <span class="chip"><%= selectedGroup?.name ?? activeUser.displayName %></span>
   </div>
-  <% const startableTemplates = workspaceSummary.templates
-    .map((template) => ({
-      template,
-      workflow: catalog.workflows.find((workflow) => workflow.id === template.workflowTemplateId),
-    }))
-    .filter(({ template, workflow }) => workspaceSummary.startableTemplateIds.includes(template.id) && template.status === "published" && workflow?.status === "published"); %>
+  <p class="panel-copy"><%= t("documents.selectionHelp") %></p>
   <div class="hero-actions">
-    <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form">
-      <label class="sr-only" for="templateId">Template</label>
-      <select id="templateId" name="templateId">
-        <% startableTemplates.forEach(({ template, workflow }) => { %>
-          <option value="<%= template.id %>"><%= template.name %> (v<%= template.version %>) · <%= workflow?.name ?? "Workflow" %> (v<%= workflow?.version ?? "?" %>)</option>
+    <form method="get" action="/documents" class="inline-form">
+      <input type="hidden" name="user" value="<%= activeUser.key %>" />
+      <% if (selectedGroup) { %><input type="hidden" name="group" value="<%= selectedGroup.key %>" /><% } %>
+      <label class="sr-only" for="templateId"><%= t("documents.formLabel") %></label>
+      <select id="templateId" name="template">
+        <option value=""><%= t("documents.allForms") %></option>
+        <% selectableTemplates.forEach(({ key, representative, workflow, hasDraft, hasPublished }) => { %>
+          <option value="<%= key %>" <%= selectedTemplateKey === key ? "selected" : "" %>><%= representative.name %> · <%= hasPublished ? "published" : representative.status %> · v<%= representative.version %><% if (hasDraft && representative.status === "published") { %> · Draft vorhanden<% } %> · <%= workflow?.name ?? "Workflow" %> (v<%= workflow?.version ?? "?" %>)</option>
         <% }) %>
       </select>
-      <button class="button-primary" type="submit" <%= startableTemplates.length === 0 ? "disabled" : "" %>>Vorgang starten</button>
+      <button class="button-secondary" type="submit"><%= t("documents.show") %></button>
+      <button class="button-primary" type="submit" formmethod="post" formaction="<%= hrefWithContext('/documents/start') %>" <%= !selectedTemplateIdForStart || !workspaceSummary.startableTemplateIds.includes(selectedTemplateIdForStart) ? "disabled" : "" %>><%= t("documents.start") %></button>
+      <% if (selectedTemplateIdForStart) { %>
+        <input type="hidden" name="templateId" value="<%= selectedTemplateIdForStart %>" />
+      <% } %>
     </form>
   </div>
+  <% if (selectedTemplateKey) { %>
+    <p class="field-help">Aktuell gefiltert nach Formularfamilie <strong><%= selectedTemplateKey %></strong>. Angezeigt werden alle nicht archivierten Vorgänge dieses Formulars über alle sichtbaren Versionen.</p>
+  <% } %>
 </section>
 
 <% if (typeof startError === "string" && startError.length > 0) { %>
   <section class="panel subtle">
     <div class="panel-header">
-      <h3>Start nicht moeglich</h3>
+      <h3>Start nicht möglich</h3>
       <span class="chip"><%= activeUser.displayName %></span>
     </div>
     <p><%= startError %></p>
@@ -55,12 +60,14 @@
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Vorgangsliste</h3>
+    <h3><%= t("documents.list") %></h3>
     <span class="chip"><%= documentsList.summary.filteredCount %></span>
   </div>
 
   <form method="get" action="/documents" class="filter-form">
     <input type="hidden" name="user" value="<%= activeUser.key %>" />
+    <% if (selectedGroup) { %><input type="hidden" name="group" value="<%= selectedGroup.key %>" /><% } %>
+    <input type="hidden" name="template" value="<%= documentsList.filterState.templateKey ?? "" %>" />
     <div class="filter-grid">
       <div>
         <label class="field-label" for="documents-q">Suche</label>
@@ -81,13 +88,13 @@
       </label>
       <div class="filter-actions">
         <button class="button-secondary" type="submit">Filtern</button>
-        <a class="text-link" href="/documents?user=<%= activeUser.key %>">Reset</a>
+        <a class="text-link" href="<%= hrefWithContext('/documents') %>">Reset</a>
       </div>
     </div>
   </form>
   <% if (documentsList.documents.length === 0) { %>
     <div class="empty-state">
-      <strong>Keine Vorgaenge gefunden.</strong>
+      <strong>Keine Vorgänge gefunden.</strong>
       <p>Die aktuelle Kombination aus Suche, Status und Archivfilter liefert keine Treffer.</p>
     </div>
   <% } else { %>
@@ -96,12 +103,12 @@
         <thead>
           <tr>
             <th>Vorgang</th>
-            <th>Template</th>
+            <th>Formular</th>
             <th>Workflow</th>
             <th>Status</th>
             <th>Zugewiesen</th>
             <th>Aktualisiert</th>
-            <th>Oeffnen</th>
+            <th>Öffnen</th>
           </tr>
         </thead>
         <tbody>
@@ -111,7 +118,7 @@
             <% const assignedUsers = users.filter((user) => document.assignedUserIds.includes(user.id)).map((user) => user.displayName).join(", "); %>
             <tr>
               <td>
-                <a class="text-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>"><%= document.title %></a>
+                <a class="text-link" href="<%= hrefWithContext(`/documents/${document.id}`) %>"><%= document.title %></a>
                 <p class="table-meta">
                   <%= document.status === "archived" ? "Archiviert" : "Aktiv" %>
                   <% if (document.typedLeadField && document.typedLeadValue) { %>
@@ -124,16 +131,16 @@
               </td>
               <td>
                 <strong><%= template?.name ?? "Unbekannt" %></strong>
-                <p class="table-meta"><%= template?.key ?? "ohne Template-Key" %><% if (template) { %> · <%= template.formType %> · v<%= template.version %><% } %></p>
+                <p class="table-meta"><%= template?.key ?? "ohne Formular-Key" %><% if (template) { %> · <%= template.formType %> · v<%= template.version %><% } %></p>
               </td>
               <td>
                 <strong><%= workflow?.name ?? "Unbekannt" %></strong>
                 <p class="table-meta"><%= workflow?.key ?? "ohne Workflow-Key" %><% if (workflow) { %> · v<%= workflow.version %><% } %></p>
               </td>
               <td><span class="status-pill"><%= document.status %></span></td>
-              <td><%= assignedUsers || "Keine aktiven Assignments" %></td>
+              <td><%= assignedUsers || "Keine aktiven Zuweisungen" %></td>
               <td><%= document.updatedAt %></td>
-              <td><a class="text-link" href="/documents/<%= document.id %>?user=<%= activeUser.key %>">Oeffnen</a></td>
+              <td><a class="text-link" href="<%= hrefWithContext(`/documents/${document.id}`) %>">Öffnen</a></td>
             </tr>
           <% }) %>
         </tbody>

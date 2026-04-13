@@ -1,34 +1,36 @@
 <section class="hero-card">
   <div>
-    <h2>Formulare</h2>
-    <p>Formulare fuer Serviceeinsaetze, Produktion, Nachweise und generische Freigaben.</p>
+    <h2><%= t("templates.title") %></h2>
+    <p><%= t("templates.subtitle") %></p>
   </div>
-  <div class="hero-actions">
-    <a class="button-primary" href="/templates/new?user=<%= activeUser.key %>">Neues Formular</a>
-  </div>
+  <% if (permissions.canEditTemplatesAndWorkflows) { %>
+    <div class="hero-actions">
+      <a class="button-primary" href="<%= hrefWithContext('/templates/new') %>"><%= t("templates.new") %></a>
+    </div>
+  <% } %>
 </section>
 
 <section class="panel">
   <div class="panel-header">
-    <h3>Formularliste</h3>
+    <h3><%= t("templates.list") %></h3>
   </div>
   <% if (catalog.templates.length === 0) { %>
     <div class="empty-state">
-      <strong>Keine Formulare sichtbar.</strong>
-      <p>Im aktuellen Konfigurationskontext gibt es keine sichtbaren Formulare.</p>
+      <strong><%= t("templates.noneTitle") %></strong>
+      <p><%= t("templates.noneText") %></p>
     </div>
   <% } else { %>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Template</th>
+            <th><%= t("documents.formLabel") %></th>
             <th>Workflow</th>
-            <th>Groups</th>
+            <th>Gruppen</th>
             <th>Status</th>
             <th>Version</th>
-            <th>Usage</th>
-            <th>Actions</th>
+            <th>Nutzung</th>
+            <th>Aktionen</th>
           </tr>
         </thead>
         <tbody>
@@ -36,30 +38,39 @@
               <% const workflow = catalog.workflows.find((item) => item.id === template.workflowTemplateId); %>
               <% const groupNames = catalog.groups.filter((group) => template.groupIds.includes(group.id)).map((group) => group.name); %>
               <% const documentCount = catalog.documents.filter((document) => document.templateId === template.id).length; %>
+              <% const siblingDraft = catalog.templates.find((item) => item.key === template.key && item.status === "draft"); %>
             <tr>
               <td>
-                <strong><a class="text-link" href="/templates/<%= template.id %>?user=<%= activeUser.key %>"><%= template.name %></a></strong>
+                <strong><a class="text-link" href="<%= hrefWithContext(`/templates/${template.id}`) %>"><%= template.name %></a></strong>
                 <p class="table-meta"><%= template.key %></p>
+                <% if (template.status === "published" && siblingDraft && siblingDraft.id !== template.id) { %>
+                  <p class="table-meta">Draft v<%= siblingDraft.version %> vorhanden</p>
+                <% } %>
               </td>
               <td>
-                <strong><%= workflow?.name ?? "Nicht zugeordnet" %></strong>
-                <p class="table-meta"><%= workflow?.key ?? "ohne Workflow-Key" %><% if (workflow) { %> · v<%= workflow.version %><% } %></p>
+                <strong><%= workflow?.name ?? t("templates.workflowUnassigned") %></strong>
+                <p class="table-meta"><%= workflow?.key ?? t("templates.noWorkflowKey") %><% if (workflow) { %> · v<%= workflow.version %><% } %></p>
               </td>
-              <td><%= groupNames.length > 0 ? groupNames.join(", ") : "Keine Group-Zuordnung" %></td>
+              <td><%= groupNames.length > 0 ? groupNames.join(", ") : t("templates.noGroupAssignment") %></td>
               <td><span class="status-pill status-<%= template.status %>"><%= template.status %></span></td>
               <td>v<%= template.version %></td>
-              <td><%= documentCount %> Vorgaenge</td>
+              <td><%= documentCount %> <%= t("templates.documents") %></td>
               <td>
                 <div class="table-actions">
-                  <a class="text-link" href="/templates/<%= template.id %>?user=<%= activeUser.key %>">Oeffnen</a>
-                  <a class="text-link" href="/documents?user=<%= activeUser.key %>&q=<%= encodeURIComponent(template.key) %>">Vorgaenge</a>
+                  <a class="text-link" href="<%= hrefWithContext(`/templates/${template.id}`) %>"><%= t("templates.open") %></a>
+                  <% if (permissions.canEditTemplatesAndWorkflows) { %>
+                    <form method="post" action="<%= hrefWithContext(`/templates/${template.id}/edit`) %>" class="inline-form compact">
+                      <button class="button-secondary" type="submit">Bearbeiten</button>
+                    </form>
+                  <% } %>
+                  <a class="text-link" href="<%= hrefWithContext('/documents', { template: template.id }) %>"><%= t("templates.documents") %></a>
                   <% if (workspaceSummary.startableTemplateIds.includes(template.id) && template.status === "published" && workflow?.status === "published") { %>
-                    <form method="post" action="/documents/start?user=<%= activeUser.key %>" class="inline-form compact">
+                    <form method="post" action="<%= hrefWithContext('/documents/start') %>" class="inline-form compact">
                       <input type="hidden" name="templateId" value="<%= template.id %>" />
-                      <button class="button-secondary" type="submit">Starten</button>
+                      <button class="button-secondary" type="submit"><%= t("documents.start") %></button>
                     </form>
                   <% } else { %>
-                    <span class="table-meta">Nicht startbar</span>
+                    <span class="table-meta"><%= t("templates.notStartable") %></span>
                   <% } %>
                 </div>
               </td>
